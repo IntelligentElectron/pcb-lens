@@ -8,7 +8,7 @@
 
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { attr, numAttr, streamAllLines, countLines } from "./xml-utils.js";
+import { attr, numAttr, streamAllLines } from "./xml-utils.js";
 import type {
   ErrorResult,
   DesignOverview,
@@ -119,7 +119,6 @@ export const getDesignOverview = async (
   if (err) return err;
 
   const fileStats = await stat(filePath);
-  const totalLines = await countLines(filePath);
 
   let ipc2581Revision: string | undefined;
   let stepName: string | undefined;
@@ -142,8 +141,10 @@ export const getDesignOverview = async (
   const sectionMap = new Map<string, number>();
   let currentSection: string | null = null;
   let currentSectionStart = 0;
+  let totalLineCount = 0;
 
   await streamAllLines(filePath, (line, lineNumber) => {
+    totalLineCount = lineNumber;
     // Detect IPC-2581 revision from root element
     if (ipc2581Revision === undefined && line.includes("<IPC-2581")) {
       ipc2581Revision = attr(line, "revision");
@@ -199,7 +200,7 @@ export const getDesignOverview = async (
   if (currentSection && currentSectionStart > 0) {
     sectionMap.set(
       currentSection,
-      (sectionMap.get(currentSection) ?? 0) + (totalLines - currentSectionStart + 1)
+      (sectionMap.get(currentSection) ?? 0) + (totalLineCount - currentSectionStart + 1)
     );
   }
 
@@ -211,7 +212,7 @@ export const getDesignOverview = async (
   return {
     fileName: path.basename(filePath),
     fileSizeBytes: fileStats.size,
-    totalLines,
+    totalLines: totalLineCount,
     units: "MICRON",
     ipc2581Revision,
     stepName,
@@ -232,6 +233,10 @@ export const queryComponents = async (
 ): Promise<QueryComponentsResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
+
+  if (pattern.length > 200) {
+    return { error: "Regex pattern too long (max 200 characters)" };
+  }
 
   let regex: RegExp;
   try {
@@ -381,6 +386,10 @@ export const queryNet = async (
 ): Promise<QueryNetResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
+
+  if (pattern.length > 200) {
+    return { error: "Regex pattern too long (max 200 characters)" };
+  }
 
   let regex: RegExp;
   try {

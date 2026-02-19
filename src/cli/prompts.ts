@@ -10,6 +10,10 @@ import * as readline from "node:readline";
  * @returns Promise resolving to true if user confirms, false otherwise
  */
 export const confirm = async (question: string): Promise<boolean> => {
+  if (!process.stdin.isTTY) {
+    return false;
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,

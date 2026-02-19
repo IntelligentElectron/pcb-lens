@@ -9,12 +9,18 @@
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 
+const attrRegexCache = new Map<string, RegExp>();
+
 /**
  * Extract an XML attribute value from a line by name.
  * Returns undefined if the attribute is not found.
  */
 export const attr = (line: string, name: string): string | undefined => {
-  const regex = new RegExp(`${name}="([^"]*)"`, "i");
+  let regex = attrRegexCache.get(name);
+  if (!regex) {
+    regex = new RegExp(`${name}="([^"]*)"`, "i");
+    attrRegexCache.set(name, regex);
+  }
   const match = line.match(regex);
   return match?.[1];
 };

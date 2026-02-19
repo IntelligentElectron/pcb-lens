@@ -28,6 +28,20 @@ describe("attr", () => {
     expect(attr(line, "Revision")).toBe("C");
     expect(attr(line, "REVISION")).toBe("C");
   });
+
+  it("can false-match when searched name is a suffix of a longer attribute name", () => {
+    // Searching for "name" matches inside "netName" because the regex
+    // `name="([^"]*)"` finds `Name="VCC"` within `netName="VCC"`.
+    // Known trade-off: works for IPC-2581 because the actual attribute
+    // names used by the codebase don't collide this way in practice.
+    expect(attr('<Set netName="VCC">', "name")).toBe("VCC");
+  });
+
+  it("does not false-match when searched name is a prefix of a longer attribute name", () => {
+    // Searching for "net" does NOT match "netName" because the regex
+    // requires `net="` and `netName` has `netN` after `net`, not `net=`.
+    expect(attr('<Set netName="VCC">', "net")).toBeUndefined();
+  });
 });
 
 describe("numAttr", () => {

@@ -110,6 +110,7 @@ const fetchLatestRelease = async (): Promise<GitHubRelease> => {
       Accept: "application/vnd.github.v3+json",
       "User-Agent": `${BINARY_NAME}/${VERSION}`,
     },
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -165,6 +166,7 @@ const downloadFile = async (url: string, destPath: string): Promise<void> => {
     headers: {
       "User-Agent": `${BINARY_NAME}/${VERSION}`,
     },
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!response.ok) {
