@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/mcpb-manifest.schema.json",
+  "manifest_version": "0.3",
+  "name": "pcb-lens",
+  "display_name": "PCB Lens",
+  "version": "0.0.1",
+  "description": "Query IPC-2581 PCB layout files for physical design review",
+  "long_description": "The PCB Lens MCP Server gives AI agents the power to query and analyze PCB layouts from IPC-2581 files. Get design overviews, find component placements, and trace net routing through natural conversations.\n\nSupports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool.",
+  "author": {
+    "name": "IntelligentElectron",
+    "url": "https://github.com/IntelligentElectron"
+  },
+  "icon": "icon.png",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IntelligentElectron/pcb-lens"
+  },
+  "homepage": "https://github.com/IntelligentElectron/pcb-lens",
+  "keywords": [
+    "PCB",
+    "IPC-2581",
+    "layout",
+    "EDA",
+    "design review"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/pcb-lens",
+    "mcp_config": {
+      "command": "${__dirname}/server/pcb-lens"
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["darwin", "win32"]
+  },
+  "tools_generated": true,
+  "tools": [
+    {
+      "name": "get_design_overview",
+      "description": "Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes"
+    },
+    {
+      "name": "query_components",
+      "description": "Find components by refdes pattern in an IPC-2581 file. Returns placement coordinates, rotation, layer, package, and BOM data."
+    },
+    {
+      "name": "query_net",
+      "description": "Query a net by name pattern in an IPC-2581 file. Returns connected pins, routing per layer (trace widths, segment counts), and via information."
+    }
+  ]
+}

@@ -2,7 +2,7 @@
  * PCB Lens MCP Server
  *
  * Model Context Protocol server for querying IPC-2581 PCB layout files.
- * Supports Cadence Allegro designs exported as IPC-2581 XML.
+ * Supports any EDA tool that exports IPC-2581 XML.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -19,7 +19,7 @@ const SERVER_INSTRUCTIONS = `
 # PCB Lens MCP Server
 
 This server provides tools to query IPC-2581 PCB layout files for physical design review.
-Supports Cadence Allegro designs exported as IPC-2581 XML (RevA, RevB, RevC).
+Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool.
 
 ## Workflow Guidance
 

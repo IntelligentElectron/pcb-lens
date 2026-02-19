@@ -1,7 +1,7 @@
 /**
  * Streaming XML utilities for IPC-2581 files.
  *
- * IPC-2581 from Allegro is well-formatted (one element per line), so regex
+ * IPC-2581 XML is well-formatted (one element per line), so regex
  * attribute extraction works without a DOM/SAX parser. This keeps dependencies
  * minimal and avoids loading 14MB+ files into memory.
  */

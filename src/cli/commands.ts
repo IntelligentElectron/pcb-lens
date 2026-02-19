@@ -29,7 +29,7 @@ export const printHelp = (): void => {
     `
 ${BINARY_NAME} v${VERSION}
 
-MCP server for IPC-2581 PCB layout analysis. Supports Cadence Allegro designs.
+MCP server for IPC-2581 PCB layout analysis.
 
 USAGE:
   ${BINARY_NAME} [OPTIONS]

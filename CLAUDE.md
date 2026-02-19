@@ -2,7 +2,7 @@
 
 ## Overview
 
-MCP server for querying IPC-2581 PCB layout files. Enables LLM-driven layout review for Cadence Allegro designs exported as IPC-2581 XML.
+MCP server for querying IPC-2581 PCB layout files. Enables LLM-driven layout review for any board exported as IPC-2581 XML.
 
 ## Development
 

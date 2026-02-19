@@ -1,0 +1,196 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate CHANGELOG has release notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "::error::No release notes found in CHANGELOG.md for version $VERSION"
+            echo "Add a section like '## [$VERSION] - $(date +%Y-%m-%d)' to CHANGELOG.md"
+            exit 1
+          fi
+          echo "Found release notes for version $VERSION"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build all platforms
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          mkdir -p bin
+          bun build --compile --minify --target=bun-darwin-arm64 --define BUILD_VERSION="\"$VERSION\"" src/index.ts --outfile bin/pcb-lens-darwin-arm64
+          bun build --compile --minify --target=bun-darwin-x64 --define BUILD_VERSION="\"$VERSION\"" src/index.ts --outfile bin/pcb-lens-darwin-x64
+          bun build --compile --minify --target=bun-linux-arm64 --define BUILD_VERSION="\"$VERSION\"" src/index.ts --outfile bin/pcb-lens-linux-arm64
+          bun build --compile --minify --target=bun-linux-x64 --define BUILD_VERSION="\"$VERSION\"" src/index.ts --outfile bin/pcb-lens-linux-x64
+          bun build --compile --minify --target=bun-windows-x64 --define BUILD_VERSION="\"$VERSION\"" src/index.ts --outfile bin/pcb-lens-windows-x64.exe
+
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the key
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Create macOS universal binary
+        run: |
+          cd bin
+          lipo -create pcb-lens-darwin-arm64 pcb-lens-darwin-x64 \
+            -output pcb-lens-darwin-universal
+          lipo -info pcb-lens-darwin-universal
+
+      - name: Sign macOS universal binary
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd bin
+          codesign --force --options runtime --entitlements ../entitlements.plist \
+            --sign "Developer ID Application: Valentino Zegna Baruffa ($APPLE_TEAM_ID)" \
+            pcb-lens-darwin-universal
+          codesign --verify --verbose pcb-lens-darwin-universal
+
+      - name: Notarize macOS universal binary
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd bin
+          zip pcb-lens-darwin-universal.zip pcb-lens-darwin-universal
+          xcrun notarytool submit pcb-lens-darwin-universal.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          rm pcb-lens-darwin-universal.zip
+
+      - name: Create arch-specific aliases for backward-compatible updates
+        run: |
+          cd bin
+          cp pcb-lens-darwin-universal pcb-lens-darwin-arm64
+          cp pcb-lens-darwin-universal pcb-lens-darwin-x64
+
+      - name: Generate checksums
+        run: |
+          cd bin
+          shasum -a 256 pcb-lens-* > checksums.txt
+          cat checksums.txt
+
+      - name: Build .mcpb desktop extension
+        run: |
+          chmod +x scripts/build-mcpb.sh
+          RELEASE_DIR=$PWD/bin OUTPUT_DIR=$PWD/bin scripts/build-mcpb.sh ${GITHUB_REF#refs/tags/v}
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          # Extract section between current version header and next version header (or EOF)
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") found=1; next }
+            /^\[.*\]:/ { exit }
+            found { print }
+          ' CHANGELOG.md)
+
+          # Use delimiter for multiline output
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.version.outputs.version }}
+          body: |
+            ${{ steps.changelog.outputs.notes }}
+
+            ## Installation
+
+            See [Setup Instructions](https://github.com/IntelligentElectron/pcb-lens?tab=readme-ov-file#connect-the-mcp-with-your-favorite-ai-tool) for installation and configuration.
+
+            ## Checksums
+
+            See `checksums.txt` for SHA256 checksums.
+          files: |
+            bin/pcb-lens-darwin-universal
+            bin/pcb-lens-darwin-arm64
+            bin/pcb-lens-darwin-x64
+            bin/pcb-lens-linux-arm64
+            bin/pcb-lens-linux-x64
+            bin/pcb-lens-windows-x64.exe
+            bin/checksums.txt
+            bin/pcb-lens.mcpb
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: build-and-release
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC trusted publishing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          # NOTE: Do NOT add registry-url here - it creates a .npmrc with
+          # auth token placeholder that interferes with OIDC authentication
+
+      - name: Update npm to latest (OIDC requires npm 11.5.1+)
+        run: npm install -g npm@latest
+
+      - name: Verify npm version
+        run: npm --version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public --ignore-scripts
