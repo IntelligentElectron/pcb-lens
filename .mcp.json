@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pcb-lens": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"]
+    }
+  }
+}

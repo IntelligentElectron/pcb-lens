@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+bun.lock
+package-lock.json
+
+# Build output
+dist/
+build/
+bin/
+release/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+.claude/settings.local.json
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Private files and plans
+private/
+.plans/
+
+# Test fixtures (large XML/ZIP files downloaded via npm run setup)
+test/fixtures/*.xml
+test/fixtures/*.zip
