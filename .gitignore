@@ -43,3 +43,4 @@ private/
 # Test fixtures (large XML/ZIP files downloaded via npm run setup)
 test/fixtures/*.xml
 test/fixtures/*.zip
+test/integration/fixtures/
