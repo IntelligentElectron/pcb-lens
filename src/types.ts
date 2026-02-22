@@ -111,6 +111,22 @@ export interface NetViaInfo {
 }
 
 /**
+ * Result from render_net tool.
+ */
+export interface RenderNetResult {
+  netName: string;
+  units: string;
+  svg: string;
+  stats: {
+    traceCount: number;
+    viaCount: number;
+    pinCount: number;
+    resolvedPads: number;
+    layersUsed: string[];
+  };
+}
+
+/**
  * Result from query_net tool.
  */
 export interface QueryNetResult {

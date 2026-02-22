@@ -7,6 +7,7 @@
  */
 
 import { createReadStream } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
 const attrRegexCache = new Map<string, RegExp>();
@@ -78,4 +79,20 @@ export const streamAllLines = async (filePath: string, handler: LineHandler): Pr
 
   rl.close();
   stream.destroy();
+};
+
+/**
+ * Load an entire file into memory as a string array.
+ * Use when multiple passes over the same file are needed (avoids re-reading from disk).
+ */
+export const loadAllLines = async (filePath: string): Promise<string[]> =>
+  (await readFile(filePath, "utf-8")).split("\n");
+
+/**
+ * Iterate an in-memory line array with the same LineHandler interface as streamAllLines.
+ */
+export const scanLines = (lines: string[], handler: LineHandler): void => {
+  for (let i = 0; i < lines.length; i++) {
+    if (handler(lines[i], i + 1) === false) break;
+  }
 };

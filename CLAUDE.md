@@ -136,7 +136,15 @@ attribute extraction instead of DOM/SAX parsing. This avoids loading the entire 
 Core utilities in `src/xml-utils.ts`:
 - `attr(line, name)` — extract XML attribute by regex
 - `numAttr(line, name)` — extract numeric attribute
-- `streamAllLines(filePath, handler)` — stream every line
+- `streamAllLines(filePath, handler)` — stream every line (disk-based, one pass)
+- `loadAllLines(filePath)` — load entire file into memory as string array
+- `scanLines(lines, handler)` — iterate in-memory lines with same `LineHandler` interface
+
+Use `loadAllLines` + `scanLines` when a tool needs multiple passes over the same file (e.g., `render_net` does 7+ passes). Use `streamAllLines` for single-pass tools.
+
+### SVG Rendering
+
+The `render_net` tool generates SVG internally, then converts to PNG via `@resvg/resvg-js` before returning as MCP image content. This is necessary because Claude's API only accepts raster image formats (PNG, JPEG, WebP, GIF) — not SVG. A 1200px PNG costs ~1K tokens regardless of net complexity.
 
 ## Testing
 

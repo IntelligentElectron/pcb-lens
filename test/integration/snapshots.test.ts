@@ -9,8 +9,13 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { getDesignOverview, queryComponents, queryNet } from "../../src/service.js";
-import type { DesignOverview, QueryComponentsResult, QueryNetResult } from "../../src/types.js";
+import { getDesignOverview, queryComponents, queryNet, renderNet } from "../../src/service.js";
+import type {
+  DesignOverview,
+  QueryComponentsResult,
+  QueryNetResult,
+  RenderNetResult,
+} from "../../src/types.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../fixtures");
 
@@ -411,6 +416,44 @@ for (const fixture of FIXTURES) {
 
       if (fixture.net.rawPinRefCount !== undefined) {
         expect(net.pins.length).toBeLessThanOrEqual(fixture.net.rawPinRefCount);
+      }
+    });
+
+    it(`renderNet(${fixture.net.pattern})`, async () => {
+      const result = await renderNet(filePath, fixture.net.pattern);
+
+      if (fixture.net.expectError) {
+        expect(result).toHaveProperty("error");
+        return;
+      }
+
+      expect(result).not.toHaveProperty("error");
+      const render = result as RenderNetResult;
+
+      if (fixture.net.netName) {
+        expect(render.netName).toBe(fixture.net.netName);
+      }
+
+      expect(render.units).toBe("MICRON");
+      expect(render.svg).toContain("<svg ");
+      expect(render.svg).toContain("</svg>");
+      expect(render.svg).toContain(`<title>Net: ${render.netName}</title>`);
+
+      expect(render.stats.traceCount).toBeGreaterThanOrEqual(0);
+      expect(render.stats.viaCount).toBeGreaterThanOrEqual(0);
+      expect(render.stats.layersUsed).toBeInstanceOf(Array);
+
+      const minPins = fixture.net.minPins ?? 1;
+      expect(render.stats.pinCount).toBeGreaterThanOrEqual(minPins);
+      expect(render.stats.resolvedPads).toBeGreaterThanOrEqual(0);
+      expect(render.stats.resolvedPads).toBeLessThanOrEqual(render.stats.pinCount);
+
+      if (fixture.net.routingLayers) {
+        expect(render.stats.layersUsed).toEqual(expect.arrayContaining(fixture.net.routingLayers));
+      }
+
+      if (fixture.net.totalVias !== undefined) {
+        expect(render.stats.viaCount).toBe(fixture.net.totalVias);
       }
     });
   });

@@ -7,9 +7,12 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Resvg } from "@resvg/resvg-js";
 import { z } from "zod";
 import { VERSION } from "./version.js";
-import { getDesignOverview, queryComponents, queryNet } from "./service.js";
+import { getDesignOverview, queryComponents, queryNet, renderNet } from "./service.js";
+import type { RenderNetResult } from "./types.js";
+import { isErrorResult } from "./types.js";
 
 // =============================================================================
 // Server Instructions
@@ -26,6 +29,7 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 1. Use \`get_design_overview\` first to understand the design structure, layer stackup, and size
 2. Use \`query_components\` to find component placements by refdes pattern (regex)
 3. Use \`query_net\` to trace a net's routing, trace widths, vias, and connected pins
+4. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips
 
@@ -53,6 +57,36 @@ Results with an \`error\` field indicate a problem:
 const formatResult = (result: unknown): { content: { type: "text"; text: string }[] } => ({
   content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 });
+
+/**
+ * Render SVG to PNG using resvg, return as MCP image content + stats text.
+ */
+const formatRenderResult = (
+  result: RenderNetResult
+): {
+  content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[];
+} => {
+  const resvg = new Resvg(result.svg, { fitTo: { mode: "width", value: 1200 } });
+  const png = resvg.render().asPng();
+
+  return {
+    content: [
+      {
+        type: "image",
+        data: Buffer.from(png).toString("base64"),
+        mimeType: "image/png",
+      },
+      {
+        type: "text",
+        text: JSON.stringify(
+          { netName: result.netName, units: result.units, stats: result.stats },
+          null,
+          2
+        ),
+      },
+    ],
+  };
+};
 
 // =============================================================================
 // Server Setup
@@ -132,6 +166,26 @@ export const createServer = (): McpServer => {
     async ({ file, pattern }) => {
       const result = await queryNet(file, pattern);
       return formatResult(result);
+    }
+  );
+
+  // -------------------------------------------------------------------------
+  // Tool: render_net
+  // -------------------------------------------------------------------------
+  server.registerTool(
+    "render_net",
+    {
+      description:
+        "Render a net's routing geometry as SVG from an IPC-2581 file. Returns an SVG showing board outline, trace paths by layer, exact SMD pad shapes, via annular rings, and pin labels.",
+      inputSchema: {
+        file: z.string().describe("Path to IPC-2581 XML file"),
+        pattern: z.string().describe("Regex pattern for net name (e.g., '^VDD_3V3B$', 'CLK')"),
+      },
+    },
+    async ({ file, pattern }) => {
+      const result = await renderNet(file, pattern);
+      if (isErrorResult(result)) return formatResult(result);
+      return formatRenderResult(result);
     }
   );
 
