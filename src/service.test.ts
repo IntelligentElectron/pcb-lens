@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { getDesignOverview, queryComponents, queryNet } from "./service.js";
+import { getDesignOverview, queryComponents, queryNet, exportCadenceBoard } from "./service.js";
 import { isErrorResult } from "./types.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../test/fixtures");
@@ -140,6 +140,16 @@ describe.skipIf(!hasBeagleBoneFixture)("queryNet — BeagleBone RevC", () => {
       expect(result.units).toBe("MICRON");
       expect(result.pins.length).toBeGreaterThan(0);
       expect(result.routing.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("exportCadenceBoard", () => {
+  it("returns error on non-Windows platforms", async () => {
+    const result = await exportCadenceBoard("C:/designs/test.brd");
+    expect(isErrorResult(result)).toBe(true);
+    if (isErrorResult(result)) {
+      expect(result.error).toContain("only available on Windows");
     }
   });
 });

@@ -6,8 +6,11 @@
  * All physical values (coordinates, trace widths) are normalized to microns.
  */
 
-import { stat } from "node:fs/promises";
+import { stat, readdir, access } from "node:fs/promises";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
+import { createMutex } from "./async-mutex.js";
 import { attr, numAttr, streamAllLines, loadAllLines, scanLines } from "./xml-utils.js";
 import type {
   ErrorResult,
@@ -22,7 +25,11 @@ import type {
   NetPin,
   NetRouteInfo,
   NetViaInfo,
+  CadenceInstall,
+  ExportCadenceBoardResult,
 } from "./types.js";
+
+const execAsync = promisify(exec);
 
 // =============================================================================
 // File Validation
@@ -1349,4 +1356,155 @@ export const renderNet = async (
       layersUsed,
     },
   };
+};
+
+// =============================================================================
+// export_cadence_board — Cadence IPC-2581 export
+// =============================================================================
+
+const serializeExport = createMutex();
+
+const CADENCE_BASE = "C:/Cadence";
+
+/**
+ * Scan for Cadence SPB installations that include ipc2581_out.exe.
+ */
+export const detectCadenceVersions = async (
+  cadenceBase = CADENCE_BASE
+): Promise<CadenceInstall[]> => {
+  const installs: CadenceInstall[] = [];
+
+  try {
+    const entries = await readdir(cadenceBase);
+
+    for (const entry of entries) {
+      const match = entry.match(/^SPB_(\d+\.\d+)$/);
+      if (!match) continue;
+
+      const version = match[1];
+      const root = path.join(cadenceBase, entry);
+      const exePath = path.join(root, "tools", "bin", "ipc2581_out.exe");
+
+      try {
+        await access(exePath);
+        installs.push({ version, root, exePath });
+      } catch {
+        // ipc2581_out.exe not found in this install
+      }
+    }
+
+    installs.sort((a, b) => parseFloat(b.version) - parseFloat(a.version));
+  } catch {
+    // Cadence directory doesn't exist or isn't accessible
+  }
+
+  return installs;
+};
+
+const REV_B_FLAGS = "-f 1.03 -u MICRON -d -b -l -R -K -n -p -t -c -O -I -D -M -S -k -e";
+const REV_C_FLAGS = "-f 1.04 -u MICRON -d -b -l -R -K -G -Y -p -t -c -O -I -D -M -A -B -C -U -k -e";
+
+/**
+ * Export a Cadence Allegro .brd file to IPC-2581 XML via ipc2581_out.exe.
+ * Windows only. Requires Cadence SPB installation.
+ */
+export const exportCadenceBoard = async (
+  brdPath: string,
+  options?: { output?: string; revision?: "B" | "C" }
+): Promise<ExportCadenceBoardResult | ErrorResult> => {
+  if (process.platform !== "win32") {
+    return {
+      error:
+        "Cadence export is only available on Windows. The ipc2581_out utility requires a Windows environment with Cadence SPB installed.",
+    };
+  }
+
+  // Validate .brd file
+  const resolvedBrd = path.resolve(brdPath);
+  if (!resolvedBrd.toLowerCase().endsWith(".brd")) {
+    return { error: `Expected a .brd file, got: '${path.basename(resolvedBrd)}'` };
+  }
+  try {
+    const s = await stat(resolvedBrd);
+    if (!s.isFile()) {
+      return { error: `'${resolvedBrd}' is not a file` };
+    }
+  } catch {
+    return { error: `Board file not found: '${resolvedBrd}'` };
+  }
+
+  // Detect Cadence installation
+  const installs = await detectCadenceVersions();
+  if (installs.length === 0) {
+    return {
+      error:
+        "No Cadence SPB installation with ipc2581_out.exe found in C:/Cadence. Ensure Cadence Allegro/OrCAD PCB Editor is installed.",
+    };
+  }
+  const cadence = installs[0];
+
+  const revision = options?.revision ?? "C";
+  const flags = revision === "B" ? REV_B_FLAGS : REV_C_FLAGS;
+
+  // Determine output path
+  const brdDir = path.dirname(resolvedBrd);
+  const brdName = path.basename(resolvedBrd, ".brd");
+  const outputBase = options?.output ?? path.join(brdDir, `${brdName}_ipc2581`);
+  // Cadence appends .xml to the output path
+  const expectedOutput = outputBase.endsWith(".xml") ? outputBase : `${outputBase}.xml`;
+
+  const command = `"${cadence.exePath}" ${flags} -i "${resolvedBrd}" -o "${outputBase}"`;
+
+  return serializeExport(async () => {
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        cwd: brdDir,
+        timeout: 300_000, // 5 minutes
+      });
+
+      const log = (stdout + stderr).trim();
+
+      // Check for license failure
+      if (log.includes("License checking failed. Terminating")) {
+        return {
+          error: `Cadence license check failed. Ensure a valid Allegro license is available. Log: ${log}`,
+        };
+      }
+
+      // Check for success marker
+      if (!log.includes("a2ipc2581 complete")) {
+        return {
+          error: `Export did not complete successfully. Log: ${log}`,
+        };
+      }
+
+      // Verify output file exists and is non-trivial
+      try {
+        const outStat = await stat(expectedOutput);
+        if (outStat.size < 1024) {
+          return {
+            error: `Output file is suspiciously small (${outStat.size} bytes): '${expectedOutput}'`,
+          };
+        }
+      } catch {
+        return {
+          error: `Export reported success but output file not found: '${expectedOutput}'`,
+        };
+      }
+
+      return {
+        success: true,
+        outputPath: expectedOutput,
+        revision,
+        cadenceVersion: cadence.version,
+        log: log || undefined,
+      };
+    } catch (err: unknown) {
+      const execError = err as { message?: string; stdout?: string; stderr?: string };
+      const combinedLog = [execError.stdout, execError.stderr].filter(Boolean).join("\n").trim();
+      return {
+        error: `Cadence ipc2581_out failed: ${execError.message ?? "Unknown error"}${combinedLog ? `\nLog: ${combinedLog}` : ""}`,
+      };
+    }
+  });
 };
