@@ -1453,7 +1453,7 @@ export const exportCadenceBoard = async (
   // Cadence appends .xml to the output path
   const expectedOutput = outputBase.endsWith(".xml") ? outputBase : `${outputBase}.xml`;
 
-  const command = `"${cadence.exePath}" ${flags} -i "${resolvedBrd}" -o "${outputBase}"`;
+  const command = `"${cadence.exePath}" ${flags} -o "${outputBase}" "${resolvedBrd}"`;
 
   return serializeExport(async () => {
     try {
