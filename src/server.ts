@@ -7,7 +7,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Resvg } from "@resvg/resvg-js";
+import { Resvg, initWasm } from "@resvg/resvg-wasm";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { VERSION } from "./version.js";
 import { getDesignOverview, queryComponents, queryNet, renderNet } from "./service.js";
@@ -58,14 +60,25 @@ const formatResult = (result: unknown): { content: { type: "text"; text: string 
   content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 });
 
+let wasmInitialized = false;
+
+const ensureWasmInitialized = async (): Promise<void> => {
+  if (wasmInitialized) return;
+  const wasmUrl = import.meta.resolve("@resvg/resvg-wasm/index_bg.wasm");
+  const wasmBuffer = await readFile(fileURLToPath(wasmUrl));
+  await initWasm(wasmBuffer);
+  wasmInitialized = true;
+};
+
 /**
- * Render SVG to PNG using resvg, return as MCP image content + stats text.
+ * Render SVG to PNG using resvg-wasm, return as MCP image content + stats text.
  */
-const formatRenderResult = (
+const formatRenderResult = async (
   result: RenderNetResult
-): {
+): Promise<{
   content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[];
-} => {
+}> => {
+  await ensureWasmInitialized();
   const resvg = new Resvg(result.svg, { fitTo: { mode: "width", value: 1200 } });
   const png = resvg.render().asPng();
 
@@ -185,7 +198,7 @@ export const createServer = (): McpServer => {
     async ({ file, pattern }) => {
       const result = await renderNet(file, pattern);
       if (isErrorResult(result)) return formatResult(result);
-      return formatRenderResult(result);
+      return await formatRenderResult(result);
     }
   );
 

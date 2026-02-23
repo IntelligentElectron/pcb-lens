@@ -144,7 +144,7 @@ Use `loadAllLines` + `scanLines` when a tool needs multiple passes over the same
 
 ### SVG Rendering
 
-The `render_net` tool generates SVG internally, then converts to PNG via `@resvg/resvg-js` before returning as MCP image content. This is necessary because Claude's API only accepts raster image formats (PNG, JPEG, WebP, GIF) — not SVG. A 1200px PNG costs ~1K tokens regardless of net complexity.
+The `render_net` tool generates SVG internally, then converts to PNG via `@resvg/resvg-wasm` before returning as MCP image content. This is necessary because Claude's API only accepts raster image formats (PNG, JPEG, WebP, GIF) — not SVG. A 1200px PNG costs ~1K tokens regardless of net complexity. The WASM variant is used instead of the native `@resvg/resvg-js` to avoid macOS code signing conflicts when running as a compiled Bun binary.
 
 ## Testing
 
