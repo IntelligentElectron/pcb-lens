@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-02-23
+
+### Added
+
+- `export_cadence_board` tool for automated IPC-2581 XML export from Cadence Allegro .brd files (Windows only)
+- Cadence SPB auto-detection with version sorting
+- Mutex-serialized export calls to avoid Cadence license conflicts
+- Support for IPC-2581 Rev B (1.03) and Rev C (1.04) export formats
+- WASM embedding support for compiled Bun binaries
+
 ## [0.0.1] - 2026-02-23
 
 ### Fixed

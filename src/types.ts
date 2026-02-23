@@ -139,3 +139,23 @@ export interface QueryNetResult {
   totalVias: number;
   layersUsed: string[];
 }
+
+/**
+ * Detected Cadence SPB installation.
+ */
+export interface CadenceInstall {
+  version: string;
+  root: string;
+  exePath: string;
+}
+
+/**
+ * Result from export_cadence_board tool.
+ */
+export interface ExportCadenceBoardResult {
+  success: boolean;
+  outputPath: string;
+  revision: "B" | "C";
+  cadenceVersion: string;
+  log?: string;
+}
