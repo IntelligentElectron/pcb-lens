@@ -61,13 +61,10 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  // Auto-update on startup (unless --no-update flag is present)
-  if (!args.includes("--no-update")) {
-    const updated = await autoUpdate();
-    if (updated) {
-      // Re-execute with the new binary
-      reexec();
-    }
+  // Auto-update on startup
+  const updated = await autoUpdate();
+  if (updated) {
+    reexec();
   }
 
   await runServer();

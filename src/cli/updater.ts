@@ -2,7 +2,6 @@
  * Auto-updater for pcb-lens server.
  *
  * Checks GitHub Releases for newer versions and self-updates on startup.
- * Can be disabled via --no-update CLI flag.
  */
 
 import {
