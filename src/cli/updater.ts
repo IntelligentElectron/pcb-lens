@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { spawn } from "node:child_process";
-import { VERSION, GITHUB_REPO, BINARY_NAME } from "../version.js";
+import { VERSION, GITHUB_REPO, BINARY_NAME } from "./version.js";
 
 /** GitHub release information. */
 interface GitHubRelease {

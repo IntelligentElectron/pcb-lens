@@ -4,7 +4,7 @@
 
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
-import { VERSION, GITHUB_REPO, BINARY_NAME } from "../version.js";
+import { VERSION, GITHUB_REPO, BINARY_NAME } from "./version.js";
 import {
   checkForUpdate,
   performUpdate,

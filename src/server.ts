@@ -7,20 +7,11 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Resvg, initWasm } from "@resvg/resvg-wasm";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { z } from "zod";
-import { VERSION } from "./version.js";
-import {
-  getDesignOverview,
-  queryComponents,
-  queryNet,
-  renderNet,
-  exportCadenceBoard,
-} from "./service.js";
-import type { RenderNetResult } from "./types.js";
-import { isErrorResult } from "./types.js";
+import { VERSION } from "./cli/version.js";
+import { register as registerGetDesignOverview } from "./tools/get-design-overview.js";
+import { register as registerQueryComponents } from "./tools/query-components.js";
+import { register as registerQueryNet } from "./tools/query-net.js";
+import { register as registerExportCadenceBoard } from "./tools/export-cadence-board.js";
 
 // =============================================================================
 // Server Instructions
@@ -38,11 +29,10 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 2. Use \`get_design_overview\` first to understand the design structure, layer stackup, and size
 3. Use \`query_components\` to find component placements by refdes pattern (regex)
 4. Use \`query_net\` to trace a net's routing, trace widths, vias, and connected pins
-5. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips
 
-- All query/render tools accept an IPC-2581 XML file path as the first argument
+- All query tools accept an IPC-2581 XML file path as the first argument
 - Component refdes patterns use regex (e.g., "^U\\\\d+" for all ICs, "^C1$" for exact match)
 - Net name patterns use regex (e.g., "DDR_D0", "^VCC", "CLK")
 - All physical values (coordinates, trace widths) are normalized to microns regardless of the source file's native unit
@@ -55,67 +45,6 @@ Results with an \`error\` field indicate a problem:
 - No matches: Try a broader regex pattern
 - Invalid regex: Check pattern syntax
 `.trim();
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Format a result as MCP tool response content.
- */
-const formatResult = (result: unknown): { content: { type: "text"; text: string }[] } => ({
-  content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-});
-
-declare const BUILD_VERSION: string | undefined;
-
-let wasmInitialized = false;
-
-const resolveWasmBuffer = async (): Promise<Buffer> => {
-  if (typeof BUILD_VERSION !== "undefined") {
-    const { default: wasmPath } = await import("./wasm-embed.js");
-    return readFile(wasmPath);
-  }
-  const wasmUrl = import.meta.resolve("@resvg/resvg-wasm/index_bg.wasm");
-  return readFile(fileURLToPath(wasmUrl));
-};
-
-const ensureWasmInitialized = async (): Promise<void> => {
-  if (wasmInitialized) return;
-  await initWasm(await resolveWasmBuffer());
-  wasmInitialized = true;
-};
-
-/**
- * Render SVG to PNG using resvg-wasm, return as MCP image content + stats text.
- */
-const formatRenderResult = async (
-  result: RenderNetResult
-): Promise<{
-  content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[];
-}> => {
-  await ensureWasmInitialized();
-  const resvg = new Resvg(result.svg, { fitTo: { mode: "width", value: 1200 } });
-  const png = resvg.render().asPng();
-
-  return {
-    content: [
-      {
-        type: "image",
-        data: Buffer.from(png).toString("base64"),
-        mimeType: "image/png",
-      },
-      {
-        type: "text",
-        text: JSON.stringify(
-          { netName: result.netName, units: result.units, stats: result.stats },
-          null,
-          2
-        ),
-      },
-    ],
-  };
-};
 
 // =============================================================================
 // Server Setup
@@ -138,113 +67,10 @@ export const createServer = (): McpServer => {
     }
   );
 
-  // -------------------------------------------------------------------------
-  // Tool: get_design_overview
-  // -------------------------------------------------------------------------
-  server.registerTool(
-    "get_design_overview",
-    {
-      description:
-        "Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes",
-      inputSchema: {
-        file: z.string().describe("Path to IPC-2581 XML file"),
-      },
-    },
-    async ({ file }) => {
-      const result = await getDesignOverview(file);
-      return formatResult(result);
-    }
-  );
-
-  // -------------------------------------------------------------------------
-  // Tool: query_components
-  // -------------------------------------------------------------------------
-  server.registerTool(
-    "query_components",
-    {
-      description:
-        "Find components by refdes pattern in an IPC-2581 file. Returns placement coordinates, rotation, layer, package, and BOM data.",
-      inputSchema: {
-        file: z.string().describe("Path to IPC-2581 XML file"),
-        pattern: z
-          .string()
-          .describe("Regex pattern for component refdes (e.g., '^U1$', '^C\\\\d+', 'R10[0-9]')"),
-      },
-    },
-    async ({ file, pattern }) => {
-      const result = await queryComponents(file, pattern);
-      return formatResult(result);
-    }
-  );
-
-  // -------------------------------------------------------------------------
-  // Tool: query_net
-  // -------------------------------------------------------------------------
-  server.registerTool(
-    "query_net",
-    {
-      description:
-        "Query a net by name pattern in an IPC-2581 file. Returns connected pins, routing per layer (trace widths, segment counts), and via information.",
-      inputSchema: {
-        file: z.string().describe("Path to IPC-2581 XML file"),
-        pattern: z
-          .string()
-          .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
-      },
-    },
-    async ({ file, pattern }) => {
-      const result = await queryNet(file, pattern);
-      return formatResult(result);
-    }
-  );
-
-  // -------------------------------------------------------------------------
-  // Tool: render_net
-  // -------------------------------------------------------------------------
-  server.registerTool(
-    "render_net",
-    {
-      description:
-        "Render a net's routing geometry as SVG from an IPC-2581 file. Returns an SVG showing board outline, trace paths by layer, exact SMD pad shapes, via annular rings, and pin labels.",
-      inputSchema: {
-        file: z.string().describe("Path to IPC-2581 XML file"),
-        pattern: z.string().describe("Regex pattern for net name (e.g., '^VDD_3V3B$', 'CLK')"),
-      },
-    },
-    async ({ file, pattern }) => {
-      const result = await renderNet(file, pattern);
-      if (isErrorResult(result)) return formatResult(result);
-      return await formatRenderResult(result);
-    }
-  );
-
-  // -------------------------------------------------------------------------
-  // Tool: export_cadence_board
-  // -------------------------------------------------------------------------
-  server.registerTool(
-    "export_cadence_board",
-    {
-      description:
-        "Export a Cadence Allegro .brd file to IPC-2581 XML. Windows only. Requires Cadence SPB installation (auto-detected). Calls are serialized internally to avoid license conflicts.",
-      inputSchema: {
-        board: z.string().describe("Path to Cadence Allegro .brd file"),
-        output: z
-          .string()
-          .optional()
-          .describe(
-            "Output path (without .xml extension — Cadence appends it). Defaults to <boardname>_ipc2581.xml next to the .brd"
-          ),
-        revision: z
-          .enum(["B", "C"])
-          .optional()
-          .describe('IPC-2581 revision: "B" (1.03) or "C" (1.04, default). Rev C is richest.'),
-      },
-    },
-    async ({ board, output, revision }) => {
-      const result = await exportCadenceBoard(board, { output, revision });
-      return formatResult(result);
-    }
-  );
+  registerGetDesignOverview(server);
+  registerQueryComponents(server);
+  registerQueryNet(server);
+  registerExportCadenceBoard(server);
 
   return server;
 };

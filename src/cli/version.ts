@@ -16,7 +16,7 @@ export const VERSION = (() => {
   // Node.js/npm: read from package.json
   try {
     const require = createRequire(import.meta.url);
-    const pkg = require("../package.json") as { version: string };
+    const pkg = require("../../package.json") as { version: string };
     return pkg.version;
   } catch {
     return "0.0.0-dev";
