@@ -159,3 +159,61 @@ export interface ExportCadenceBoardResult {
   cadenceVersion: string;
   log?: string;
 }
+
+/**
+ * Result from export_cadence_constraints tool.
+ */
+export interface ExportCadenceConstraintsResult {
+  success: boolean;
+  outputPath: string;
+  cadenceVersion: string;
+  log?: string;
+}
+
+/**
+ * Generic TCFX constraint object. Attribute names (MIN_LINE_WIDTH, LINE_TO_LINE,
+ * etc.) carry domain semantics that the LLM interprets directly.
+ */
+export interface ConstraintObject {
+  name: string;
+  attributes: Record<string, { value: string; generic?: string }>;
+  references: Array<{ kind: string; name: string }>;
+  members: Array<{ kind: string; name: string }>;
+  crossSection?: CrossSection;
+}
+
+/**
+ * Stackup cross-section layer (nested inside Design section objects).
+ */
+export interface CrossSectionLayer {
+  type: string; // Conductor, Dielectric, Mask, Surface
+  attributes: Record<string, string>;
+}
+
+/**
+ * Cross-section data from a Design section object.
+ */
+export interface CrossSection {
+  primaryStackup?: string;
+  topIndex?: number;
+  bottomIndex?: number;
+  layers: CrossSectionLayer[];
+}
+
+/**
+ * Overview result from query_constraints (no section specified).
+ */
+export interface ConstraintsOverviewResult {
+  fileName: string;
+  fileSizeBytes: number;
+  sections: Array<{ name: string; objectCount: number }>;
+}
+
+/**
+ * Section query result from query_constraints.
+ */
+export interface ConstraintsSectionResult {
+  fileName: string;
+  section: string;
+  objects: ConstraintObject[];
+}

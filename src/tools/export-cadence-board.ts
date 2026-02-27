@@ -1,48 +1,14 @@
-import { stat, readdir, access } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createMutex } from "./lib/async-mutex.js";
-import type { CadenceInstall, ErrorResult, ExportCadenceBoardResult } from "./lib/types.js";
+import { detectCadenceInstalls, requireWindows, serializeCadenceCall } from "./lib/cadence.js";
+import type { ErrorResult, ExportCadenceBoardResult } from "./lib/types.js";
 import { formatResult } from "./shared.js";
 
 const execAsync = promisify(exec);
-const serializeExport = createMutex();
-const CADENCE_BASE = "C:/Cadence";
-
-export const detectCadenceVersions = async (
-  cadenceBase = CADENCE_BASE
-): Promise<CadenceInstall[]> => {
-  const installs: CadenceInstall[] = [];
-
-  try {
-    const entries = await readdir(cadenceBase);
-
-    for (const entry of entries) {
-      const match = entry.match(/^SPB_(\d+\.\d+)$/);
-      if (!match) continue;
-
-      const version = match[1];
-      const root = path.join(cadenceBase, entry);
-      const exePath = path.join(root, "tools", "bin", "ipc2581_out.exe");
-
-      try {
-        await access(exePath);
-        installs.push({ version, root, exePath });
-      } catch {
-        // ipc2581_out.exe not found in this install
-      }
-    }
-
-    installs.sort((a, b) => parseFloat(b.version) - parseFloat(a.version));
-  } catch {
-    // Cadence directory doesn't exist or isn't accessible
-  }
-
-  return installs;
-};
 
 const REV_B_FLAGS = "-f 1.03 -u MICRON -d -b -l -R -K -n -p -t -c -O -I -D -M -S -k -e";
 const REV_C_FLAGS = "-f 1.04 -u MICRON -d -b -l -R -K -G -Y -p -t -c -O -I -D -M -A -B -C -U -k -e";
@@ -51,12 +17,8 @@ export const exportCadenceBoard = async (
   brdPath: string,
   options?: { output?: string; revision?: "B" | "C" }
 ): Promise<ExportCadenceBoardResult | ErrorResult> => {
-  if (process.platform !== "win32") {
-    return {
-      error:
-        "Cadence export is only available on Windows. The ipc2581_out utility requires a Windows environment with Cadence SPB installed.",
-    };
-  }
+  const windowsError = requireWindows("Cadence export");
+  if (windowsError) return windowsError;
 
   const resolvedBrd = path.resolve(brdPath);
   if (!resolvedBrd.toLowerCase().endsWith(".brd")) {
@@ -71,7 +33,7 @@ export const exportCadenceBoard = async (
     return { error: `Board file not found: '${resolvedBrd}'` };
   }
 
-  const installs = await detectCadenceVersions();
+  const installs = await detectCadenceInstalls("ipc2581_out.exe");
   if (installs.length === 0) {
     return {
       error:
@@ -90,7 +52,7 @@ export const exportCadenceBoard = async (
 
   const command = `"${cadence.exePath}" ${flags} -o "${outputBase}" "${resolvedBrd}"`;
 
-  return serializeExport(async () => {
+  return serializeCadenceCall(async () => {
     try {
       const { stdout, stderr } = await execAsync(command, {
         cwd: brdDir,
