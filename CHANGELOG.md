@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-02-27
+
+### Added
+
+- `export_cadence_constraints` tool for exporting Cadence `.brd` constraint data to `.tcfx` XML (Windows only)
+- `query_constraints` tool for parsing `.tcfx` files: overview mode (section names, object counts) and section query mode (constraint objects with attributes, references, members, cross-section stackup)
+- Shared Cadence utilities module (`src/tools/lib/cadence.ts`) with install detection, license mutex, and platform guard
+
+### Changed
+
+- Refactored `export_cadence_board` to use shared Cadence utilities, ensuring a single mutex across all Cadence export tools
+- Enforced strict module hierarchy: tool files import only from `./lib/` and `./shared.js`, no peer imports
+
+### Removed
+
+- Claude Code Review and Claude CI/CD GitHub workflows
+
 ## [0.0.4] - 2026-02-24
 
 ### Removed
@@ -45,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release automation with CI workflows and binary compilation
 - Integration tests against IPC-2581 consortium fixtures
 
+[0.0.5]: https://github.com/IntelligentElectron/pcb-lens/releases/tag/v0.0.5
 [0.0.4]: https://github.com/IntelligentElectron/pcb-lens/releases/tag/v0.0.4
 [0.0.3]: https://github.com/IntelligentElectron/pcb-lens/releases/tag/v0.0.3
 [0.0.2]: https://github.com/IntelligentElectron/pcb-lens/releases/tag/v0.0.2
