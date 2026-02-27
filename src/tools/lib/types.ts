@@ -127,17 +127,25 @@ export interface RenderNetResult {
 }
 
 /**
- * Result from query_net tool.
+ * Per-net result from query_net tool.
  */
 export interface QueryNetResult {
   netName: string;
-  units: string;
   pins: NetPin[];
   routing: NetRouteInfo[];
   vias: NetViaInfo[];
   totalSegments: number;
   totalVias: number;
   layersUsed: string[];
+}
+
+/**
+ * Result from query_net tool (multi-match wrapper).
+ */
+export interface QueryNetsResult {
+  pattern: string;
+  units: string;
+  matches: QueryNetResult[];
 }
 
 /**

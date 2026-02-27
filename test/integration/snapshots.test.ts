@@ -16,7 +16,7 @@ import { renderNet } from "../../src/tools/render-net.js";
 import type {
   DesignOverview,
   QueryComponentsResult,
-  QueryNetResult,
+  QueryNetsResult,
   RenderNetResult,
 } from "../../src/tools/lib/types.js";
 
@@ -39,6 +39,7 @@ interface ComponentSpotCheck {
 interface NetGroundTruth {
   pattern: string;
   expectError?: boolean;
+  expectEmpty?: boolean;
   netName?: string;
   rawPinRefCount?: number;
   routingLayers?: string[];
@@ -249,7 +250,7 @@ const FIXTURES: FixtureConfig[] = [
     // (attr() picks up the first x=/y= on the entire line, not the target component's)
     net: {
       pattern: ".*",
-      expectError: true,
+      expectEmpty: true,
     },
   },
   {
@@ -398,13 +399,20 @@ for (const fixture of FIXTURES) {
       }
 
       expect(result).not.toHaveProperty("error");
-      const net = result as QueryNetResult;
+      const wrapper = result as QueryNetsResult;
+      expect(wrapper.units).toBe("MICRON");
+
+      if (fixture.net.expectEmpty) {
+        expect(wrapper.matches).toHaveLength(0);
+        return;
+      }
+
+      expect(wrapper.matches.length).toBeGreaterThanOrEqual(1);
+      const net = wrapper.matches[0];
 
       if (fixture.net.netName) {
         expect(net.netName).toBe(fixture.net.netName);
       }
-
-      expect(net.units).toBe("MICRON");
 
       if (fixture.net.routingLayers) {
         expect(net.layersUsed).toEqual(expect.arrayContaining(fixture.net.routingLayers));
@@ -425,7 +433,7 @@ for (const fixture of FIXTURES) {
     it(`renderNet(${fixture.net.pattern})`, async () => {
       const result = await renderNet(filePath, fixture.net.pattern);
 
-      if (fixture.net.expectError) {
+      if (fixture.net.expectError || fixture.net.expectEmpty) {
         expect(result).toHaveProperty("error");
         return;
       }
