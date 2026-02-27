@@ -141,6 +141,8 @@ Then enable it in **Configure Tools** (click the tools icon in Copilot chat).
 
 ## Documentation
 
+See [docs/](docs/README.md) for API documentation and response schemas.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ---

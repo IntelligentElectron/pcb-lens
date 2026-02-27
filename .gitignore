@@ -44,3 +44,7 @@ private/
 test/fixtures/*.xml
 test/fixtures/*.zip
 test/integration/fixtures/
+
+# Telemetry
+telemetry.jsonl
+telemetry-*.zip

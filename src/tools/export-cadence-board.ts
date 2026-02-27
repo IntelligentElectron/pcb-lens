@@ -7,6 +7,7 @@ import { z } from "zod";
 import { detectCadenceInstalls, requireWindows, serializeCadenceCall } from "./lib/cadence.js";
 import type { ErrorResult, ExportCadenceBoardResult } from "./lib/types.js";
 import { formatResult } from "./shared.js";
+import { withTelemetry } from "../telemetry.js";
 
 const execAsync = promisify(exec);
 
@@ -123,9 +124,9 @@ export const register = (server: McpServer): void => {
           .describe('IPC-2581 revision: "B" (1.03) or "C" (1.04, default). Rev C is richest.'),
       },
     },
-    async ({ board, output, revision }) => {
+    withTelemetry("export_cadence_board", async ({ board, output, revision }) => {
       const result = await exportCadenceBoard(board, { output, revision });
       return formatResult(result);
-    }
+    })
   );
 };

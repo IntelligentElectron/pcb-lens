@@ -8,6 +8,7 @@ import type {
 } from "./lib/types.js";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
 import { extractMicronFactor, formatResult, validateFile, validatePattern } from "./shared.js";
+import { withTelemetry } from "../telemetry.js";
 
 export const queryComponents = async (
   filePath: string,
@@ -148,9 +149,9 @@ export const register = (server: McpServer): void => {
           .describe("Regex pattern for component refdes (e.g., '^U1$', '^C\\\\d+', 'R10[0-9]')"),
       },
     },
-    async ({ file, pattern }) => {
+    withTelemetry("query_components", async ({ file, pattern }) => {
       const result = await queryComponents(file, pattern);
       return formatResult(result);
-    }
+    })
   );
 };

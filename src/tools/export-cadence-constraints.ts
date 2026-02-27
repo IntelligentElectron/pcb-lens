@@ -7,6 +7,7 @@ import { z } from "zod";
 import { detectCadenceInstalls, requireWindows, serializeCadenceCall } from "./lib/cadence.js";
 import type { ErrorResult, ExportCadenceConstraintsResult } from "./lib/types.js";
 import { formatResult } from "./shared.js";
+import { withTelemetry } from "../telemetry.js";
 
 const execAsync = promisify(exec);
 
@@ -103,9 +104,9 @@ export const register = (server: McpServer): void => {
           .describe("Output .tcfx path. Defaults to <boardname>_constraints.tcfx next to the .brd"),
       },
     },
-    async ({ board, output }) => {
+    withTelemetry("export_cadence_constraints", async ({ board, output }) => {
       const result = await exportCadenceConstraints(board, { output });
       return formatResult(result);
-    }
+    })
   );
 };

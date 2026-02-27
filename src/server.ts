@@ -5,9 +5,11 @@
  * Supports any EDA tool that exports IPC-2581 XML.
  */
 
+import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { VERSION } from "./cli/version.js";
+import { initTelemetry } from "./telemetry.js";
 import { register as registerGetDesignOverview } from "./tools/get-design-overview.js";
 import { register as registerQueryComponents } from "./tools/query-components.js";
 import { register as registerQueryNet } from "./tools/query-net.js";
@@ -86,6 +88,7 @@ export const createServer = (): McpServer => {
  * Run the MCP server with stdio transport.
  */
 export const runServer = async (): Promise<void> => {
+  initTelemetry(crypto.randomUUID());
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
