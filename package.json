@@ -1,6 +1,6 @@
 {
   "name": "@intelligentelectron/pcb-lens",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "MCP server for IPC-2581 PCB layout analysis and review",
   "type": "module",
   "main": "dist/index.js",
