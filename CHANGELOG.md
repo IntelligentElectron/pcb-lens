@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.7] - 2026-02-27
+
+### Fixed
+
+- `query_net` now extracts pins from `<LogicalNet>` sections instead of only `<LayerFeature>/<Set>`, which returned empty pin arrays
+- `query_net` now extracts layer usage from `<PhyNetPoint>` sections, fixing empty `layersUsed` for nets without routing segments
+- `query_net` now returns all nets matching the regex pattern instead of only the first match
+
+### Changed
+
+- `query_net` return type changed from single `QueryNetResult` to `QueryNetsResult` wrapper with `pattern`, `units`, and `matches` array (consistent with `query_components`)
+- Non-matching patterns now return `{ matches: [] }` instead of an error
+
 ## [0.0.6] - 2026-02-27
 
 ### Added
