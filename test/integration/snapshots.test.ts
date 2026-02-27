@@ -2,20 +2,23 @@
  * Correctness validation integration tests.
  *
  * Every hardcoded expected value was independently extracted from the raw XML
- * fixtures via grep/manual inspection — not from running the streaming parser.
+ * fixtures via grep/manual inspection -- not from running the streaming parser.
  * This avoids circular testing where bugs in the parser would be frozen as "correct."
  */
 
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { getDesignOverview, queryComponents, queryNet, renderNet } from "../../src/service.js";
+import { getDesignOverview } from "../../src/tools/get-design-overview.js";
+import { queryComponents } from "../../src/tools/query-components.js";
+import { queryNet } from "../../src/tools/query-net.js";
+import { renderNet } from "../../src/tools/render-net.js";
 import type {
   DesignOverview,
   QueryComponentsResult,
   QueryNetResult,
   RenderNetResult,
-} from "../../src/types.js";
+} from "../../src/tools/lib/types.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../fixtures");
 

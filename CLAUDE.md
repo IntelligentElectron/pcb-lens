@@ -77,23 +77,7 @@ The tag push triggers the release workflow, which automatically:
 ## Project Structure
 
 ```bash
-src/
-  index.ts              # Entry point, CLI handling
-  server.ts             # MCP server setup, tool registration
-  service.ts            # Tool implementations (streaming XML queries)
-  types.ts              # TypeScript types and interfaces
-  version.ts            # Version constant
-  xml-utils.ts          # Streaming XML parsing utilities
-  cli/
-    commands.ts         # CLI command handlers
-    updater.ts          # Auto-update logic
-    prompts.ts          # User interaction utilities
-    shell.ts            # Shell rc file manipulation
-scripts/
-  download-fixtures.sh  # Download IPC-2581 test fixtures
-test/
-  fixtures/             # IPC-2581 XML test files (gitignored)
-  integration/          # Integration tests against fixtures
+find src/ scripts/ test/ -type f -not -name '*.js' -not -name '*.map' | sort
 ```
 
 ## Editing Guidelines
@@ -105,10 +89,10 @@ test/
 
 ### Adding a New Tool
 
-1. Add types in `src/types.ts`
-2. Add the service function in `src/service.ts`
-3. Register the tool in `src/server.ts` using `server.registerTool()`
-4. Add tests in `src/service.test.ts`
+1. Add types in `src/tools/lib/types.ts`
+2. Create a new tool file in `src/tools/<tool-name>.ts` (imports from `./lib/` and `./shared.js` only)
+3. Register the tool via a `register(server)` export, called from `src/server.ts`
+4. Add tests in `src/tools/<tool-name>.test.ts`
 
 ## Key Concepts
 
