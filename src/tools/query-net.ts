@@ -9,6 +9,7 @@ import {
   validateFile,
   validatePattern,
 } from "./shared.js";
+import { withTelemetry } from "../telemetry.js";
 
 export const queryNet = async (
   filePath: string,
@@ -175,9 +176,9 @@ export const register = (server: McpServer): void => {
           .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
       },
     },
-    async ({ file, pattern }) => {
+    withTelemetry("query_net", async ({ file, pattern }) => {
       const result = await queryNet(file, pattern);
       return formatResult(result);
-    }
+    })
   );
 };

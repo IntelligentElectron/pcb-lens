@@ -5,6 +5,7 @@
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { VERSION, GITHUB_REPO, BINARY_NAME } from "./version.js";
+import { exportTelemetry } from "../telemetry.js";
 import {
   checkForUpdate,
   performUpdate,
@@ -38,8 +39,9 @@ OPTIONS:
   --version, -v    Print version and exit
   --help, -h       Show this help message
   --update         Check for and install updates
-  --uninstall      Remove binary and PATH entries
-  --no-update      Disable auto-update check on startup
+  --uninstall          Remove binary and PATH entries
+  --export-telemetry   Export telemetry data as a zip file
+  --no-update          Disable auto-update check on startup
 
 MORE INFO:
   https://github.com/${GITHUB_REPO}
@@ -135,4 +137,18 @@ export const handleUninstallCommand = async (): Promise<void> => {
 
   console.log("");
   console.log(`${BINARY_NAME} has been uninstalled.`);
+};
+
+/**
+ * Handle --export-telemetry command.
+ * Exports telemetry data as a zip file in the current working directory.
+ */
+export const handleExportTelemetryCommand = async (): Promise<void> => {
+  try {
+    const zipPath = await exportTelemetry();
+    console.log(zipPath);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 };

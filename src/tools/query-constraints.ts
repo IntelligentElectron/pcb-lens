@@ -12,6 +12,7 @@ import type {
   ErrorResult,
 } from "./lib/types.js";
 import { formatResult } from "./shared.js";
+import { withTelemetry } from "../telemetry.js";
 
 // =============================================================================
 // File validation
@@ -342,9 +343,9 @@ export const register = (server: McpServer): void => {
           ),
       },
     },
-    async ({ file, section }) => {
+    withTelemetry("query_constraints", async ({ file, section }) => {
       const result = await queryConstraints(file, section);
       return formatResult(result);
-    }
+    })
   );
 };

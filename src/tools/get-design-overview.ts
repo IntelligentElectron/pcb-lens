@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { DesignOverview, ErrorResult, LayerInfo, SectionInfo } from "./lib/types.js";
 import { attr, streamAllLines } from "./lib/xml-utils.js";
 import { formatResult, validateFile } from "./shared.js";
+import { withTelemetry } from "../telemetry.js";
 
 export const getDesignOverview = async (
   filePath: string
@@ -120,9 +121,9 @@ export const register = (server: McpServer): void => {
         file: z.string().describe("Path to IPC-2581 XML file"),
       },
     },
-    async ({ file }) => {
+    withTelemetry("get_design_overview", async ({ file }) => {
       const result = await getDesignOverview(file);
       return formatResult(result);
-    }
+    })
   );
 };
