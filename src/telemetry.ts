@@ -59,10 +59,7 @@ export const getInstallDir = (): string => {
   // npm/dev fallback: platform-specific data directory
   switch (process.platform) {
     case "darwin":
-      return join(
-        process.env.HOME ?? userInfo().homedir,
-        "Library/Application Support/pcb-lens"
-      );
+      return join(process.env.HOME ?? userInfo().homedir, "Library/Application Support/pcb-lens");
     case "win32":
       return join(
         process.env.LOCALAPPDATA ?? join(userInfo().homedir, "AppData/Local"),
