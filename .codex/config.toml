@@ -1,0 +1,4 @@
+[mcp_servers.pcb-lens]
+command = "npx"
+args = ["tsx", "src/index.ts"]
+cwd = "/Users/valentino/Developer/IntelligentElectron/pcb-lens"

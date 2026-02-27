@@ -64,6 +64,9 @@ interface FixtureConfig {
   net: NetGroundTruth;
 }
 
+const groupedPinCount = (pins: Record<string, string[]>): number =>
+  Object.values(pins).reduce((sum, componentPins) => sum + componentPins.length, 0);
+
 // ---------------------------------------------------------------------------
 // Fixture definitions with independently-verified ground truth
 //
@@ -419,14 +422,15 @@ for (const fixture of FIXTURES) {
       }
 
       if (fixture.net.totalVias !== undefined) {
-        expect(net.totalVias).toBe(fixture.net.totalVias);
+        expect(net.totalVias ?? 0).toBe(fixture.net.totalVias);
       }
 
       const minPins = fixture.net.minPins ?? 1;
-      expect(net.pins.length).toBeGreaterThanOrEqual(minPins);
+      const totalPins = groupedPinCount(net.pins);
+      expect(totalPins).toBeGreaterThanOrEqual(minPins);
 
       if (fixture.net.rawPinRefCount !== undefined) {
-        expect(net.pins.length).toBeLessThanOrEqual(fixture.net.rawPinRefCount);
+        expect(totalPins).toBeLessThanOrEqual(fixture.net.rawPinRefCount);
       }
     });
 

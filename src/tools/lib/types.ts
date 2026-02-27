@@ -131,11 +131,11 @@ export interface RenderNetResult {
  */
 export interface QueryNetResult {
   netName: string;
-  pins: NetPin[];
-  routing: NetRouteInfo[];
-  vias: NetViaInfo[];
-  totalSegments: number;
-  totalVias: number;
+  pins: Record<string, string[]>;
+  routing?: NetRouteInfo[];
+  vias?: NetViaInfo[];
+  totalSegments?: number;
+  totalVias?: number;
   layersUsed: string[];
 }
 
