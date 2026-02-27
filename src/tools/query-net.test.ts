@@ -88,6 +88,12 @@ const expectSuccess = (result: unknown): QueryNetsResult => {
   return result as QueryNetsResult;
 };
 
+const hasPin = (pins: Record<string, string[]>, refdes: string, pin: string): boolean =>
+  (pins[refdes] ?? []).includes(pin);
+
+const pinCount = (pins: Record<string, string[]>): number =>
+  Object.values(pins).reduce((sum, componentPins) => sum + componentPins.length, 0);
+
 // ---------------------------------------------------------------------------
 // Pattern validation (edge cases)
 // ---------------------------------------------------------------------------
@@ -121,29 +127,38 @@ describe("queryNet -- pin extraction from LogicalNet", () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
     expect(r.matches).toHaveLength(1);
     const pins = r.matches[0].pins;
-    expect(pins).toContainEqual({ refdes: "U1", pin: "1" });
-    expect(pins).toContainEqual({ refdes: "R1", pin: "2" });
+    expect(hasPin(pins, "U1", "1")).toBe(true);
+    expect(hasPin(pins, "R1", "2")).toBe(true);
   });
 
   it("extracts pins from LogicalNet for NET_B", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_B$"));
     expect(r.matches).toHaveLength(1);
     const pins = r.matches[0].pins;
-    expect(pins).toContainEqual({ refdes: "U1", pin: "3" });
-    expect(pins).toContainEqual({ refdes: "C1", pin: "1" });
+    expect(hasPin(pins, "U1", "3")).toBe(true);
+    expect(hasPin(pins, "C1", "1")).toBe(true);
   });
 
   it("includes supplementary pin from LayerFeature Set", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_B$"));
     const pins = r.matches[0].pins;
-    expect(pins).toContainEqual({ refdes: "U2", pin: "5" });
+    expect(hasPin(pins, "U2", "5")).toBe(true);
   });
 
   it("deduplicates pins appearing in both LogicalNet and LayerFeature", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_B$"));
     const pins = r.matches[0].pins;
-    const u2Pin5 = pins.filter((p) => p.refdes === "U2" && p.pin === "5");
-    expect(u2Pin5).toHaveLength(1);
+    const u2Pins = pins.U2 ?? [];
+    expect(u2Pins.filter((pin) => pin === "5")).toHaveLength(1);
+  });
+
+  it("groups pins by refdes with sorted keys and pin values", async () => {
+    const r = expectSuccess(await queryNet(inlineXml, "^NET_B$"));
+    const pins = r.matches[0].pins;
+    expect(Object.keys(pins)).toEqual(["C1", "U1", "U2"]);
+    expect(pins.C1).toEqual(["1"]);
+    expect(pins.U1).toEqual(["3"]);
+    expect(pins.U2).toEqual(["5"]);
   });
 });
 
@@ -183,9 +198,29 @@ describe("queryNet -- multi-match", () => {
     expect(r.matches[1].netName).toBe("NET_B");
   });
 
-  it("returns all nets for wildcard pattern", async () => {
-    const r = expectSuccess(await queryNet(inlineXml, "."));
-    expect(r.matches).toHaveLength(3);
+  it("rejects '.' pattern when it matches all nets", async () => {
+    const result = await queryNet(inlineXml, ".");
+    expect(isErrorResult(result)).toBe(true);
+    if (isErrorResult(result)) {
+      expect(result.error).toContain("matches all 3 physical nets");
+      expect(result.error).toContain("get_design_overview");
+    }
+  });
+
+  it("rejects '.*' pattern when it matches all nets", async () => {
+    const result = await queryNet(inlineXml, ".*");
+    expect(isErrorResult(result)).toBe(true);
+    if (isErrorResult(result)) {
+      expect(result.error).toContain("matches all 3 physical nets");
+    }
+  });
+
+  it("rejects '.+' pattern when it matches all nets", async () => {
+    const result = await queryNet(inlineXml, ".+");
+    expect(isErrorResult(result)).toBe(true);
+    if (isErrorResult(result)) {
+      expect(result.error).toContain("matches all 3 physical nets");
+    }
   });
 
   it("returns empty matches for non-existent net", async () => {
@@ -207,7 +242,8 @@ describe("queryNet -- multi-match", () => {
 describe("queryNet -- routing and vias", () => {
   it("NET_A has correct routing on TOP (150 microns)", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
-    const topRoute = r.matches[0].routing.find((rt) => rt.layerName === "TOP");
+    expect(r.matches[0].routing).toBeDefined();
+    const topRoute = r.matches[0].routing!.find((rt) => rt.layerName === "TOP");
     expect(topRoute).toBeDefined();
     expect(topRoute!.segmentCount).toBe(1);
     expect(topRoute!.traceWidths).toContain(150);
@@ -215,7 +251,8 @@ describe("queryNet -- routing and vias", () => {
 
   it("NET_A has correct routing on BOTTOM (250 microns)", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
-    const botRoute = r.matches[0].routing.find((rt) => rt.layerName === "BOTTOM");
+    expect(r.matches[0].routing).toBeDefined();
+    const botRoute = r.matches[0].routing!.find((rt) => rt.layerName === "BOTTOM");
     expect(botRoute).toBeDefined();
     expect(botRoute!.segmentCount).toBe(1);
     expect(botRoute!.traceWidths).toContain(250);
@@ -225,14 +262,25 @@ describe("queryNet -- routing and vias", () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
     expect(r.matches[0].totalSegments).toBe(2);
     expect(r.matches[0].totalVias).toBe(1);
-    expect(r.matches[0].vias[0].padstackRef).toBe("VIA1");
+    expect(r.matches[0].vias).toBeDefined();
+    expect(r.matches[0].vias![0].padstackRef).toBe("VIA1");
   });
 
   it("NET_B on TOP has trace width 200 microns (inline LineDesc)", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_B$"));
-    const topRoute = r.matches[0].routing.find((rt) => rt.layerName === "TOP");
+    expect(r.matches[0].routing).toBeDefined();
+    const topRoute = r.matches[0].routing!.find((rt) => rt.layerName === "TOP");
     expect(topRoute).toBeDefined();
     expect(topRoute!.traceWidths).toContain(200);
+  });
+
+  it("omits empty routing/via/total fields when a net has no route segments", async () => {
+    const r = expectSuccess(await queryNet(inlineXml, "^PWR_VCC$"));
+    const net = r.matches[0];
+    expect(net).not.toHaveProperty("routing");
+    expect(net).not.toHaveProperty("vias");
+    expect(net).not.toHaveProperty("totalSegments");
+    expect(net).not.toHaveProperty("totalVias");
   });
 
   it("units field is always MICRON", async () => {
@@ -258,6 +306,9 @@ describe("queryNet -- edge cases", () => {
   <LogicalNet name="ORPHAN_NET">
     <PinRef pin="1" componentRef="U1"/>
   </LogicalNet>
+  <LogicalNet name="OTHER_NET">
+    <PinRef pin="2" componentRef="U2"/>
+  </LogicalNet>
   <Step>
     <PhyNetGroup></PhyNetGroup>
   </Step>
@@ -266,7 +317,48 @@ describe("queryNet -- edge cases", () => {
     writeFileSync(f, xml);
     const r = expectSuccess(await queryNet(f, "^ORPHAN_NET$"));
     expect(r.matches).toHaveLength(1);
-    expect(r.matches[0].pins).toContainEqual({ refdes: "U1", pin: "1" });
+    expect(hasPin(r.matches[0].pins, "U1", "1")).toBe(true);
+  });
+
+  it("does not reject wildcard patterns when the design has zero nets", async () => {
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <Step>
+    <PhyNetGroup></PhyNetGroup>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "zero-nets.xml");
+    writeFileSync(f, xml);
+    const r = expectSuccess(await queryNet(f, ".*"));
+    expect(r.matches).toHaveLength(0);
+  });
+
+  it("uses PhyNet count for match-all rejection denominator", async () => {
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="ONLY_LOGICAL_NET">
+    <PinRef pin="1" componentRef="U1"/>
+  </LogicalNet>
+  <LogicalNet name="BOTH_NET">
+    <PinRef pin="2" componentRef="U2"/>
+  </LogicalNet>
+  <Step>
+    <PhyNetGroup>
+      <PhyNet name="BOTH_NET">
+        <PhyNetPoint x="0" y="0" layerRef="TOP" netNode="END" via="false"/>
+      </PhyNet>
+    </PhyNetGroup>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "phy-count.xml");
+    writeFileSync(f, xml);
+    const result = await queryNet(f, ".*");
+    expect(isErrorResult(result)).toBe(true);
+    if (isErrorResult(result)) {
+      expect(result.error).toContain("matches all 1 physical nets");
+    }
   });
 });
 
@@ -278,8 +370,8 @@ describe.skipIf(!hasBeagleBoneFixture)("queryNet -- BeagleBone RevB6", () => {
     const r = expectSuccess(await queryNet(BEAGLEBONE, "^VDD_3V3B$"));
     expect(r.matches).toHaveLength(1);
     const net = r.matches[0];
-    expect(net.pins.length).toBeGreaterThan(0);
-    expect(net.pins).toContainEqual({ refdes: "R157", pin: "2" });
+    expect(pinCount(net.pins)).toBeGreaterThan(0);
+    expect(hasPin(net.pins, "R157", "2")).toBe(true);
     expect(net.layersUsed).toContain("TOP");
     expect(net.layersUsed).toContain("BOTTOM");
   });
@@ -288,7 +380,7 @@ describe.skipIf(!hasBeagleBoneFixture)("queryNet -- BeagleBone RevB6", () => {
     const r = expectSuccess(await queryNet(BEAGLEBONE, "^VDD"));
     expect(r.matches.length).toBeGreaterThan(1);
     for (const m of r.matches) {
-      expect(m.pins.length).toBeGreaterThan(0);
+      expect(pinCount(m.pins)).toBeGreaterThan(0);
       expect(m.layersUsed.length).toBeGreaterThan(0);
     }
   });

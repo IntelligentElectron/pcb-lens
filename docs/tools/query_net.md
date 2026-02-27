@@ -1,10 +1,12 @@
 # query_net
 
-Query a net by name pattern. Returns connected pins, routing per layer (trace widths, segment counts), and via information.
+Query nets by name pattern. Returns grouped connected pins, routing per layer (trace widths, segment counts), via information, and layers used.
 
 ## Description
 
-Finds the first net whose name matches the given regex pattern, then collects its full connectivity and routing data. Returns the list of component pins on the net, per-layer routing details (trace widths, segment counts), via usage, and a summary of layers used. Useful for inspecting signal integrity, checking trace widths on critical nets, or understanding how a net is routed across layers.
+Finds all nets whose names match the given regex pattern, then collects connectivity and routing data for each match. Pin connectivity is grouped by component refdes to reduce response size. Empty routing/via fields and zero-value summary fields are omitted to keep payloads compact.
+
+If a pattern matches all nets in a design (for example `.`, `.*`, or `.+`), the tool rejects the query and asks for a more specific pattern.
 
 ## Input Parameters
 
@@ -16,25 +18,25 @@ Finds the first net whose name matches the given regex pattern, then collects it
 ## Response Schema
 
 ```typescript
-interface QueryNetResult {
-  netName: string;
-  units: string;                // Always "MICRON"
-  pins: NetPin[];
-  routing: NetRouteInfo[];
-  vias: NetViaInfo[];
-  totalSegments: number;
-  totalVias: number;
-  layersUsed: string[];
+interface QueryNetsResult {
+  pattern: string;
+  units: "MICRON";
+  matches: QueryNetResult[];
 }
 
-interface NetPin {
-  refdes: string;
-  pin: string;
+interface QueryNetResult {
+  netName: string;
+  pins: Record<string, string[]>; // { refdes: [pin, ...] }
+  layersUsed: string[];
+  routing?: NetRouteInfo[];        // omitted when empty
+  vias?: NetViaInfo[];             // omitted when empty
+  totalSegments?: number;          // omitted when 0
+  totalVias?: number;              // omitted when 0
 }
 
 interface NetRouteInfo {
   layerName: string;
-  traceWidths: number[];        // Unique widths in microns
+  traceWidths: number[]; // Unique widths in microns
   segmentCount: number;
 }
 
@@ -62,92 +64,97 @@ Call:
 Response:
 ```json
 {
-  "netName": "DDR_D0",
+  "pattern": "^DDR_D0$",
   "units": "MICRON",
-  "pins": [
-    { "refdes": "U1", "pin": "A5" },
-    { "refdes": "U8", "pin": "D3" }
-  ],
-  "routing": [
+  "matches": [
     {
-      "layerName": "SIG1",
-      "traceWidths": [100],
-      "segmentCount": 12
+      "netName": "DDR_D0",
+      "pins": {
+        "U1": ["A5"],
+        "U8": ["D3"]
+      },
+      "routing": [
+        {
+          "layerName": "SIG1",
+          "traceWidths": [100],
+          "segmentCount": 12
+        }
+      ],
+      "totalSegments": 12,
+      "layersUsed": ["SIG1"]
     }
-  ],
-  "vias": [],
-  "totalSegments": 12,
-  "totalVias": 0,
-  "layersUsed": ["SIG1"]
+  ]
 }
 ```
 
 **Query a power net:**
 
-Call:
-```json
-{
-  "tool": "query_net",
-  "arguments": {
-    "file": "/designs/motherboard_ipc2581.xml",
-    "pattern": "^VCC_3V3$"
-  }
-}
-```
-
 Response:
 ```json
 {
-  "netName": "VCC_3V3",
+  "pattern": "^VCC_3V3$",
   "units": "MICRON",
-  "pins": [
-    { "refdes": "U1", "pin": "B2" },
-    { "refdes": "U1", "pin": "C7" },
-    { "refdes": "C1", "pin": "1" },
-    { "refdes": "C2", "pin": "1" },
-    { "refdes": "C3", "pin": "1" },
-    { "refdes": "L1", "pin": "2" }
-  ],
-  "routing": [
+  "matches": [
     {
-      "layerName": "TOP",
-      "traceWidths": [200, 300],
-      "segmentCount": 28
-    },
-    {
-      "layerName": "PWR",
-      "traceWidths": [500],
-      "segmentCount": 45
+      "netName": "VCC_3V3",
+      "pins": {
+        "C1": ["1"],
+        "C2": ["1"],
+        "C3": ["1"],
+        "L1": ["2"],
+        "U1": ["B2", "C7"]
+      },
+      "routing": [
+        {
+          "layerName": "TOP",
+          "traceWidths": [200, 300],
+          "segmentCount": 28
+        },
+        {
+          "layerName": "PWR",
+          "traceWidths": [500],
+          "segmentCount": 45
+        }
+      ],
+      "vias": [
+        { "padstackRef": "VIA_0.3mm", "count": 8 }
+      ],
+      "totalSegments": 73,
+      "totalVias": 8,
+      "layersUsed": ["PWR", "TOP"]
     }
-  ],
-  "vias": [
-    { "padstackRef": "VIA_0.3mm", "count": 8 }
-  ],
-  "totalSegments": 73,
-  "totalVias": 8,
-  "layersUsed": ["TOP", "PWR"]
+  ]
 }
 ```
 
 **No match:**
 ```json
 {
-  "error": "No net matching pattern '^MISSING_NET$' found"
+  "pattern": "^MISSING_NET$",
+  "units": "MICRON",
+  "matches": []
+}
+```
+
+**Error (pattern matches all nets):**
+```json
+{
+  "error": "Pattern '.*' matches all 307 physical nets. Use a more specific pattern, or use get_design_overview for net counts and discovery."
 }
 ```
 
 **Error (invalid regex):**
 ```json
 {
-  "error": "Invalid regex pattern: ^VCC[+"
+  "error": "Invalid regex pattern: '^VCC[+'"
 }
 ```
 
 ## Notes
 
-- Matches the **first** net whose name matches the regex; use an anchored pattern like `^DDR_D0$` for exact matches
-- Uses three passes: (1) find the matching net name, (2) build a LineDesc dictionary for trace width resolution, (3) collect pins, routing, and vias from LayerFeature sections
-- Reference layers (REF-route, REF-both) are skipped to avoid counting template geometry
-- `traceWidths` contains unique widths found on that layer (not per-segment)
-- All widths are in microns
-- `layersUsed` is a flat list of all layers where the net has routing
+- Returns all matching nets, sorted by net name
+- Uses three passes: (1) match nets and collect LogicalNet/PhyNet data, (2) build a LineDesc dictionary, (3) collect routing and vias from LayerFeature sections
+- Reference layers (`REF-route`, `REF-both`) are skipped to avoid counting template geometry
+- `traceWidths` contains unique widths found on each layer (not one entry per segment)
+- All physical values are normalized to microns
+- `layersUsed` merges layers from PhyNet points and routing geometry

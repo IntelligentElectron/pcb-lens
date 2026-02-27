@@ -3,6 +3,7 @@ import { z } from "zod";
 import type {
   ErrorResult,
   NetPin,
+  QueryNetResult,
   NetRouteInfo,
   NetViaInfo,
   QueryNetsResult,
@@ -41,6 +42,24 @@ const addPin = (acc: NetAccumulator, refdes: string, pin: string): void => {
   }
 };
 
+const groupPinsByRefdes = (pins: NetPin[]): Record<string, string[]> => {
+  const grouped = new Map<string, string[]>();
+  for (const { refdes, pin } of pins) {
+    if (!grouped.has(refdes)) {
+      grouped.set(refdes, []);
+    }
+    grouped.get(refdes)!.push(pin);
+  }
+
+  const result: Record<string, string[]> = {};
+  const sortedRefdes = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
+  for (const refdes of sortedRefdes) {
+    result[refdes] = grouped.get(refdes)!.sort((a, b) => a.localeCompare(b));
+  }
+
+  return result;
+};
+
 export const queryNet = async (
   filePath: string,
   pattern: string
@@ -57,6 +76,8 @@ export const queryNet = async (
   // Pass 1: Discover matching nets from LogicalNet + PhyNet sections,
   // extract pins from LogicalNet, extract layers from PhyNetPoint.
   const accumulators = new Map<string, NetAccumulator>();
+  const phyNetNames = new Set<string>();
+  const matchedPhyNetNames = new Set<string>();
   let insideMatchedLogicalNet = false;
   let insideMatchedPhyNet = false;
   let currentLogicalNetName = "";
@@ -94,9 +115,13 @@ export const queryNet = async (
     // PhyNet layer extraction
     if (line.includes("<PhyNet ")) {
       const name = attr(line, "name");
+      if (name) {
+        phyNetNames.add(name);
+      }
       if (name && regex.test(name)) {
         insideMatchedPhyNet = true;
         currentPhyNetName = name;
+        matchedPhyNetNames.add(name);
         if (!accumulators.has(name)) accumulators.set(name, makeAccumulator());
       } else {
         insideMatchedPhyNet = false;
@@ -119,6 +144,12 @@ export const queryNet = async (
   // If no nets matched, return empty matches (not an error)
   if (accumulators.size === 0) {
     return { pattern, units: "MICRON", matches: [] };
+  }
+
+  if (phyNetNames.size > 0 && matchedPhyNetNames.size === phyNetNames.size) {
+    return {
+      error: `Pattern '${pattern}' matches all ${phyNetNames.size} physical nets. Use a more specific pattern, or use get_design_overview for net counts and discovery.`,
+    };
   }
 
   // Pass 2: Build LineDesc dictionary
@@ -216,7 +247,9 @@ export const queryNet = async (
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([netName, acc]) => {
       const routing: NetRouteInfo[] = [];
-      for (const [layerName, data] of acc.routeMap) {
+      for (const [layerName, data] of [...acc.routeMap.entries()].sort(([a], [b]) =>
+        a.localeCompare(b)
+      )) {
         routing.push({
           layerName,
           traceWidths: [...data.widths].sort((a, b) => a - b),
@@ -225,7 +258,9 @@ export const queryNet = async (
       }
 
       const vias: NetViaInfo[] = [];
-      for (const [padstackRef, count] of acc.viaMap) {
+      for (const [padstackRef, count] of [...acc.viaMap.entries()].sort(([a], [b]) =>
+        a.localeCompare(b)
+      )) {
         vias.push({ padstackRef, count });
       }
 
@@ -237,7 +272,26 @@ export const queryNet = async (
       for (const r of routing) layerSet.add(r.layerName);
       const layersUsed = [...layerSet].sort();
 
-      return { netName, pins: acc.pins, routing, vias, totalSegments, totalVias, layersUsed };
+      const result: QueryNetResult = {
+        netName,
+        pins: groupPinsByRefdes(acc.pins),
+        layersUsed,
+      };
+
+      if (routing.length > 0) {
+        result.routing = routing;
+      }
+      if (vias.length > 0) {
+        result.vias = vias;
+      }
+      if (totalSegments > 0) {
+        result.totalSegments = totalSegments;
+      }
+      if (totalVias > 0) {
+        result.totalVias = totalVias;
+      }
+
+      return result;
     });
 
   return { pattern, units: "MICRON", matches };
@@ -248,7 +302,7 @@ export const register = (server: McpServer): void => {
     "query_net",
     {
       description:
-        "Query a net by name pattern in an IPC-2581 file. Returns connected pins, routing per layer (trace widths, segment counts), and via information.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, segment counts), and via information. Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
