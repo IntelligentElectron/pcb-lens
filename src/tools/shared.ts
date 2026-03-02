@@ -35,6 +35,10 @@ export const validateFile = async (filePath: string): Promise<ErrorResult | null
 
 // =============================================================================
 // Unit Conversion
+//
+// All tool responses normalize physical values (coordinates, trace widths) to
+// microns, regardless of the source file's native unit (MICRON, MILLIMETER,
+// INCH). The conversion factor is extracted from <CadHeader units="...">.
 // =============================================================================
 
 const UNIT_TO_MICRON: Record<string, number> = {

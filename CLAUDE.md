@@ -1,4 +1,4 @@
-# CLAUDE.md - PCB Lens MCP Server
+# PCB Lens MCP Server
 
 ## Overview
 
@@ -82,7 +82,6 @@ find src/ scripts/ test/ -type f -not -name '*.js' -not -name '*.map' | sort
 
 ## Editing Guidelines
 
-- A post-edit hook runs `tsc --noEmit` and `eslint` after every `Edit`. When refactoring touches multiple call sites (e.g., renaming a function), use `Write` to rewrite the whole file at once instead of incremental `Edit` calls that leave intermediate broken states.
 - Scratch scripts in `scripts/` are fine for ad-hoc work, but clean them up before finishing — don't leave them behind.
 
 ## Adding New Features
@@ -93,42 +92,6 @@ find src/ scripts/ test/ -type f -not -name '*.js' -not -name '*.map' | sort
 2. Create a new tool file in `src/tools/<tool-name>.ts` (imports from `./lib/` and `./shared.js` only)
 3. Register the tool via a `register(server)` export, called from `src/server.ts`
 4. Add tests in `src/tools/<tool-name>.test.ts`
-
-## Key Concepts
-
-### IPC-2581 XML Structure
-
-IPC-2581 is an industry-standard XML format for PCB layout data. Key sections:
-
-- **Content**: Dictionaries (line descriptors, pad shapes, colors)
-- **LogisticHeader**: File metadata
-- **Bom**: Bill of materials
-- **Ecad/CadData**: Layer definitions, padstack definitions, package/footprint definitions
-- **Component** (under Step): Component placement (x/y, rotation, layer)
-- **PhyNet**: Physical net connectivity (pin connections)
-- **LayerFeature**: Routing data (traces, vias, copper pours)
-
-### Units
-
-All tool responses normalize physical values (coordinates, trace widths) to **microns**, regardless of the source file's native unit (`MICRON`, `MILLIMETER`, `INCH`). The conversion factor is extracted from `<CadHeader units="...">`. Do not assume or describe values in mils, mm, or inches — they are always microns.
-
-### Streaming Parser
-
-Files can be 14MB+ (300K+ lines). The parser uses Node.js readline streaming with regex
-attribute extraction instead of DOM/SAX parsing. This avoids loading the entire file into memory.
-
-Core utilities in `src/xml-utils.ts`:
-- `attr(line, name)` — extract XML attribute by regex
-- `numAttr(line, name)` — extract numeric attribute
-- `streamAllLines(filePath, handler)` — stream every line (disk-based, one pass)
-- `loadAllLines(filePath)` — load entire file into memory as string array
-- `scanLines(lines, handler)` — iterate in-memory lines with same `LineHandler` interface
-
-Use `loadAllLines` + `scanLines` when a tool needs multiple passes over the same file (e.g., `render_net` does 7+ passes). Use `streamAllLines` for single-pass tools.
-
-### SVG Rendering
-
-The `render_net` tool generates SVG internally, then converts to PNG via `@resvg/resvg-wasm` before returning as MCP image content. This is necessary because Claude's API only accepts raster image formats (PNG, JPEG, WebP, GIF) — not SVG. A 1200px PNG costs ~1K tokens regardless of net complexity. The WASM variant is used instead of the native `@resvg/resvg-js` to avoid macOS code signing conflicts when running as a compiled Bun binary.
 
 ## Testing
 

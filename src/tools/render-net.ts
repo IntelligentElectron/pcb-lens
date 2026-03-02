@@ -1,3 +1,15 @@
+/**
+ * Render a net's routing geometry from an IPC-2581 file.
+ *
+ * Generates SVG internally, then converts to PNG via @resvg/resvg-wasm before
+ * returning as MCP image content. PNG is required because Claude's API only
+ * accepts raster formats (PNG, JPEG, WebP, GIF), not SVG. A 1200px PNG costs
+ * ~1K tokens regardless of net complexity.
+ *
+ * Uses the WASM variant of resvg instead of the native @resvg/resvg-js to
+ * avoid macOS code signing conflicts when running as a compiled Bun binary.
+ */
+
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

@@ -3,7 +3,12 @@
  *
  * IPC-2581 XML is well-formatted (one element per line), so regex
  * attribute extraction works without a DOM/SAX parser. This keeps dependencies
- * minimal and avoids loading 14MB+ files into memory.
+ * minimal and avoids loading 14MB+ (300K+ line) files into memory.
+ *
+ * Usage guidance:
+ * - Use `loadAllLines` + `scanLines` when a tool needs multiple passes over
+ *   the same file (e.g., render_net does 7+ passes). Avoids re-reading from disk.
+ * - Use `streamAllLines` for single-pass tools where memory efficiency matters.
  */
 
 import { createReadStream } from "node:fs";
