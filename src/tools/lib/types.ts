@@ -1,5 +1,14 @@
 /**
  * TypeScript type definitions for IPC-2581 PCB layout analysis.
+ *
+ * IPC-2581 is an industry-standard XML format for PCB layout data. Key sections:
+ * - Content: Dictionaries (line descriptors, pad shapes, colors)
+ * - LogisticHeader: File metadata
+ * - Bom: Bill of materials
+ * - Ecad/CadData: Layer definitions, padstack definitions, package/footprint definitions
+ * - Component (under Step): Component placement (x/y, rotation, layer)
+ * - PhyNet: Physical net connectivity (pin connections)
+ * - LayerFeature: Routing data (traces, vias, copper pours)
  */
 
 /**
