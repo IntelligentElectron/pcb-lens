@@ -1,10 +1,24 @@
 {
   "name": "@intelligentelectron/pcb-lens",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "MCP server for IPC-2581 PCB layout analysis and review",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./service": {
+      "types": "./dist/service.d.ts",
+      "default": "./dist/service.js"
+    },
+    "./types": {
+      "types": "./dist/tools/lib/types.d.ts",
+      "default": "./dist/tools/lib/types.js"
+    }
+  },
   "bin": {
     "pcb-lens": "./dist/index.js"
   },
