@@ -82,12 +82,6 @@ export const handleUpdateCommand = async (): Promise<void> => {
     process.exit(1);
   }
 
-  const confirmed = await confirm("Install update?");
-  if (!confirmed) {
-    console.log("Update cancelled");
-    return;
-  }
-
   console.log("Downloading update...");
   const result = await performUpdate(check.downloadUrl, check.latestVersion!);
 
