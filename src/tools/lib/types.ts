@@ -198,7 +198,6 @@ export interface ComponentNetSummary {
  */
 export interface QueryNetsByComponentResult {
   refdes: string;
-  includeGround: boolean;
   nets: ComponentNetSummary[];
 }
 

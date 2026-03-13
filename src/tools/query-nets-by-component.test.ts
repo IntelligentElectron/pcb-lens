@@ -28,12 +28,6 @@ const INLINE_XML = `<IPC-2581>
     <PinRef pin="GND" componentRef="U1"/>
     <PinRef pin="1" componentRef="C2"/>
   </LogicalNet>
-  <LogicalNet name="AGND">
-    <PinRef pin="AGND" componentRef="U1"/>
-  </LogicalNet>
-  <LogicalNet name="VSS_CORE">
-    <PinRef pin="VSS" componentRef="U1"/>
-  </LogicalNet>
   <LogicalNet name="UNRELATED">
     <PinRef pin="1" componentRef="U2"/>
     <PinRef pin="2" componentRef="R2"/>
@@ -65,24 +59,13 @@ const expectSuccess = (result: unknown): QueryNetsByComponentResult => {
 // Basic functionality
 // ---------------------------------------------------------------------------
 describe("queryNetsByComponent -- basic", () => {
-  it("returns nets connected to U1 (excluding ground by default)", () => async () => {
+  it("returns all nets connected to U1 including ground", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
     const netNames = r.nets.map((n) => n.netName);
     expect(netNames).toContain("NET_A");
     expect(netNames).toContain("NET_B");
-    expect(netNames).not.toContain("GND");
-    expect(netNames).not.toContain("AGND");
-    expect(netNames).not.toContain("VSS_CORE");
-  });
-
-  it("includes ground nets when include_ground is true", async () => {
-    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1", true));
-    const netNames = r.nets.map((n) => n.netName);
-    expect(netNames).toContain("NET_A");
     expect(netNames).toContain("GND");
-    expect(netNames).toContain("AGND");
-    expect(netNames).toContain("VSS_CORE");
-    expect(r.nets.length).toBe(5);
+    expect(r.nets).toHaveLength(3);
   });
 
   it("returns empty for non-existent component", async () => {
@@ -127,35 +110,12 @@ describe("queryNetsByComponent -- pins", () => {
     expect(netA!.pinCount).toBe(2); // U1.1 + R1.2
   });
 
-  it("single-pin net has pinCount 1", async () => {
-    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1", true));
-    const agnd = r.nets.find((n) => n.netName === "AGND");
-    expect(agnd).toBeDefined();
-    expect(agnd!.pinCount).toBe(1);
-    expect(agnd!.pins).toEqual(["AGND"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Ground filtering
-// ---------------------------------------------------------------------------
-describe("queryNetsByComponent -- ground filtering", () => {
-  it("filters GND", async () => {
+  it("GND net includes component pin name", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.nets.map((n) => n.netName);
-    expect(netNames).not.toContain("GND");
-  });
-
-  it("filters AGND", async () => {
-    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.nets.map((n) => n.netName);
-    expect(netNames).not.toContain("AGND");
-  });
-
-  it("filters VSS variants", async () => {
-    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.nets.map((n) => n.netName);
-    expect(netNames).not.toContain("VSS_CORE");
+    const gnd = r.nets.find((n) => n.netName === "GND");
+    expect(gnd).toBeDefined();
+    expect(gnd!.pins).toEqual(["GND"]);
+    expect(gnd!.pinCount).toBe(2);
   });
 });
 
@@ -166,11 +126,6 @@ describe("queryNetsByComponent -- metadata", () => {
   it("refdes field reflects input", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
     expect(r.refdes).toBe("U1");
-  });
-
-  it("includeGround defaults to false", async () => {
-    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    expect(r.includeGround).toBe(false);
   });
 
   it("nets are sorted alphabetically", async () => {
@@ -211,17 +166,17 @@ describe.skipIf(!hasBeagleBoneFixture)("queryNetsByComponent -- BeagleBone RevB6
     expect(netNames).toContain("VDD_3V3B");
   });
 
-  it("excludes ground nets by default", async () => {
-    const r = expectSuccess(await queryNetsByComponent(BEAGLEBONE, "R157"));
-    for (const net of r.nets) {
-      expect(net.netName).not.toMatch(/^(A?D?GND\d*|VSS\w*)$/i);
-    }
-  });
-
   it("each net has a positive pin count", async () => {
     const r = expectSuccess(await queryNetsByComponent(BEAGLEBONE, "R157"));
     for (const net of r.nets) {
       expect(net.pinCount).toBeGreaterThan(0);
+    }
+  });
+
+  it("each net has at least one component pin", async () => {
+    const r = expectSuccess(await queryNetsByComponent(BEAGLEBONE, "R157"));
+    for (const net of r.nets) {
+      expect(net.pins.length).toBeGreaterThan(0);
     }
   });
 });

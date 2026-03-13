@@ -36,7 +36,7 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 3. Use \`get_design_overview\` first to understand the design structure, layer stackup, and size
 4. Use \`query_components\` to find component placements by refdes pattern (regex)
 5. Use \`query_net\` to trace a net's routing, trace widths, vias, and connected pins
-6. Use \`query_nets_by_component\` to get all nets connected to a component (ground nets excluded by default)
+6. Use \`query_nets_by_component\` to get all nets connected to a component
 7. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips

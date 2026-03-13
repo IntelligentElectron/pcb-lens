@@ -5,12 +5,9 @@ import { attr, streamAllLines } from "./lib/xml-utils.js";
 import { formatResult, validateFile } from "./shared.js";
 import { withTelemetry } from "../telemetry.js";
 
-const GROUND_PATTERN = /^(A?D?GND\d*|VSS\w*)$/i;
-
 export const queryNetsByComponent = async (
   filePath: string,
-  refdes: string,
-  includeGround = false
+  refdes: string
 ): Promise<QueryNetsByComponentResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
@@ -63,20 +60,11 @@ export const queryNetsByComponent = async (
     if (line.includes("<Step>") || line.includes("<LayerFeature")) return false;
   });
 
-  // Filter out ground nets unless include_ground is true
-  if (!includeGround) {
-    for (const netName of [...netData.keys()]) {
-      if (GROUND_PATTERN.test(netName)) {
-        netData.delete(netName);
-      }
-    }
-  }
-
   const nets: ComponentNetSummary[] = [...netData.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([netName, data]) => ({ netName, pins: data.componentPins, pinCount: data.pinCount }));
 
-  return { refdes, includeGround, nets };
+  return { refdes, nets };
 };
 
 export const register = (server: McpServer): void => {
@@ -84,18 +72,14 @@ export const register = (server: McpServer): void => {
     "query_nets_by_component",
     {
       description:
-        "List all nets connected to a component. Returns net names and pin counts. Use query_net on specific nets for full routing details. Ground nets excluded by default.",
+        "List all nets connected to a component. Returns net names, the component's pin names on each net, and total pin count per net. Use query_net on specific nets for full routing details.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         refdes: z.string().describe("Exact component refdes (e.g., 'U1', 'R15')"),
-        include_ground: z
-          .boolean()
-          .default(false)
-          .describe("Include ground nets (GND, AGND, DGND, VSS, etc.). Default: false"),
       },
     },
-    withTelemetry("query_nets_by_component", async ({ file, refdes, include_ground }) => {
-      const result = await queryNetsByComponent(file, refdes, include_ground);
+    withTelemetry("query_nets_by_component", async ({ file, refdes }) => {
+      const result = await queryNetsByComponent(file, refdes);
       return formatResult(result);
     })
   );
