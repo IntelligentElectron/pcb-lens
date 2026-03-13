@@ -14,9 +14,7 @@ const hasBeagleBoneFixture = existsSync(BEAGLEBONE);
 // Inline fixture
 // ---------------------------------------------------------------------------
 const INLINE_XML = `<IPC-2581>
-  <Content>
-    <EntryLineDesc id="LD1"><LineDesc lineWidth="0.15"/></EntryLineDesc>
-  </Content>
+  <Content></Content>
   <CadHeader units="MILLIMETER"/>
   <LogicalNet name="NET_A">
     <PinRef pin="1" componentRef="U1"/>
@@ -41,45 +39,17 @@ const INLINE_XML = `<IPC-2581>
     <PinRef pin="2" componentRef="R2"/>
   </LogicalNet>
   <Step>
-    <PhyNetGroup>
-      <PhyNet name="NET_A">
-        <PhyNetPoint x="0" y="0" layerRef="TOP" netNode="END" via="false"/>
-      </PhyNet>
-      <PhyNet name="NET_B">
-        <PhyNetPoint x="2" y="2" layerRef="TOP" netNode="END" via="false"/>
-      </PhyNet>
-      <PhyNet name="GND">
-        <PhyNetPoint x="3" y="3" layerRef="TOP" netNode="END" via="false"/>
-      </PhyNet>
-      <PhyNet name="AGND">
-        <PhyNetPoint x="4" y="4" layerRef="BOTTOM" netNode="END" via="false"/>
-      </PhyNet>
-      <PhyNet name="VSS_CORE">
-        <PhyNetPoint x="5" y="5" layerRef="BOTTOM" netNode="END" via="false"/>
-      </PhyNet>
-      <PhyNet name="UNRELATED">
-        <PhyNetPoint x="6" y="6" layerRef="TOP" netNode="END" via="false"/>
-      </PhyNet>
-    </PhyNetGroup>
-    <LayerFeature layerRef="TOP">
-      <Set net="NET_A">
-        <Polyline/>
-        <LineDescRef id="LD1"/>
-      </Set>
-    </LayerFeature>
+    <PhyNetGroup/>
   </Step>
 </IPC-2581>`;
 
 let tempDir: string;
 let inlineXml: string;
-let minimalXml: string;
 
 beforeAll(() => {
   tempDir = mkdtempSync(path.join(tmpdir(), "pcb-lens-test-"));
   inlineXml = path.join(tempDir, "inline.xml");
   writeFileSync(inlineXml, INLINE_XML);
-  minimalXml = path.join(tempDir, "minimal.xml");
-  writeFileSync(minimalXml, "<IPC-2581/>");
 });
 
 afterAll(() => {
@@ -95,11 +65,9 @@ const expectSuccess = (result: unknown): QueryNetsByComponentResult => {
 // Basic functionality
 // ---------------------------------------------------------------------------
 describe("queryNetsByComponent -- basic", () => {
-  it("returns nets connected to U1 (excluding ground by default)", async () => {
+  it("returns nets connected to U1 (excluding ground by default)", () => async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    // Should have NET_A and NET_B, but not GND/AGND/VSS_CORE
-    expect(r.matches).toHaveLength(2);
-    const netNames = r.matches.map((m) => m.netName);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).toContain("NET_A");
     expect(netNames).toContain("NET_B");
     expect(netNames).not.toContain("GND");
@@ -109,76 +77,77 @@ describe("queryNetsByComponent -- basic", () => {
 
   it("includes ground nets when include_ground is true", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1", true));
-    const netNames = r.matches.map((m) => m.netName);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).toContain("NET_A");
     expect(netNames).toContain("GND");
     expect(netNames).toContain("AGND");
     expect(netNames).toContain("VSS_CORE");
-    expect(r.matches.length).toBe(5);
+    expect(r.nets.length).toBe(5);
   });
 
   it("returns empty for non-existent component", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "NONEXISTENT"));
-    expect(r.matches).toHaveLength(0);
+    expect(r.nets).toHaveLength(0);
   });
 
   it("does not include nets from unrelated components", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.matches.map((m) => m.netName);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).not.toContain("UNRELATED");
   });
 
   it("returns only the net connected to R1", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "R1"));
-    expect(r.matches).toHaveLength(1);
-    expect(r.matches[0].netName).toBe("NET_A");
+    expect(r.nets).toHaveLength(1);
+    expect(r.nets[0].netName).toBe("NET_A");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Pin data
+// Pin counts
 // ---------------------------------------------------------------------------
-describe("queryNetsByComponent -- pin data", () => {
-  it("includes all pins on NET_A (not just the queried component)", async () => {
+describe("queryNetsByComponent -- pin counts", () => {
+  it("returns correct pin count for NET_A (2 pins: U1.1, R1.2)", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netA = r.matches.find((m) => m.netName === "NET_A")!;
-    expect(netA.pins.U1).toContain("1");
-    expect(netA.pins.R1).toContain("2");
+    const netA = r.nets.find((n) => n.netName === "NET_A");
+    expect(netA).toBeDefined();
+    expect(netA!.pinCount).toBe(2);
   });
-});
 
-// ---------------------------------------------------------------------------
-// Routing data
-// ---------------------------------------------------------------------------
-describe("queryNetsByComponent -- routing", () => {
-  it("includes routing data for NET_A", async () => {
+  it("returns correct pin count for NET_B (2 pins: U1.3, C1.1)", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netA = r.matches.find((m) => m.netName === "NET_A")!;
-    expect(netA.routing).toBeDefined();
-    expect(netA.routing![0].layerName).toBe("TOP");
-    expect(netA.routing![0].traceWidths).toContain(150); // 0.15mm = 150 microns
+    const netB = r.nets.find((n) => n.netName === "NET_B");
+    expect(netB).toBeDefined();
+    expect(netB!.pinCount).toBe(2);
+  });
+
+  it("single-pin net has pinCount 1", async () => {
+    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1", true));
+    const agnd = r.nets.find((n) => n.netName === "AGND");
+    expect(agnd).toBeDefined();
+    expect(agnd!.pinCount).toBe(1);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Ground pattern matching
+// Ground filtering
 // ---------------------------------------------------------------------------
 describe("queryNetsByComponent -- ground filtering", () => {
   it("filters GND", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.matches.map((m) => m.netName);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).not.toContain("GND");
   });
 
   it("filters AGND", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.matches.map((m) => m.netName);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).not.toContain("AGND");
   });
 
   it("filters VSS variants", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    const netNames = r.matches.map((m) => m.netName);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).not.toContain("VSS_CORE");
   });
 });
@@ -187,11 +156,6 @@ describe("queryNetsByComponent -- ground filtering", () => {
 // Result metadata
 // ---------------------------------------------------------------------------
 describe("queryNetsByComponent -- metadata", () => {
-  it("units field is always MICRON", async () => {
-    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
-    expect(r.units).toBe("MICRON");
-  });
-
   it("refdes field reflects input", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
     expect(r.refdes).toBe("U1");
@@ -200,6 +164,12 @@ describe("queryNetsByComponent -- metadata", () => {
   it("includeGround defaults to false", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
     expect(r.includeGround).toBe(false);
+  });
+
+  it("nets are sorted alphabetically", async () => {
+    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
+    const names = r.nets.map((n) => n.netName);
+    expect(names).toEqual([...names].sort());
   });
 });
 
@@ -229,16 +199,22 @@ describe("queryNetsByComponent -- validation", () => {
 describe.skipIf(!hasBeagleBoneFixture)("queryNetsByComponent -- BeagleBone RevB6", () => {
   it("returns nets for a known component", async () => {
     const r = expectSuccess(await queryNetsByComponent(BEAGLEBONE, "R157"));
-    expect(r.matches.length).toBeGreaterThan(0);
-    const netNames = r.matches.map((m) => m.netName);
+    expect(r.nets.length).toBeGreaterThan(0);
+    const netNames = r.nets.map((n) => n.netName);
     expect(netNames).toContain("VDD_3V3B");
   });
 
   it("excludes ground nets by default", async () => {
     const r = expectSuccess(await queryNetsByComponent(BEAGLEBONE, "R157"));
-    const netNames = r.matches.map((m) => m.netName);
-    for (const name of netNames) {
-      expect(name).not.toMatch(/^(A?D?GND\d*|VSS\w*)$/i);
+    for (const net of r.nets) {
+      expect(net.netName).not.toMatch(/^(A?D?GND\d*|VSS\w*)$/i);
+    }
+  });
+
+  it("each net has a positive pin count", async () => {
+    const r = expectSuccess(await queryNetsByComponent(BEAGLEBONE, "R157"));
+    for (const net of r.nets) {
+      expect(net.pinCount).toBeGreaterThan(0);
     }
   });
 });

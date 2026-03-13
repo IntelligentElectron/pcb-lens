@@ -185,13 +185,20 @@ export interface QueryNetsResult {
 }
 
 /**
+ * Lightweight net summary for component net discovery.
+ */
+export interface ComponentNetSummary {
+  netName: string;
+  pinCount: number;
+}
+
+/**
  * Result from query_nets_by_component tool.
  */
 export interface QueryNetsByComponentResult {
   refdes: string;
   includeGround: boolean;
-  units: string;
-  matches: QueryNetResult[];
+  nets: ComponentNetSummary[];
 }
 
 /**
