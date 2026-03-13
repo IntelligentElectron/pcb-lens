@@ -260,13 +260,14 @@ describe("queryComponents -- pad geometry", () => {
     writeFileSync(padXml, PAD_XML);
   });
 
-  it("includes pads and deduplicated padShapes", async () => {
+  it("includes padRows and deduplicated padShapes", async () => {
     const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const comp = result.matches[0];
-      expect(comp.pads).toBeDefined();
-      expect(comp.pads).toHaveLength(2);
+      expect(comp.padRows).toBeDefined();
+      expect(comp.padRows).toHaveLength(2);
+      expect(comp.padColumns).toEqual(["pin", "x", "y", "shapeIndex"]);
       expect(comp.padShapes).toBeDefined();
       expect(comp.padShapes).toHaveLength(2); // rect + circle
     }
@@ -277,17 +278,18 @@ describe("queryComponents -- pad geometry", () => {
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const comp = result.matches[0];
-      const pads = comp.pads!;
+      const rows = comp.padRows!;
       const shapes = comp.padShapes!;
 
-      const pin1 = pads.find((p) => p.pin === "1")!;
-      const shape1 = shapes[pin1.shapeIndex];
+      // padRow: [pin, x, y, shapeIndex]
+      const pin1 = rows.find((r) => r[0] === "1")!;
+      const shape1 = shapes[pin1[3]];
       expect(shape1.shape).toBe("rect");
       expect(shape1.width).toBe(500); // 0.5mm = 500 microns
       expect(shape1.height).toBe(300); // 0.3mm = 300 microns
 
-      const pin2 = pads.find((p) => p.pin === "2")!;
-      const shape2 = shapes[pin2.shapeIndex];
+      const pin2 = rows.find((r) => r[0] === "2")!;
+      const shape2 = shapes[pin2[3]];
       expect(shape2.shape).toBe("circle");
       expect(shape2.width).toBe(400); // 0.4mm diameter
     }
@@ -297,16 +299,17 @@ describe("queryComponents -- pad geometry", () => {
     const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
-      const pads = result.matches[0].pads!;
-      const pin1 = pads.find((p) => p.pin === "1")!;
+      const rows = result.matches[0].padRows!;
+      // padRow: [pin, x, y, shapeIndex]
+      const pin1 = rows.find((r) => r[0] === "1")!;
       // Component at (10,20)mm, pin offset (0,0) -> (10000, 20000) microns
-      expect(pin1.x).toBe(10000);
-      expect(pin1.y).toBe(20000);
+      expect(pin1[1]).toBe(10000);
+      expect(pin1[2]).toBe(20000);
 
-      const pin2 = pads.find((p) => p.pin === "2")!;
+      const pin2 = rows.find((r) => r[0] === "2")!;
       // Component at (10,20)mm, pin offset (1,0) -> (11000, 20000) microns
-      expect(pin2.x).toBe(11000);
-      expect(pin2.y).toBe(20000);
+      expect(pin2[1]).toBe(11000);
+      expect(pin2[2]).toBe(20000);
     }
   });
 
@@ -314,9 +317,9 @@ describe("queryComponents -- pad geometry", () => {
     const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
-      const pads = result.matches[0].pads!;
-      expect(pads[0].pin).toBe("1");
-      expect(pads[1].pin).toBe("2");
+      const rows = result.matches[0].padRows!;
+      expect(rows[0][0]).toBe("1");
+      expect(rows[1][0]).toBe("2");
     }
   });
 
@@ -347,9 +350,9 @@ describe("queryComponents -- pad geometry", () => {
     if (!isErrorResult(result)) {
       const comp = result.matches[0];
       expect(comp.padShapes).toHaveLength(1); // all same shape
-      expect(comp.pads).toHaveLength(4);
-      for (const pad of comp.pads!) {
-        expect(pad.shapeIndex).toBe(0);
+      expect(comp.padRows).toHaveLength(4);
+      for (const row of comp.padRows!) {
+        expect(row[3]).toBe(0); // shapeIndex
       }
     }
   });

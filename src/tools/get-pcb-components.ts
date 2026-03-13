@@ -2,10 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type {
   ComponentInfo,
-  ComponentNetSummary,
   ComponentResult,
   ErrorResult,
-  PadGeometry,
+  NetRow,
+  PadRow,
   PadShape,
   QueryComponentsResult,
 } from "./lib/types.js";
@@ -207,7 +207,7 @@ export const queryComponents = async (
   }
 
   // Pass 4: Extract pad geometry.
-  const padDataMap = new Map<string, { padShapes: PadShape[]; pads: PadGeometry[] }>();
+  const padDataMap = new Map<string, { padShapes: PadShape[]; padRows: PadRow[] }>();
   {
     const lines = await loadAllLines(filePath);
     const f = extractMicronFactorFromLines(lines);
@@ -218,8 +218,8 @@ export const queryComponents = async (
       const pkg = packages.get(placement.packageRef);
       if (!pkg) continue;
       const shapeList: PadShape[] = [];
-      const shapeIndex = new Map<string, number>();
-      const pads: PadGeometry[] = [];
+      const shapeIdx = new Map<string, number>();
+      const rows: PadRow[] = [];
       for (const [pinName, pinDef] of pkg) {
         const pos = transformPin(
           {
@@ -239,22 +239,17 @@ export const queryComponents = async (
           const w = Math.round(shape.width * 100) / 100;
           const h = Math.round(shape.height * 100) / 100;
           const key = `${shape.type}:${w}:${h}`;
-          let idx = shapeIndex.get(key);
+          let idx = shapeIdx.get(key);
           if (idx === undefined) {
             idx = shapeList.length;
             shapeList.push({ shape: shape.type, width: w, height: h });
-            shapeIndex.set(key, idx);
+            shapeIdx.set(key, idx);
           }
-          pads.push({
-            pin: pinName,
-            x: Math.round(pos.x * 100) / 100,
-            y: Math.round(pos.y * 100) / 100,
-            shapeIndex: idx,
-          });
+          rows.push([pinName, Math.round(pos.x * 100) / 100, Math.round(pos.y * 100) / 100, idx]);
         }
       }
-      pads.sort((a, b) => a.pin.localeCompare(b.pin, undefined, { numeric: true }));
-      padDataMap.set(refdes, { padShapes: shapeList, pads });
+      rows.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+      padDataMap.set(refdes, { padShapes: shapeList, padRows: rows });
     }
   }
 
@@ -264,22 +259,25 @@ export const queryComponents = async (
     const parsed = parsePackageRef(placement.packageRef);
     const padData = padDataMap.get(refdes);
     const netMap = netsByComponent.get(refdes);
-    const nets: ComponentNetSummary[] = netMap
+    const netRows: NetRow[] = netMap
       ? [...netMap.entries()]
           .sort(([a], [b]) => a.localeCompare(b))
-          .map(([netName, data]) => ({
-            netName,
-            pins: data.componentPins,
-            pinCount: data.pinCount,
-          }))
+          .map(([netName, data]) => [netName, data.componentPins, data.pinCount])
       : [];
     matches.push({
       ...placement,
       ...(parsed ? { parsed } : {}),
       description: bomDescriptions.get(refdes),
       characteristics: bomCharacteristics.get(refdes) ?? {},
-      nets,
-      ...(padData ? { padShapes: padData.padShapes, pads: padData.pads } : {}),
+      netColumns: ["netName", "pins", "pinCount"],
+      netRows,
+      ...(padData
+        ? {
+            padShapes: padData.padShapes,
+            padColumns: ["pin", "x", "y", "shapeIndex"] as const,
+            padRows: padData.padRows,
+          }
+        : {}),
     });
   }
 

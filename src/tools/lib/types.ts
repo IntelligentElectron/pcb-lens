@@ -83,7 +83,7 @@ export interface ParsedPackage {
 }
 
 /**
- * Unique pad shape definition, referenced by index from PadGeometry.
+ * Unique pad shape definition, referenced by index from pad rows.
  */
 export interface PadShape {
   shape: "rect" | "circle";
@@ -92,14 +92,14 @@ export interface PadShape {
 }
 
 /**
- * Per-pin pad position, references a PadShape by index.
+ * Columnar pad data: column headers + rows of [pin, x, y, shapeIndex].
  */
-export interface PadGeometry {
-  pin: string;
-  x: number;
-  y: number;
-  shapeIndex: number;
-}
+export type PadRow = [pin: string, x: number, y: number, shapeIndex: number];
+
+/**
+ * Columnar net data: rows of [netName, pins, pinCount].
+ */
+export type NetRow = [netName: string, pins: string[], pinCount: number];
 
 /**
  * Combined component result (placement + BOM).
@@ -115,9 +115,11 @@ export interface ComponentResult {
   mountType?: string;
   description?: string;
   characteristics: Record<string, string>;
-  nets: ComponentNetSummary[];
+  netColumns: ["netName", "pins", "pinCount"];
+  netRows: NetRow[];
   padShapes?: PadShape[];
-  pads?: PadGeometry[];
+  padColumns?: ["pin", "x", "y", "shapeIndex"];
+  padRows?: PadRow[];
 }
 
 /**
@@ -198,7 +200,7 @@ export interface QueryNetsResult {
 }
 
 /**
- * Lightweight net summary for component net discovery.
+ * Lightweight net summary for component net discovery (used internally).
  */
 export interface ComponentNetSummary {
   netName: string;
