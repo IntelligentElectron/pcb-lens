@@ -178,3 +178,41 @@ describe("queryComponents -- package_pattern", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Parsed package info
+// ---------------------------------------------------------------------------
+describe("queryComponents -- parsed package", () => {
+  it("includes parsed package for recognized Cadence naming", async () => {
+    const result = await queryComponents(inlineXml, "^U1$");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.matches).toHaveLength(1);
+      const comp = result.matches[0];
+      expect(comp.parsed).toBeDefined();
+      expect(comp.parsed!.packageFamily).toBe("BGA");
+      expect(comp.parsed!.pinCount).toBe(256);
+    }
+  });
+
+  it("omits parsed field for unrecognized package names", async () => {
+    // Create XML with an unrecognizable package name
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <Step>
+    <Component refDes="X1" packageRef="_CUSTOM_PKG_" layerRef="TOP">
+      <Location x="0" y="0"/>
+    </Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "custom-pkg.xml");
+    writeFileSync(f, xml);
+    const result = await queryComponents(f, "^X1$");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.matches[0].parsed).toBeUndefined();
+    }
+  });
+});

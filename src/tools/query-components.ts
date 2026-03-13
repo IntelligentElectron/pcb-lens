@@ -6,6 +6,7 @@ import type {
   ErrorResult,
   QueryComponentsResult,
 } from "./lib/types.js";
+import { parsePackageRef } from "./lib/package-parser.js";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
 import { extractMicronFactor, formatResult, validateFile, validatePattern } from "./shared.js";
 import { withTelemetry } from "../telemetry.js";
@@ -140,11 +141,13 @@ export const queryComponents = async (
     }
   });
 
-  // Merge placement + BOM
+  // Merge placement + BOM + parsed package
   const matches: ComponentResult[] = [];
   for (const [refdes, placement] of placements) {
+    const parsed = parsePackageRef(placement.packageRef);
     matches.push({
       ...placement,
+      ...(parsed ? { parsed } : {}),
       description: bomDescriptions.get(refdes),
       characteristics: bomCharacteristics.get(refdes) ?? {},
     });

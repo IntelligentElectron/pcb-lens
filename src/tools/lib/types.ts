@@ -71,11 +71,24 @@ export interface ComponentInfo {
 }
 
 /**
+ * Parsed package/footprint information from Cadence naming conventions.
+ */
+export interface ParsedPackage {
+  packageFamily: string;
+  pinCount: number;
+  bodySize_mm?: { width: number; height: number };
+  pitch_mm?: number;
+  ballHeight_mm?: number;
+  ubmDiameter_mm?: number;
+}
+
+/**
  * Combined component result (placement + BOM).
  */
 export interface ComponentResult {
   refdes: string;
   packageRef: string;
+  parsed?: ParsedPackage;
   x: number;
   y: number;
   rotation: number;
