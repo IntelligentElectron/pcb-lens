@@ -329,7 +329,7 @@ export const queryConstraints = async (
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "query_constraints",
+    "get_constraints",
     {
       description:
         "Query layout constraints from a Cadence .tcfx file. Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, and members. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, Design (stackup), Region.",
@@ -343,7 +343,7 @@ export const register = (server: McpServer): void => {
           ),
       },
     },
-    withTelemetry("query_constraints", async ({ file, section }) => {
+    withTelemetry("get_constraints", async ({ file, section }) => {
       const result = await queryConstraints(file, section);
       return formatResult(result);
     })

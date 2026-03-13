@@ -113,7 +113,7 @@ export const getDesignOverview = async (
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "get_design_overview",
+    "get_pcb_metadata",
     {
       description:
         "Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes",
@@ -121,7 +121,7 @@ export const register = (server: McpServer): void => {
         file: z.string().describe("Path to IPC-2581 XML file"),
       },
     },
-    withTelemetry("get_design_overview", async ({ file }) => {
+    withTelemetry("get_pcb_metadata", async ({ file }) => {
       const result = await getDesignOverview(file);
       return formatResult(result);
     })

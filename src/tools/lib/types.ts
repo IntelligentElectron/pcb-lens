@@ -71,11 +71,44 @@ export interface ComponentInfo {
 }
 
 /**
- * Combined component result (placement + BOM).
+ * Parsed package/footprint information from Cadence naming conventions.
+ */
+export interface ParsedPackage {
+  packageFamily: string;
+  pinCount: number;
+  bodySize_mm?: { width: number; height: number };
+  pitch_mm?: number;
+  ballHeight_mm?: number;
+  ubmDiameter_mm?: number;
+}
+
+/**
+ * Unique pad shape definition, referenced by index from pad rows.
+ */
+export interface PadShape {
+  shape: "rect" | "circle";
+  width: number;
+  height: number;
+}
+
+/**
+ * Columnar pad data: column headers + rows of [pin, x, y, shapeIndex].
+ */
+export type PadRow = [pin: string, x: number, y: number, shapeIndex: number];
+
+/**
+ * Columnar net data: rows of [netName, pins, pinCount].
+ */
+export type NetRow = [netName: string, pins: string[], pinCount: number];
+
+/**
+ * Result from get_pcb_component tool (single component).
  */
 export interface ComponentResult {
   refdes: string;
+  units: string;
   packageRef: string;
+  parsed?: ParsedPackage;
   x: number;
   y: number;
   rotation: number;
@@ -83,15 +116,11 @@ export interface ComponentResult {
   mountType?: string;
   description?: string;
   characteristics: Record<string, string>;
-}
-
-/**
- * Result from query_components tool.
- */
-export interface QueryComponentsResult {
-  pattern: string;
-  units: string;
-  matches: ComponentResult[];
+  netColumns: ["netName", "pins", "pinCount"];
+  netRows: NetRow[];
+  padShapes?: PadShape[];
+  padColumns?: ["pin", "x", "y", "shapeIndex"];
+  padRows?: PadRow[];
 }
 
 /**
@@ -109,15 +138,21 @@ export interface NetRouteInfo {
   layerName: string;
   traceWidths: number[];
   segmentCount: number;
+  traceLength: number;
 }
 
 /**
- * Via info for a net.
+ * Unique via drill type, referenced by index from via rows.
  */
-export interface NetViaInfo {
-  padstackRef: string;
-  count: number;
+export interface ViaDrill {
+  diameter: number;
+  layer: string;
 }
+
+/**
+ * Columnar via data: rows of [x, y, drillIndex].
+ */
+export type ViaRow = [x: number, y: number, drillIndex: number];
 
 /**
  * Result from render_net tool.
@@ -142,9 +177,12 @@ export interface QueryNetResult {
   netName: string;
   pins: Record<string, string[]>;
   routing?: NetRouteInfo[];
-  vias?: NetViaInfo[];
+  viaDrills?: ViaDrill[];
+  viaColumns?: ["x", "y", "drillIndex"];
+  viaRows?: ViaRow[];
   totalSegments?: number;
   totalVias?: number;
+  totalTraceLength?: number;
   layersUsed: string[];
 }
 
@@ -155,6 +193,15 @@ export interface QueryNetsResult {
   pattern: string;
   units: string;
   matches: QueryNetResult[];
+}
+
+/**
+ * Lightweight net summary for component net discovery (used internally).
+ */
+export interface ComponentNetSummary {
+  netName: string;
+  pins: string[];
+  pinCount: number;
 }
 
 /**

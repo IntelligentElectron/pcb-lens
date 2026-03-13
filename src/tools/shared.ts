@@ -119,3 +119,58 @@ export const validatePattern = (pattern: string): { error: string } | { regex: R
     return { error: `Invalid regex pattern: '${pattern}'` };
   }
 };
+
+// =============================================================================
+// Net Accumulator (used by get-pcb-net)
+// =============================================================================
+
+import type { NetPin } from "./lib/types.js";
+
+export interface RawVia {
+  x: number;
+  y: number;
+  diameter: number;
+  layer: string;
+}
+
+export interface NetAccumulator {
+  pins: NetPin[];
+  pinsSeen: Set<string>;
+  phyNetLayers: Set<string>;
+  routeMap: Map<string, { widths: Set<number>; segments: number; traceLength: number }>;
+  vias: RawVia[];
+}
+
+export const makeAccumulator = (): NetAccumulator => ({
+  pins: [],
+  pinsSeen: new Set(),
+  phyNetLayers: new Set(),
+  routeMap: new Map(),
+  vias: [],
+});
+
+export const addPin = (acc: NetAccumulator, refdes: string, pin: string): void => {
+  const key = `${refdes}.${pin}`;
+  if (!acc.pinsSeen.has(key)) {
+    acc.pinsSeen.add(key);
+    acc.pins.push({ refdes, pin });
+  }
+};
+
+export const groupPinsByRefdes = (pins: NetPin[]): Record<string, string[]> => {
+  const grouped = new Map<string, string[]>();
+  for (const { refdes, pin } of pins) {
+    if (!grouped.has(refdes)) {
+      grouped.set(refdes, []);
+    }
+    grouped.get(refdes)!.push(pin);
+  }
+
+  const result: Record<string, string[]> = {};
+  const sortedRefdes = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
+  for (const refdes of sortedRefdes) {
+    result[refdes] = grouped.get(refdes)!.sort((a, b) => a.localeCompare(b));
+  }
+
+  return result;
+};

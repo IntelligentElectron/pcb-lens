@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { queryNet } from "./query-net.js";
+import { queryNet } from "./get-pcb-net.js";
 import { isErrorResult } from "./lib/types.js";
 import type { QueryNetsResult } from "./lib/types.js";
 
@@ -49,7 +49,7 @@ const INLINE_XML = `<IPC-2581>
       <Set net="NET_A" geometry="VIA1">
         <Polyline/>
         <LineDescRef id="LD1"/>
-        <Hole platingStatus="VIA" diameter="0.3"/>
+        <Hole platingStatus="VIA" x="0.5" y="0.5" diameter="0.3"/>
       </Set>
       <Set net="NET_B">
         <PinRef pin="5" componentRef="U2"/>
@@ -203,7 +203,7 @@ describe("queryNet -- multi-match", () => {
     expect(isErrorResult(result)).toBe(true);
     if (isErrorResult(result)) {
       expect(result.error).toContain("matches all 3 physical nets");
-      expect(result.error).toContain("get_design_overview");
+      expect(result.error).toContain("get_pcb_metadata");
     }
   });
 
@@ -258,12 +258,14 @@ describe("queryNet -- routing and vias", () => {
     expect(botRoute!.traceWidths).toContain(250);
   });
 
-  it("NET_A has 2 total segments and 1 via", async () => {
+  it("NET_A has 2 total segments and 1 via with coordinates", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
     expect(r.matches[0].totalSegments).toBe(2);
     expect(r.matches[0].totalVias).toBe(1);
-    expect(r.matches[0].vias).toBeDefined();
-    expect(r.matches[0].vias![0].padstackRef).toBe("VIA1");
+    expect(r.matches[0].viaRows).toBeDefined();
+    expect(r.matches[0].viaRows![0]).toEqual([500, 500, 0]);
+    expect(r.matches[0].viaDrills).toBeDefined();
+    expect(r.matches[0].viaDrills![0]).toEqual({ diameter: 300, layer: "TOP" });
   });
 
   it("NET_B on TOP has trace width 200 microns (inline LineDesc)", async () => {

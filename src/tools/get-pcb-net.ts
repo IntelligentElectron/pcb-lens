@@ -2,63 +2,25 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type {
   ErrorResult,
-  NetPin,
   QueryNetResult,
   NetRouteInfo,
-  NetViaInfo,
+  ViaDrill,
+  ViaRow,
   QueryNetsResult,
 } from "./lib/types.js";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
 import {
+  addPin,
   buildLineDescDict,
   extractMicronFactor,
   formatResult,
+  groupPinsByRefdes,
+  makeAccumulator,
   validateFile,
   validatePattern,
+  type NetAccumulator,
 } from "./shared.js";
 import { withTelemetry } from "../telemetry.js";
-
-interface NetAccumulator {
-  pins: NetPin[];
-  pinsSeen: Set<string>;
-  phyNetLayers: Set<string>;
-  routeMap: Map<string, { widths: Set<number>; segments: number }>;
-  viaMap: Map<string, number>;
-}
-
-const makeAccumulator = (): NetAccumulator => ({
-  pins: [],
-  pinsSeen: new Set(),
-  phyNetLayers: new Set(),
-  routeMap: new Map(),
-  viaMap: new Map(),
-});
-
-const addPin = (acc: NetAccumulator, refdes: string, pin: string): void => {
-  const key = `${refdes}.${pin}`;
-  if (!acc.pinsSeen.has(key)) {
-    acc.pinsSeen.add(key);
-    acc.pins.push({ refdes, pin });
-  }
-};
-
-const groupPinsByRefdes = (pins: NetPin[]): Record<string, string[]> => {
-  const grouped = new Map<string, string[]>();
-  for (const { refdes, pin } of pins) {
-    if (!grouped.has(refdes)) {
-      grouped.set(refdes, []);
-    }
-    grouped.get(refdes)!.push(pin);
-  }
-
-  const result: Record<string, string[]> = {};
-  const sortedRefdes = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
-  for (const refdes of sortedRefdes) {
-    result[refdes] = grouped.get(refdes)!.sort((a, b) => a.localeCompare(b));
-  }
-
-  return result;
-};
 
 export const queryNet = async (
   filePath: string,
@@ -148,7 +110,7 @@ export const queryNet = async (
 
   if (phyNetNames.size > 0 && matchedPhyNetNames.size === phyNetNames.size) {
     return {
-      error: `Pattern '${pattern}' matches all ${phyNetNames.size} physical nets. Use a more specific pattern, or use get_design_overview for net counts and discovery.`,
+      error: `Pattern '${pattern}' matches all ${phyNetNames.size} physical nets. Use a more specific pattern, or use get_pcb_metadata for net counts and discovery.`,
     };
   }
 
@@ -165,7 +127,9 @@ export const queryNet = async (
   let currentSetHasPolyline = false;
   let currentSetLineDescId: string | undefined;
   let currentSetInlineWidth: number | undefined;
-  let currentSetGeometry: string | undefined;
+  let inPolyline = false;
+  let polyPoints: { x: number; y: number }[] = [];
+  let polyLength = 0;
 
   await streamAllLines(filePath, (line) => {
     if (line.includes("<LayerFeature ")) {
@@ -181,7 +145,7 @@ export const queryNet = async (
       currentSetHasPolyline = false;
       currentSetLineDescId = undefined;
       currentSetInlineWidth = undefined;
-      currentSetGeometry = attr(line, "geometry");
+      polyLength = 0;
     }
 
     if (insideMatchedSet) {
@@ -197,6 +161,28 @@ export const queryNet = async (
 
       if (line.includes("<Polyline")) {
         currentSetHasPolyline = true;
+        inPolyline = true;
+        polyPoints = [];
+      }
+
+      if (inPolyline) {
+        if (line.includes("<PolyBegin ") || line.includes("<PolyStepSegment ")) {
+          const x = numAttr(line, "x");
+          const y = numAttr(line, "y");
+          if (x !== undefined && y !== undefined) {
+            const pt = { x: x * factor, y: y * factor };
+            if (polyPoints.length > 0) {
+              const prev = polyPoints[polyPoints.length - 1];
+              const dx = pt.x - prev.x;
+              const dy = pt.y - prev.y;
+              polyLength += Math.sqrt(dx * dx + dy * dy);
+            }
+            polyPoints.push(pt);
+          }
+        }
+        if (line.includes("</Polyline>")) {
+          inPolyline = false;
+        }
       }
 
       if (line.includes("<LineDescRef ")) {
@@ -213,27 +199,36 @@ export const queryNet = async (
       if (line.includes("<Hole ")) {
         const platingStatus = attr(line, "platingStatus");
         if (platingStatus === "VIA") {
-          const diameter = numAttr(line, "diameter");
-          const key = currentSetGeometry ?? `dia_${diameter ?? "unknown"}`;
-          acc.viaMap.set(key, (acc.viaMap.get(key) ?? 0) + 1);
+          const x = numAttr(line, "x");
+          const y = numAttr(line, "y");
+          const diameter = numAttr(line, "diameter") ?? 0;
+          if (x !== undefined && y !== undefined) {
+            acc.vias.push({
+              x: Math.round(x * factor),
+              y: Math.round(y * factor),
+              diameter: Math.round(diameter * factor),
+              layer: currentLayerName,
+            });
+          }
         }
       }
 
       if (line.includes("</Set>")) {
         if (currentSetHasPolyline && currentLayerName) {
           if (!acc.routeMap.has(currentLayerName)) {
-            acc.routeMap.set(currentLayerName, { widths: new Set(), segments: 0 });
+            acc.routeMap.set(currentLayerName, { widths: new Set(), segments: 0, traceLength: 0 });
           }
           const layerRoute = acc.routeMap.get(currentLayerName)!;
           layerRoute.segments++;
+          layerRoute.traceLength += polyLength;
 
           if (currentSetLineDescId) {
             const width = lineDescDict.get(currentSetLineDescId);
             if (width !== undefined) {
-              layerRoute.widths.add(width * factor);
+              layerRoute.widths.add(Math.round(width * factor));
             }
           } else if (currentSetInlineWidth !== undefined) {
-            layerRoute.widths.add(currentSetInlineWidth * factor);
+            layerRoute.widths.add(Math.round(currentSetInlineWidth * factor));
           }
         }
 
@@ -254,18 +249,28 @@ export const queryNet = async (
           layerName,
           traceWidths: [...data.widths].sort((a, b) => a - b),
           segmentCount: data.segments,
+          traceLength: Math.round(data.traceLength),
         });
       }
 
-      const vias: NetViaInfo[] = [];
-      for (const [padstackRef, count] of [...acc.viaMap.entries()].sort(([a], [b]) =>
-        a.localeCompare(b)
-      )) {
-        vias.push({ padstackRef, count });
+      // Deduplicate drill types, build columnar via rows
+      const drillList: ViaDrill[] = [];
+      const drillIdx = new Map<string, number>();
+      const viaRows: ViaRow[] = [];
+      for (const v of acc.vias) {
+        const key = `${v.diameter}:${v.layer}`;
+        let idx = drillIdx.get(key);
+        if (idx === undefined) {
+          idx = drillList.length;
+          drillList.push({ diameter: v.diameter, layer: v.layer });
+          drillIdx.set(key, idx);
+        }
+        viaRows.push([v.x, v.y, idx]);
       }
 
       const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
-      const totalVias = vias.reduce((sum, v) => sum + v.count, 0);
+      const totalVias = viaRows.length;
+      const totalTraceLength = Math.round(routing.reduce((sum, r) => sum + r.traceLength, 0));
 
       // Merge PhyNetPoint layers with routing-derived layers
       const layerSet = new Set(acc.phyNetLayers);
@@ -281,14 +286,19 @@ export const queryNet = async (
       if (routing.length > 0) {
         result.routing = routing;
       }
-      if (vias.length > 0) {
-        result.vias = vias;
+      if (viaRows.length > 0) {
+        result.viaDrills = drillList;
+        result.viaColumns = ["x", "y", "drillIndex"];
+        result.viaRows = viaRows;
       }
       if (totalSegments > 0) {
         result.totalSegments = totalSegments;
       }
       if (totalVias > 0) {
         result.totalVias = totalVias;
+      }
+      if (totalTraceLength > 0) {
+        result.totalTraceLength = totalTraceLength;
       }
 
       return result;
@@ -299,10 +309,10 @@ export const queryNet = async (
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "query_net",
+    "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, segment counts), and via information. Rejects patterns that match all nets.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), and via information. Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
@@ -310,7 +320,7 @@ export const register = (server: McpServer): void => {
           .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
       },
     },
-    withTelemetry("query_net", async ({ file, pattern }) => {
+    withTelemetry("get_pcb_net", async ({ file, pattern }) => {
       const result = await queryNet(file, pattern);
       return formatResult(result);
     })

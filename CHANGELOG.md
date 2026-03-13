@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-03-13
+
+### Added
+
+- Per-pin pad geometry in `get_pcb_component` output (positions and shapes with deduplication)
+- Net connectivity in `get_pcb_component` output (connected nets with pin names and total pin counts)
+- Structured package parsing from Cadence footprint naming (packageFamily, pinCount, bodySize_mm, pitch_mm)
+- Shared geometry extraction module (`lib/geometry.ts`) for pad, shape, and via utilities
+
+### Changed
+
+- Renamed `get_pcb_components` to `get_pcb_component`: single exact-refdes lookup instead of regex multi-match
+- Switched pads to columnar format with deduplicated shapes (`padShapes[]` + `padRows[]` of `[pin, x, y, shapeIndex]`)
+- Switched component nets to columnar format (`netColumns` + `netRows[]` of `[netName, pins, pinCount]`)
+- Switched vias in `get_pcb_net` to columnar format with deduplicated drill types (`viaDrills[]` + `viaRows[]` of `[x, y, drillIndex]`)
+- Rounded all micron coordinate and dimension values to integers
+
 ## [0.0.10] - 2026-03-03
 
 ### Changed
