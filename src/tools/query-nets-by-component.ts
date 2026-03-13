@@ -5,7 +5,7 @@ import type {
   QueryNetResult,
   NetRouteInfo,
   NetViaInfo,
-  QueryNetsResult,
+  QueryNetsByComponentResult,
 } from "./lib/types.js";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
 import {
@@ -16,107 +16,111 @@ import {
   groupPinsByRefdes,
   makeAccumulator,
   validateFile,
-  validatePattern,
   type NetAccumulator,
 } from "./shared.js";
 import { withTelemetry } from "../telemetry.js";
 
-export const queryNet = async (
+const GROUND_PATTERN = /^(A?D?GND\d*|VSS\w*)$/i;
+
+export const queryNetsByComponent = async (
   filePath: string,
-  pattern: string
-): Promise<QueryNetsResult | ErrorResult> => {
+  refdes: string,
+  includeGround = false
+): Promise<QueryNetsByComponentResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
 
-  const validation = validatePattern(pattern);
-  if ("error" in validation) return validation;
-  const { regex } = validation;
+  if (!refdes || refdes.length > 200) {
+    return { error: "refdes must be 1-200 characters" };
+  }
 
   const factor = await extractMicronFactor(filePath);
 
-  // Pass 1: Discover matching nets from LogicalNet + PhyNet sections,
-  // extract pins from LogicalNet, extract layers from PhyNetPoint.
+  // Pass 1: Find nets connected to this component via LogicalNet PinRef,
+  // collect pins, and extract PhyNet layers.
   const accumulators = new Map<string, NetAccumulator>();
-  const phyNetNames = new Set<string>();
-  const matchedPhyNetNames = new Set<string>();
-  let insideMatchedLogicalNet = false;
-  let insideMatchedPhyNet = false;
-  let currentLogicalNetName = "";
-  let currentPhyNetName = "";
+  let insideLogicalNet = false;
+  let currentNetName = "";
+  let currentNetHasComponent = false;
+  let currentNetPins: Array<{ refdes: string; pin: string }> = [];
 
   await streamAllLines(filePath, (line) => {
-    // Stop once we reach LayerFeature (Pass 3 handles that)
     if (line.includes("<LayerFeature")) return false;
 
-    // LogicalNet pin extraction
+    // LogicalNet: check if this net connects to our component
     if (line.includes("<LogicalNet ")) {
       const name = attr(line, "name");
-      if (name && regex.test(name)) {
-        insideMatchedLogicalNet = true;
-        currentLogicalNetName = name;
-        if (!accumulators.has(name)) accumulators.set(name, makeAccumulator());
-      } else {
-        insideMatchedLogicalNet = false;
-      }
+      insideLogicalNet = Boolean(name);
+      currentNetName = name ?? "";
+      currentNetHasComponent = false;
+      currentNetPins = [];
     }
 
-    if (insideMatchedLogicalNet) {
+    if (insideLogicalNet) {
       if (line.includes("<PinRef ")) {
         const compRef = attr(line, "componentRef");
         const pin = attr(line, "pin");
         if (compRef && pin) {
-          addPin(accumulators.get(currentLogicalNetName)!, compRef, pin);
+          currentNetPins.push({ refdes: compRef, pin });
+          if (compRef === refdes) {
+            currentNetHasComponent = true;
+          }
         }
       }
       if (line.includes("</LogicalNet>")) {
-        insideMatchedLogicalNet = false;
+        if (currentNetHasComponent && currentNetName) {
+          if (!accumulators.has(currentNetName)) {
+            accumulators.set(currentNetName, makeAccumulator());
+          }
+          const acc = accumulators.get(currentNetName)!;
+          for (const p of currentNetPins) {
+            addPin(acc, p.refdes, p.pin);
+          }
+        }
+        insideLogicalNet = false;
       }
     }
 
-    // PhyNet layer extraction
+    // PhyNet: collect layers for matched nets
     if (line.includes("<PhyNet ")) {
       const name = attr(line, "name");
-      if (name) {
-        phyNetNames.add(name);
-      }
-      if (name && regex.test(name)) {
-        insideMatchedPhyNet = true;
-        currentPhyNetName = name;
-        matchedPhyNetNames.add(name);
-        if (!accumulators.has(name)) accumulators.set(name, makeAccumulator());
+      if (name && accumulators.has(name)) {
+        currentNetName = name;
       } else {
-        insideMatchedPhyNet = false;
+        currentNetName = "";
       }
     }
 
-    if (insideMatchedPhyNet) {
+    if (currentNetName && accumulators.has(currentNetName)) {
       if (line.includes("<PhyNetPoint ")) {
         const layerRef = attr(line, "layerRef");
         if (layerRef) {
-          accumulators.get(currentPhyNetName)!.phyNetLayers.add(layerRef);
+          accumulators.get(currentNetName)!.phyNetLayers.add(layerRef);
         }
       }
       if (line.includes("</PhyNet>")) {
-        insideMatchedPhyNet = false;
+        currentNetName = "";
       }
     }
   });
 
-  // If no nets matched, return empty matches (not an error)
-  if (accumulators.size === 0) {
-    return { pattern, units: "MICRON", matches: [] };
+  // Filter out ground nets unless include_ground is true
+  if (!includeGround) {
+    for (const netName of [...accumulators.keys()]) {
+      if (GROUND_PATTERN.test(netName)) {
+        accumulators.delete(netName);
+      }
+    }
   }
 
-  if (phyNetNames.size > 0 && matchedPhyNetNames.size === phyNetNames.size) {
-    return {
-      error: `Pattern '${pattern}' matches all ${phyNetNames.size} physical nets. Use a more specific pattern, or use get_design_overview for net counts and discovery.`,
-    };
+  if (accumulators.size === 0) {
+    return { refdes, includeGround, units: "MICRON", matches: [] };
   }
 
   // Pass 2: Build LineDesc dictionary
   const lineDescDict = await buildLineDescDict(filePath);
 
-  // Pass 3: LayerFeature routing/vias for all matched nets
+  // Pass 3: LayerFeature routing/vias for matched nets
   const matchedNames = new Set(accumulators.keys());
   const skipLayers = new Set(["REF-route", "REF-both"]);
 
@@ -228,7 +232,6 @@ export const queryNet = async (
       const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
       const totalVias = vias.reduce((sum, v) => sum + v.count, 0);
 
-      // Merge PhyNetPoint layers with routing-derived layers
       const layerSet = new Set(acc.phyNetLayers);
       for (const r of routing) layerSet.add(r.layerName);
       const layersUsed = [...layerSet].sort();
@@ -239,40 +242,34 @@ export const queryNet = async (
         layersUsed,
       };
 
-      if (routing.length > 0) {
-        result.routing = routing;
-      }
-      if (vias.length > 0) {
-        result.vias = vias;
-      }
-      if (totalSegments > 0) {
-        result.totalSegments = totalSegments;
-      }
-      if (totalVias > 0) {
-        result.totalVias = totalVias;
-      }
+      if (routing.length > 0) result.routing = routing;
+      if (vias.length > 0) result.vias = vias;
+      if (totalSegments > 0) result.totalSegments = totalSegments;
+      if (totalVias > 0) result.totalVias = totalVias;
 
       return result;
     });
 
-  return { pattern, units: "MICRON", matches };
+  return { refdes, includeGround, units: "MICRON", matches };
 };
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "query_net",
+    "query_nets_by_component",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, segment counts), and via information. Rejects patterns that match all nets.",
+        "Query all nets connected to a component by refdes. Returns routing data (trace widths, vias, layers) for each net. Ground/power-ground nets are excluded by default.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
-        pattern: z
-          .string()
-          .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
+        refdes: z.string().describe("Exact component refdes (e.g., 'U1', 'R15')"),
+        include_ground: z
+          .boolean()
+          .default(false)
+          .describe("Include ground nets (GND, AGND, DGND, VSS, etc.). Default: false"),
       },
     },
-    withTelemetry("query_net", async ({ file, pattern }) => {
-      const result = await queryNet(file, pattern);
+    withTelemetry("query_nets_by_component", async ({ file, refdes, include_ground }) => {
+      const result = await queryNetsByComponent(file, refdes, include_ground);
       return formatResult(result);
     })
   );

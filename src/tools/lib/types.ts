@@ -159,6 +159,16 @@ export interface QueryNetsResult {
 }
 
 /**
+ * Result from query_nets_by_component tool.
+ */
+export interface QueryNetsByComponentResult {
+  refdes: string;
+  includeGround: boolean;
+  units: string;
+  matches: QueryNetResult[];
+}
+
+/**
  * Detected Cadence SPB installation.
  */
 export interface CadenceInstall {

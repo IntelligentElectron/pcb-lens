@@ -13,6 +13,7 @@ import { initTelemetry } from "./telemetry.js";
 import { register as registerGetDesignOverview } from "./tools/get-design-overview.js";
 import { register as registerQueryComponents } from "./tools/query-components.js";
 import { register as registerQueryNet } from "./tools/query-net.js";
+import { register as registerQueryNetsByComponent } from "./tools/query-nets-by-component.js";
 import { register as registerExportCadenceBoard } from "./tools/export-cadence-board.js";
 import { register as registerExportCadenceConstraints } from "./tools/export-cadence-constraints.js";
 import { register as registerQueryConstraints } from "./tools/query-constraints.js";
@@ -34,7 +35,8 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 3. Use \`get_design_overview\` first to understand the design structure, layer stackup, and size
 4. Use \`query_components\` to find component placements by refdes pattern (regex)
 5. Use \`query_net\` to trace a net's routing, trace widths, vias, and connected pins
-6. Use \`render_net\` to visualize a net's routing geometry as SVG
+6. Use \`query_nets_by_component\` to get all nets connected to a component (ground nets excluded by default)
+7. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips
 
@@ -76,6 +78,7 @@ export const createServer = (): McpServer => {
   registerGetDesignOverview(server);
   registerQueryComponents(server);
   registerQueryNet(server);
+  registerQueryNetsByComponent(server);
   registerExportCadenceBoard(server);
   registerExportCadenceConstraints(server);
   registerQueryConstraints(server);
