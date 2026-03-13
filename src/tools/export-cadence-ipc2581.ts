@@ -106,7 +106,7 @@ export const exportCadenceBoard = async (
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "export_cadence_board",
+    "export_cadence_ipc2581",
     {
       description:
         "Export a Cadence Allegro .brd file to IPC-2581 XML. Windows only. Requires Cadence SPB installation (auto-detected). Calls are serialized internally to avoid license conflicts.",
@@ -124,7 +124,7 @@ export const register = (server: McpServer): void => {
           .describe('IPC-2581 revision: "B" (1.03) or "C" (1.04, default). Rev C is richest.'),
       },
     },
-    withTelemetry("export_cadence_board", async ({ board, output, revision }) => {
+    withTelemetry("export_cadence_ipc2581", async ({ board, output, revision }) => {
       const result = await exportCadenceBoard(board, { output, revision });
       return formatResult(result);
     })

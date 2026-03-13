@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { getDesignOverview } from "./get-design-overview.js";
+import { getDesignOverview } from "./get-pcb-metadata.js";
 import { isErrorResult } from "./lib/types.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");

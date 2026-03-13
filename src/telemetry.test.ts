@@ -89,7 +89,7 @@ describe("logToolEvent", () => {
     initTelemetry("test-session-tool-events");
 
     logToolEvent({
-      tool: "get_design_overview",
+      tool: "get_pcb_metadata",
       args: { file: "./test.xml" },
       duration_ms: 42,
       success: true,
@@ -100,7 +100,7 @@ describe("logToolEvent", () => {
 
     const toolEvent = JSON.parse(lines[1]);
     expect(toolEvent.session_id).toBe("test-session-tool-events");
-    expect(toolEvent.tool).toBe("get_design_overview");
+    expect(toolEvent.tool).toBe("get_pcb_metadata");
     expect(toolEvent.args).toEqual({ file: "./test.xml" });
     expect(toolEvent.duration_ms).toBe(42);
     expect(toolEvent.success).toBe(true);
@@ -122,7 +122,7 @@ describe("withTelemetry", () => {
   });
 
   it("logs a successful tool event", async () => {
-    const handler = withTelemetry("query_components", async (_args: { file: string }) => ({
+    const handler = withTelemetry("get_pcb_components", async (_args: { file: string }) => ({
       content: [{ type: "text" as const, text: '{"refdes":"U1"}' }],
     }));
 
@@ -130,14 +130,14 @@ describe("withTelemetry", () => {
 
     const lines = readFileSync(testTelemetryPath, "utf-8").trim().split("\n");
     const toolEvent = JSON.parse(lines[lines.length - 1]);
-    expect(toolEvent.tool).toBe("query_components");
+    expect(toolEvent.tool).toBe("get_pcb_components");
     expect(toolEvent.success).toBe(true);
     expect(toolEvent.duration_ms).toBeGreaterThanOrEqual(0);
     expect(toolEvent.args).toEqual({ file: "./Board.xml" });
   });
 
   it("logs success=false for error results", async () => {
-    const handler = withTelemetry("query_net", async (_args: { file: string }) => ({
+    const handler = withTelemetry("get_pcb_net", async (_args: { file: string }) => ({
       content: [{ type: "text" as const, text: '{"error":"Net not found"}' }],
     }));
 

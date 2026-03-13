@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { queryConstraints } from "./query-constraints.js";
+import { queryConstraints } from "./get-constraints.js";
 import { isErrorResult } from "./lib/types.js";
 import type { ConstraintsOverviewResult, ConstraintsSectionResult } from "./lib/types.js";
 

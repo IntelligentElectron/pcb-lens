@@ -9,9 +9,9 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { getDesignOverview } from "../../src/tools/get-design-overview.js";
-import { queryComponents } from "../../src/tools/query-components.js";
-import { queryNet } from "../../src/tools/query-net.js";
+import { getDesignOverview } from "../../src/tools/get-pcb-metadata.js";
+import { queryComponents } from "../../src/tools/get-pcb-components.js";
+import { queryNet } from "../../src/tools/get-pcb-net.js";
 import { renderNet } from "../../src/tools/render-net.js";
 import type {
   DesignOverview,

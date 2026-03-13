@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { exportCadenceBoard } from "./export-cadence-board.js";
+import { exportCadenceBoard } from "./export-cadence-ipc2581.js";
 import { isErrorResult } from "./lib/types.js";
 
 describe("exportCadenceBoard", () => {

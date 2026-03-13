@@ -121,7 +121,7 @@ export const validatePattern = (pattern: string): { error: string } | { regex: R
 };
 
 // =============================================================================
-// Net Accumulator (shared between query-net and query-nets-by-component)
+// Net Accumulator (used by get-pcb-net)
 // =============================================================================
 
 import type { NetPin } from "./lib/types.js";
@@ -130,8 +130,8 @@ export interface NetAccumulator {
   pins: NetPin[];
   pinsSeen: Set<string>;
   phyNetLayers: Set<string>;
-  routeMap: Map<string, { widths: Set<number>; segments: number }>;
-  viaMap: Map<string, number>;
+  routeMap: Map<string, { widths: Set<number>; segments: number; traceLength: number }>;
+  vias: Array<{ x: number; y: number; drillDiameter: number; layer: string }>;
 }
 
 export const makeAccumulator = (): NetAccumulator => ({
@@ -139,7 +139,7 @@ export const makeAccumulator = (): NetAccumulator => ({
   pinsSeen: new Set(),
   phyNetLayers: new Set(),
   routeMap: new Map(),
-  viaMap: new Map(),
+  vias: [],
 });
 
 export const addPin = (acc: NetAccumulator, refdes: string, pin: string): void => {

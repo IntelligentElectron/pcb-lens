@@ -4,7 +4,7 @@ import type {
   ErrorResult,
   QueryNetResult,
   NetRouteInfo,
-  NetViaInfo,
+  NetVia,
   QueryNetsResult,
 } from "./lib/types.js";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
@@ -109,7 +109,7 @@ export const queryNet = async (
 
   if (phyNetNames.size > 0 && matchedPhyNetNames.size === phyNetNames.size) {
     return {
-      error: `Pattern '${pattern}' matches all ${phyNetNames.size} physical nets. Use a more specific pattern, or use get_design_overview for net counts and discovery.`,
+      error: `Pattern '${pattern}' matches all ${phyNetNames.size} physical nets. Use a more specific pattern, or use get_pcb_metadata for net counts and discovery.`,
     };
   }
 
@@ -126,7 +126,9 @@ export const queryNet = async (
   let currentSetHasPolyline = false;
   let currentSetLineDescId: string | undefined;
   let currentSetInlineWidth: number | undefined;
-  let currentSetGeometry: string | undefined;
+  let inPolyline = false;
+  let polyPoints: { x: number; y: number }[] = [];
+  let polyLength = 0;
 
   await streamAllLines(filePath, (line) => {
     if (line.includes("<LayerFeature ")) {
@@ -142,7 +144,7 @@ export const queryNet = async (
       currentSetHasPolyline = false;
       currentSetLineDescId = undefined;
       currentSetInlineWidth = undefined;
-      currentSetGeometry = attr(line, "geometry");
+      polyLength = 0;
     }
 
     if (insideMatchedSet) {
@@ -158,6 +160,28 @@ export const queryNet = async (
 
       if (line.includes("<Polyline")) {
         currentSetHasPolyline = true;
+        inPolyline = true;
+        polyPoints = [];
+      }
+
+      if (inPolyline) {
+        if (line.includes("<PolyBegin ") || line.includes("<PolyStepSegment ")) {
+          const x = numAttr(line, "x");
+          const y = numAttr(line, "y");
+          if (x !== undefined && y !== undefined) {
+            const pt = { x: x * factor, y: y * factor };
+            if (polyPoints.length > 0) {
+              const prev = polyPoints[polyPoints.length - 1];
+              const dx = pt.x - prev.x;
+              const dy = pt.y - prev.y;
+              polyLength += Math.sqrt(dx * dx + dy * dy);
+            }
+            polyPoints.push(pt);
+          }
+        }
+        if (line.includes("</Polyline>")) {
+          inPolyline = false;
+        }
       }
 
       if (line.includes("<LineDescRef ")) {
@@ -174,19 +198,28 @@ export const queryNet = async (
       if (line.includes("<Hole ")) {
         const platingStatus = attr(line, "platingStatus");
         if (platingStatus === "VIA") {
-          const diameter = numAttr(line, "diameter");
-          const key = currentSetGeometry ?? `dia_${diameter ?? "unknown"}`;
-          acc.viaMap.set(key, (acc.viaMap.get(key) ?? 0) + 1);
+          const x = numAttr(line, "x");
+          const y = numAttr(line, "y");
+          const diameter = numAttr(line, "diameter") ?? 0;
+          if (x !== undefined && y !== undefined) {
+            acc.vias.push({
+              x: Math.round(x * factor * 100) / 100,
+              y: Math.round(y * factor * 100) / 100,
+              drillDiameter: Math.round(diameter * factor * 100) / 100,
+              layer: currentLayerName,
+            });
+          }
         }
       }
 
       if (line.includes("</Set>")) {
         if (currentSetHasPolyline && currentLayerName) {
           if (!acc.routeMap.has(currentLayerName)) {
-            acc.routeMap.set(currentLayerName, { widths: new Set(), segments: 0 });
+            acc.routeMap.set(currentLayerName, { widths: new Set(), segments: 0, traceLength: 0 });
           }
           const layerRoute = acc.routeMap.get(currentLayerName)!;
           layerRoute.segments++;
+          layerRoute.traceLength += polyLength;
 
           if (currentSetLineDescId) {
             const width = lineDescDict.get(currentSetLineDescId);
@@ -215,18 +248,16 @@ export const queryNet = async (
           layerName,
           traceWidths: [...data.widths].sort((a, b) => a - b),
           segmentCount: data.segments,
+          traceLength: Math.round(data.traceLength * 100) / 100,
         });
       }
 
-      const vias: NetViaInfo[] = [];
-      for (const [padstackRef, count] of [...acc.viaMap.entries()].sort(([a], [b]) =>
-        a.localeCompare(b)
-      )) {
-        vias.push({ padstackRef, count });
-      }
+      const vias: NetVia[] = acc.vias;
 
       const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
-      const totalVias = vias.reduce((sum, v) => sum + v.count, 0);
+      const totalVias = vias.length;
+      const totalTraceLength =
+        Math.round(routing.reduce((sum, r) => sum + r.traceLength, 0) * 100) / 100;
 
       // Merge PhyNetPoint layers with routing-derived layers
       const layerSet = new Set(acc.phyNetLayers);
@@ -251,6 +282,9 @@ export const queryNet = async (
       if (totalVias > 0) {
         result.totalVias = totalVias;
       }
+      if (totalTraceLength > 0) {
+        result.totalTraceLength = totalTraceLength;
+      }
 
       return result;
     });
@@ -260,10 +294,10 @@ export const queryNet = async (
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "query_net",
+    "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, segment counts), and via information. Rejects patterns that match all nets.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), and via information. Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
@@ -271,7 +305,7 @@ export const register = (server: McpServer): void => {
           .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
       },
     },
-    withTelemetry("query_net", async ({ file, pattern }) => {
+    withTelemetry("get_pcb_net", async ({ file, pattern }) => {
       const result = await queryNet(file, pattern);
       return formatResult(result);
     })

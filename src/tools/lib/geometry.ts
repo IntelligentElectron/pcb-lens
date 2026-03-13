@@ -2,7 +2,7 @@
  * Geometry extraction from IPC-2581 XML lines.
  *
  * Extracts pad shapes, package pin definitions, via padstack sizes,
- * and component placements. Used by render-net and query-via-in-pad.
+ * and component placements. Used by render-net and get-via-in-pad.
  */
 
 import { attr, numAttr, scanLines } from "./xml-utils.js";
