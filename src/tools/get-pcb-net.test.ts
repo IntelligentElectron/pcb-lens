@@ -262,11 +262,10 @@ describe("queryNet -- routing and vias", () => {
     const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
     expect(r.matches[0].totalSegments).toBe(2);
     expect(r.matches[0].totalVias).toBe(1);
-    expect(r.matches[0].vias).toBeDefined();
-    expect(r.matches[0].vias![0].x).toBe(500);
-    expect(r.matches[0].vias![0].y).toBe(500);
-    expect(r.matches[0].vias![0].drillDiameter).toBe(300);
-    expect(r.matches[0].vias![0].layer).toBe("TOP");
+    expect(r.matches[0].viaRows).toBeDefined();
+    expect(r.matches[0].viaRows![0]).toEqual([500, 500, 0]);
+    expect(r.matches[0].viaDrills).toBeDefined();
+    expect(r.matches[0].viaDrills![0]).toEqual({ diameter: 300, layer: "TOP" });
   });
 
   it("NET_B on TOP has trace width 200 microns (inline LineDesc)", async () => {

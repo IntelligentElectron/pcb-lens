@@ -126,12 +126,19 @@ export const validatePattern = (pattern: string): { error: string } | { regex: R
 
 import type { NetPin } from "./lib/types.js";
 
+export interface RawVia {
+  x: number;
+  y: number;
+  diameter: number;
+  layer: string;
+}
+
 export interface NetAccumulator {
   pins: NetPin[];
   pinsSeen: Set<string>;
   phyNetLayers: Set<string>;
   routeMap: Map<string, { widths: Set<number>; segments: number; traceLength: number }>;
-  vias: Array<{ x: number; y: number; drillDiameter: number; layer: string }>;
+  vias: RawVia[];
 }
 
 export const makeAccumulator = (): NetAccumulator => ({

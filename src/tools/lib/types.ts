@@ -151,14 +151,17 @@ export interface NetRouteInfo {
 }
 
 /**
- * Individual via location on a net.
+ * Unique via drill type, referenced by index from via rows.
  */
-export interface NetVia {
-  x: number;
-  y: number;
-  drillDiameter: number;
+export interface ViaDrill {
+  diameter: number;
   layer: string;
 }
+
+/**
+ * Columnar via data: rows of [x, y, drillIndex].
+ */
+export type ViaRow = [x: number, y: number, drillIndex: number];
 
 /**
  * Result from render_net tool.
@@ -183,7 +186,9 @@ export interface QueryNetResult {
   netName: string;
   pins: Record<string, string[]>;
   routing?: NetRouteInfo[];
-  vias?: NetVia[];
+  viaDrills?: ViaDrill[];
+  viaColumns?: ["x", "y", "drillIndex"];
+  viaRows?: ViaRow[];
   totalSegments?: number;
   totalVias?: number;
   totalTraceLength?: number;

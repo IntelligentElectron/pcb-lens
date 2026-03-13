@@ -4,7 +4,8 @@ import type {
   ErrorResult,
   QueryNetResult,
   NetRouteInfo,
-  NetVia,
+  ViaDrill,
+  ViaRow,
   QueryNetsResult,
 } from "./lib/types.js";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
@@ -205,7 +206,7 @@ export const queryNet = async (
             acc.vias.push({
               x: Math.round(x * factor),
               y: Math.round(y * factor),
-              drillDiameter: Math.round(diameter * factor),
+              diameter: Math.round(diameter * factor),
               layer: currentLayerName,
             });
           }
@@ -252,10 +253,23 @@ export const queryNet = async (
         });
       }
 
-      const vias: NetVia[] = acc.vias;
+      // Deduplicate drill types, build columnar via rows
+      const drillList: ViaDrill[] = [];
+      const drillIdx = new Map<string, number>();
+      const viaRows: ViaRow[] = [];
+      for (const v of acc.vias) {
+        const key = `${v.diameter}:${v.layer}`;
+        let idx = drillIdx.get(key);
+        if (idx === undefined) {
+          idx = drillList.length;
+          drillList.push({ diameter: v.diameter, layer: v.layer });
+          drillIdx.set(key, idx);
+        }
+        viaRows.push([v.x, v.y, idx]);
+      }
 
       const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
-      const totalVias = vias.length;
+      const totalVias = viaRows.length;
       const totalTraceLength = Math.round(routing.reduce((sum, r) => sum + r.traceLength, 0));
 
       // Merge PhyNetPoint layers with routing-derived layers
@@ -272,8 +286,10 @@ export const queryNet = async (
       if (routing.length > 0) {
         result.routing = routing;
       }
-      if (vias.length > 0) {
-        result.vias = vias;
+      if (viaRows.length > 0) {
+        result.viaDrills = drillList;
+        result.viaColumns = ["x", "y", "drillIndex"];
+        result.viaRows = viaRows;
       }
       if (totalSegments > 0) {
         result.totalSegments = totalSegments;
