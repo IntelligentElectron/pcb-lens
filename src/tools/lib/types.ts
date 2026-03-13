@@ -116,7 +116,7 @@ export interface ComponentResult {
  */
 export interface QueryComponentsResult {
   pattern: string;
-  packagePattern?: string;
+  package?: string;
   units: string;
   matches: ComponentResult[];
 }

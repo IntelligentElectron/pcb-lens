@@ -153,19 +153,19 @@ describe("queryComponents -- package_pattern", () => {
     expect(isErrorResult(result)).toBe(true);
   });
 
-  it("includes packagePattern in result when provided", async () => {
+  it("includes package in result when provided", async () => {
     const result = await queryComponents(inlineXml, "^U", "BGA");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
-      expect(result.packagePattern).toBe("BGA");
+      expect(result.package).toBe("BGA");
     }
   });
 
-  it("omits packagePattern from result when not provided", async () => {
+  it("omits package from result when not provided", async () => {
     const result = await queryComponents(inlineXml, "^U");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
-      expect(result.packagePattern).toBeUndefined();
+      expect(result.package).toBeUndefined();
     }
   });
 

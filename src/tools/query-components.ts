@@ -98,7 +98,11 @@ export const queryComponents = async (
     }
   }
 
-  const baseResult = { pattern, ...(packagePattern ? { packagePattern } : {}), units: "MICRON" };
+  const baseResult = {
+    pattern,
+    ...(packagePattern ? { package: packagePattern } : {}),
+    units: "MICRON",
+  };
 
   if (placements.size === 0) {
     return { ...baseResult, matches: [] };
@@ -224,7 +228,7 @@ export const register = (server: McpServer): void => {
         pattern: z
           .string()
           .describe("Regex pattern for component refdes (e.g., '^U1$', '^C\\\\d+', 'R10[0-9]')"),
-        package_pattern: z
+        package: z
           .string()
           .optional()
           .describe(
@@ -236,8 +240,8 @@ export const register = (server: McpServer): void => {
           .describe("Include per-pin pad geometry (shape, size, position). Default: false"),
       },
     },
-    withTelemetry("query_components", async ({ file, pattern, package_pattern, include_pads }) => {
-      const result = await queryComponents(file, pattern, package_pattern, include_pads);
+    withTelemetry("query_components", async ({ file, pattern, package: pkg, include_pads }) => {
+      const result = await queryComponents(file, pattern, pkg, include_pads);
       return formatResult(result);
     })
   );
