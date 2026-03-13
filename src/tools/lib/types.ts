@@ -83,6 +83,18 @@ export interface ParsedPackage {
 }
 
 /**
+ * Per-pin pad geometry information.
+ */
+export interface PadGeometry {
+  pin: string;
+  x: number;
+  y: number;
+  shape: "rect" | "circle";
+  width: number;
+  height: number;
+}
+
+/**
  * Combined component result (placement + BOM).
  */
 export interface ComponentResult {
@@ -96,6 +108,7 @@ export interface ComponentResult {
   mountType?: string;
   description?: string;
   characteristics: Record<string, string>;
+  pads?: PadGeometry[];
 }
 
 /**

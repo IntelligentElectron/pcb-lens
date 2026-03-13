@@ -4,17 +4,26 @@ import type {
   ComponentInfo,
   ComponentResult,
   ErrorResult,
+  PadGeometry,
   QueryComponentsResult,
 } from "./lib/types.js";
+import { extractShapes, extractPackages, transformPin } from "./lib/geometry.js";
 import { parsePackageRef } from "./lib/package-parser.js";
-import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
-import { extractMicronFactor, formatResult, validateFile, validatePattern } from "./shared.js";
+import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js";
+import {
+  extractMicronFactor,
+  extractMicronFactorFromLines,
+  formatResult,
+  validateFile,
+  validatePattern,
+} from "./shared.js";
 import { withTelemetry } from "../telemetry.js";
 
 export const queryComponents = async (
   filePath: string,
   pattern: string,
-  packagePattern?: string
+  packagePattern?: string,
+  includePads = false
 ): Promise<QueryComponentsResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
@@ -141,15 +150,61 @@ export const queryComponents = async (
     }
   });
 
-  // Merge placement + BOM + parsed package
+  // Optional Pass 3: Extract pad geometry when include_pads is set.
+  let padGeometryMap: Map<string, PadGeometry[]> | undefined;
+  if (includePads) {
+    const lines = await loadAllLines(filePath);
+    const f = extractMicronFactorFromLines(lines);
+    const shapes = extractShapes(lines, f);
+    const packages = extractPackages(lines);
+    padGeometryMap = new Map();
+
+    for (const [refdes, placement] of placements) {
+      const pkg = packages.get(placement.packageRef);
+      if (!pkg) continue;
+      const pads: PadGeometry[] = [];
+      for (const [pinName, pinDef] of pkg) {
+        const pos = transformPin(
+          {
+            refdes,
+            packageRef: placement.packageRef,
+            x: placement.x,
+            y: placement.y,
+            rotation: placement.rotation,
+            mirror: false,
+            layer: placement.layer,
+          },
+          pinDef,
+          f
+        );
+        const shape = shapes.get(pinDef.shapeId);
+        if (shape) {
+          pads.push({
+            pin: pinName,
+            x: Math.round(pos.x * 100) / 100,
+            y: Math.round(pos.y * 100) / 100,
+            shape: shape.type,
+            width: Math.round(shape.width * 100) / 100,
+            height: Math.round(shape.height * 100) / 100,
+          });
+        }
+      }
+      pads.sort((a, b) => a.pin.localeCompare(b.pin, undefined, { numeric: true }));
+      padGeometryMap.set(refdes, pads);
+    }
+  }
+
+  // Merge placement + BOM + parsed package + optional pads
   const matches: ComponentResult[] = [];
   for (const [refdes, placement] of placements) {
     const parsed = parsePackageRef(placement.packageRef);
+    const pads = padGeometryMap?.get(refdes);
     matches.push({
       ...placement,
       ...(parsed ? { parsed } : {}),
       description: bomDescriptions.get(refdes),
       characteristics: bomCharacteristics.get(refdes) ?? {},
+      ...(pads ? { pads } : {}),
     });
   }
 
@@ -175,10 +230,14 @@ export const register = (server: McpServer): void => {
           .describe(
             "Optional regex pattern to filter by package/footprint name (e.g., 'BGA', 'QFP', 'SOT23'). ANDed with refdes pattern."
           ),
+        include_pads: z
+          .boolean()
+          .default(false)
+          .describe("Include per-pin pad geometry (shape, size, position). Default: false"),
       },
     },
-    withTelemetry("query_components", async ({ file, pattern, package_pattern }) => {
-      const result = await queryComponents(file, pattern, package_pattern);
+    withTelemetry("query_components", async ({ file, pattern, package_pattern, include_pads }) => {
+      const result = await queryComponents(file, pattern, package_pattern, include_pads);
       return formatResult(result);
     })
   );

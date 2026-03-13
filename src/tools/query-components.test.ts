@@ -216,3 +216,108 @@ describe("queryComponents -- parsed package", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// include_pads
+// ---------------------------------------------------------------------------
+const PAD_XML = `<IPC-2581>
+  <Content>
+    <EntryStandard id="PAD_RECT">
+      <RectCenter width="0.5" height="0.3"/>
+    </EntryStandard>
+    <EntryStandard id="PAD_CIRCLE">
+      <Circle diameter="0.4"/>
+    </EntryStandard>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <Ecad>
+    <CadData>
+      <Package name="PKG2">
+        <Pin number="1">
+          <Location x="0" y="0"/>
+          <StandardPrimitiveRef id="PAD_RECT"/>
+        </Pin>
+        <Pin number="2">
+          <Location x="1.0" y="0"/>
+          <StandardPrimitiveRef id="PAD_CIRCLE"/>
+        </Pin>
+      </Package>
+    </CadData>
+  </Ecad>
+  <Step>
+    <Component refDes="U1" packageRef="PKG2" layerRef="TOP">
+      <Location x="10" y="20"/>
+    </Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+
+describe("queryComponents -- include_pads", () => {
+  let padXml: string;
+
+  beforeAll(() => {
+    padXml = path.join(tempDir, "pads.xml");
+    writeFileSync(padXml, PAD_XML);
+  });
+
+  it("omits pads by default", async () => {
+    const result = await queryComponents(padXml, "^U1$");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.matches[0].pads).toBeUndefined();
+    }
+  });
+
+  it("includes pads when include_pads is true", async () => {
+    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      const comp = result.matches[0];
+      expect(comp.pads).toBeDefined();
+      expect(comp.pads).toHaveLength(2);
+    }
+  });
+
+  it("returns correct pad shapes", async () => {
+    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      const pads = result.matches[0].pads!;
+      const pin1 = pads.find((p) => p.pin === "1")!;
+      expect(pin1.shape).toBe("rect");
+      expect(pin1.width).toBe(500); // 0.5mm = 500 microns
+      expect(pin1.height).toBe(300); // 0.3mm = 300 microns
+
+      const pin2 = pads.find((p) => p.pin === "2")!;
+      expect(pin2.shape).toBe("circle");
+      expect(pin2.width).toBe(400); // 0.4mm diameter
+    }
+  });
+
+  it("pads have correct positions in microns", async () => {
+    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      const pads = result.matches[0].pads!;
+      const pin1 = pads.find((p) => p.pin === "1")!;
+      // Component at (10,20)mm, pin offset (0,0) -> (10000, 20000) microns
+      expect(pin1.x).toBe(10000);
+      expect(pin1.y).toBe(20000);
+
+      const pin2 = pads.find((p) => p.pin === "2")!;
+      // Component at (10,20)mm, pin offset (1,0) -> (11000, 20000) microns
+      expect(pin2.x).toBe(11000);
+      expect(pin2.y).toBe(20000);
+    }
+  });
+
+  it("pads are sorted by pin number", async () => {
+    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      const pads = result.matches[0].pads!;
+      expect(pads[0].pin).toBe("1");
+      expect(pads[1].pin).toBe("2");
+    }
+  });
+});
