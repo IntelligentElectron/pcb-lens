@@ -6,6 +6,7 @@ import type {
   ComponentResult,
   ErrorResult,
   PadGeometry,
+  PadShape,
   QueryComponentsResult,
 } from "./lib/types.js";
 import { extractShapes, extractPackages, transformPin } from "./lib/geometry.js";
@@ -206,7 +207,7 @@ export const queryComponents = async (
   }
 
   // Pass 4: Extract pad geometry.
-  const padGeometryMap = new Map<string, PadGeometry[]>();
+  const padDataMap = new Map<string, { padShapes: PadShape[]; pads: PadGeometry[] }>();
   {
     const lines = await loadAllLines(filePath);
     const f = extractMicronFactorFromLines(lines);
@@ -216,6 +217,8 @@ export const queryComponents = async (
     for (const [refdes, placement] of placements) {
       const pkg = packages.get(placement.packageRef);
       if (!pkg) continue;
+      const shapeList: PadShape[] = [];
+      const shapeIndex = new Map<string, number>();
       const pads: PadGeometry[] = [];
       for (const [pinName, pinDef] of pkg) {
         const pos = transformPin(
@@ -233,18 +236,25 @@ export const queryComponents = async (
         );
         const shape = shapes.get(pinDef.shapeId);
         if (shape) {
+          const w = Math.round(shape.width * 100) / 100;
+          const h = Math.round(shape.height * 100) / 100;
+          const key = `${shape.type}:${w}:${h}`;
+          let idx = shapeIndex.get(key);
+          if (idx === undefined) {
+            idx = shapeList.length;
+            shapeList.push({ shape: shape.type, width: w, height: h });
+            shapeIndex.set(key, idx);
+          }
           pads.push({
             pin: pinName,
             x: Math.round(pos.x * 100) / 100,
             y: Math.round(pos.y * 100) / 100,
-            shape: shape.type,
-            width: Math.round(shape.width * 100) / 100,
-            height: Math.round(shape.height * 100) / 100,
+            shapeIndex: idx,
           });
         }
       }
       pads.sort((a, b) => a.pin.localeCompare(b.pin, undefined, { numeric: true }));
-      padGeometryMap.set(refdes, pads);
+      padDataMap.set(refdes, { padShapes: shapeList, pads });
     }
   }
 
@@ -252,7 +262,7 @@ export const queryComponents = async (
   const matches: ComponentResult[] = [];
   for (const [refdes, placement] of placements) {
     const parsed = parsePackageRef(placement.packageRef);
-    const pads = padGeometryMap.get(refdes);
+    const padData = padDataMap.get(refdes);
     const netMap = netsByComponent.get(refdes);
     const nets: ComponentNetSummary[] = netMap
       ? [...netMap.entries()]
@@ -269,7 +279,7 @@ export const queryComponents = async (
       description: bomDescriptions.get(refdes),
       characteristics: bomCharacteristics.get(refdes) ?? {},
       nets,
-      ...(pads ? { pads } : {}),
+      ...(padData ? { padShapes: padData.padShapes, pads: padData.pads } : {}),
     });
   }
 

@@ -260,29 +260,36 @@ describe("queryComponents -- pad geometry", () => {
     writeFileSync(padXml, PAD_XML);
   });
 
-  it("includes pads in results", async () => {
+  it("includes pads and deduplicated padShapes", async () => {
     const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const comp = result.matches[0];
       expect(comp.pads).toBeDefined();
       expect(comp.pads).toHaveLength(2);
+      expect(comp.padShapes).toBeDefined();
+      expect(comp.padShapes).toHaveLength(2); // rect + circle
     }
   });
 
-  it("returns correct pad shapes", async () => {
+  it("returns correct pad shapes via shapeIndex", async () => {
     const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
-      const pads = result.matches[0].pads!;
+      const comp = result.matches[0];
+      const pads = comp.pads!;
+      const shapes = comp.padShapes!;
+
       const pin1 = pads.find((p) => p.pin === "1")!;
-      expect(pin1.shape).toBe("rect");
-      expect(pin1.width).toBe(500); // 0.5mm = 500 microns
-      expect(pin1.height).toBe(300); // 0.3mm = 300 microns
+      const shape1 = shapes[pin1.shapeIndex];
+      expect(shape1.shape).toBe("rect");
+      expect(shape1.width).toBe(500); // 0.5mm = 500 microns
+      expect(shape1.height).toBe(300); // 0.3mm = 300 microns
 
       const pin2 = pads.find((p) => p.pin === "2")!;
-      expect(pin2.shape).toBe("circle");
-      expect(pin2.width).toBe(400); // 0.4mm diameter
+      const shape2 = shapes[pin2.shapeIndex];
+      expect(shape2.shape).toBe("circle");
+      expect(shape2.width).toBe(400); // 0.4mm diameter
     }
   });
 
@@ -310,6 +317,40 @@ describe("queryComponents -- pad geometry", () => {
       const pads = result.matches[0].pads!;
       expect(pads[0].pin).toBe("1");
       expect(pads[1].pin).toBe("2");
+    }
+  });
+
+  it("deduplicates identical pad shapes", async () => {
+    // All pads same shape -> padShapes should have length 1
+    const xml = `<IPC-2581>
+  <Content>
+    <EntryStandard id="PAD_CIRCLE"><Circle diameter="0.4"/></EntryStandard>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <Ecad><CadData>
+    <Package name="BGA4">
+      <Pin number="A1"><Location x="0" y="0"/><StandardPrimitiveRef id="PAD_CIRCLE"/></Pin>
+      <Pin number="A2"><Location x="0.8" y="0"/><StandardPrimitiveRef id="PAD_CIRCLE"/></Pin>
+      <Pin number="B1"><Location x="0" y="0.8"/><StandardPrimitiveRef id="PAD_CIRCLE"/></Pin>
+      <Pin number="B2"><Location x="0.8" y="0.8"/><StandardPrimitiveRef id="PAD_CIRCLE"/></Pin>
+    </Package>
+  </CadData></Ecad>
+  <Step>
+    <Component refDes="U1" packageRef="BGA4" layerRef="TOP"><Location x="10" y="20"/></Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "dedup.xml");
+    writeFileSync(f, xml);
+    const result = await queryComponents(f, "^U1$");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      const comp = result.matches[0];
+      expect(comp.padShapes).toHaveLength(1); // all same shape
+      expect(comp.pads).toHaveLength(4);
+      for (const pad of comp.pads!) {
+        expect(pad.shapeIndex).toBe(0);
+      }
     }
   });
 });

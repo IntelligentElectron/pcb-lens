@@ -83,15 +83,22 @@ export interface ParsedPackage {
 }
 
 /**
- * Per-pin pad geometry information.
+ * Unique pad shape definition, referenced by index from PadGeometry.
+ */
+export interface PadShape {
+  shape: "rect" | "circle";
+  width: number;
+  height: number;
+}
+
+/**
+ * Per-pin pad position, references a PadShape by index.
  */
 export interface PadGeometry {
   pin: string;
   x: number;
   y: number;
-  shape: "rect" | "circle";
-  width: number;
-  height: number;
+  shapeIndex: number;
 }
 
 /**
@@ -109,6 +116,7 @@ export interface ComponentResult {
   description?: string;
   characteristics: Record<string, string>;
   nets: ComponentNetSummary[];
+  padShapes?: PadShape[];
   pads?: PadGeometry[];
 }
 
