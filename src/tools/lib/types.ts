@@ -102,10 +102,11 @@ export type PadRow = [pin: string, x: number, y: number, shapeIndex: number];
 export type NetRow = [netName: string, pins: string[], pinCount: number];
 
 /**
- * Combined component result (placement + BOM).
+ * Result from get_pcb_component tool (single component).
  */
 export interface ComponentResult {
   refdes: string;
+  units: string;
   packageRef: string;
   parsed?: ParsedPackage;
   x: number;
@@ -120,16 +121,6 @@ export interface ComponentResult {
   padShapes?: PadShape[];
   padColumns?: ["pin", "x", "y", "shapeIndex"];
   padRows?: PadRow[];
-}
-
-/**
- * Result from query_components tool.
- */
-export interface QueryComponentsResult {
-  pattern: string;
-  package?: string;
-  units: string;
-  matches: ComponentResult[];
 }
 
 /**

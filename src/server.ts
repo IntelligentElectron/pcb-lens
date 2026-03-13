@@ -11,7 +11,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { VERSION } from "./cli/version.js";
 import { initTelemetry } from "./telemetry.js";
 import { register as registerGetPcbMetadata } from "./tools/get-pcb-metadata.js";
-import { register as registerGetPcbComponents } from "./tools/get-pcb-components.js";
+import { register as registerGetPcbComponent } from "./tools/get-pcb-component.js";
 import { register as registerGetPcbNet } from "./tools/get-pcb-net.js";
 import { register as registerExportCadenceIpc2581 } from "./tools/export-cadence-ipc2581.js";
 import { register as registerExportCadenceConstraints } from "./tools/export-cadence-constraints.js";
@@ -32,14 +32,14 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 1. If starting from a Cadence Allegro .brd file, use \`export_cadence_ipc2581\` to generate the IPC-2581 XML first (Windows only)
 2. To access design constraints (trace width rules, spacing rules, net classes, stackup), use \`export_cadence_constraints\` to generate a .tcfx file, then \`get_constraints\` to read it
 3. Use \`get_pcb_metadata\` first to understand the design structure, layer stackup, and size
-4. Use \`get_pcb_components\` to find component placements by refdes pattern (regex)
+4. Use \`get_pcb_component\` to look up a single component by exact refdes
 5. Use \`get_pcb_net\` to trace a net's routing, trace widths, vias, and connected pins
 6. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips
 
 - All query/render tools accept an IPC-2581 XML file path as the first argument
-- Component refdes patterns use regex (e.g., "^U\\\\d+" for all ICs, "^C1$" for exact match)
+- Component refdes is an exact match (e.g., "U5", "C10", "R22")
 - Net name patterns use regex (e.g., "DDR_D0", "^VCC", "CLK")
 - All physical values (coordinates, trace widths) are normalized to microns regardless of the source file's native unit
 - Rotation is in degrees counterclockwise
@@ -74,7 +74,7 @@ export const createServer = (): McpServer => {
   );
 
   registerGetPcbMetadata(server);
-  registerGetPcbComponents(server);
+  registerGetPcbComponent(server);
   registerGetPcbNet(server);
   registerExportCadenceIpc2581(server);
   registerExportCadenceConstraints(server);

@@ -6,7 +6,7 @@
  */
 
 export { getDesignOverview } from "./tools/get-pcb-metadata.js";
-export { queryComponents } from "./tools/get-pcb-components.js";
+export { queryComponent } from "./tools/get-pcb-component.js";
 export { queryNet } from "./tools/get-pcb-net.js";
 export { exportCadenceBoard } from "./tools/export-cadence-ipc2581.js";
 export { exportCadenceConstraints } from "./tools/export-cadence-constraints.js";
@@ -20,7 +20,6 @@ export type {
   SectionInfo,
   ComponentInfo,
   ComponentResult,
-  QueryComponentsResult,
   NetPin,
   NetRouteInfo,
   ViaDrill,

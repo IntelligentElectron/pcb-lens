@@ -10,15 +10,16 @@ import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { getDesignOverview } from "../../src/tools/get-pcb-metadata.js";
-import { queryComponents } from "../../src/tools/get-pcb-components.js";
+import { queryComponent } from "../../src/tools/get-pcb-component.js";
 import { queryNet } from "../../src/tools/get-pcb-net.js";
 import { renderNet } from "../../src/tools/render-net.js";
 import type {
   DesignOverview,
-  QueryComponentsResult,
+  ComponentResult,
   QueryNetsResult,
   RenderNetResult,
 } from "../../src/tools/lib/types.js";
+import { isErrorResult } from "../../src/tools/lib/types.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../fixtures");
 
@@ -58,8 +59,6 @@ interface FixtureConfig {
     componentCount: number;
     netCount: number;
   };
-  /** When duplicate refDes exist, queryComponents deduplicates via Map and returns fewer. */
-  uniqueComponentCount?: number;
   component?: ComponentSpotCheck;
   net: NetGroundTruth;
 }
@@ -292,7 +291,6 @@ const FIXTURES: FixtureConfig[] = [
       componentCount: 1278,
       netCount: 956,
     },
-    uniqueComponentCount: 1267, // 11 duplicate refDes="OR" entries → Map deduplicates
     component: {
       refdes: "I14",
       packageRef: "TO220_170_1054X1092X4872",
@@ -364,32 +362,27 @@ for (const fixture of FIXTURES) {
       expect(overview.sections).toBeInstanceOf(Array);
     });
 
-    it("queryComponents(.*)", async () => {
-      const result = await queryComponents(filePath, ".*");
-      expect(result).not.toHaveProperty("error");
-      const { matches } = result as QueryComponentsResult;
+    it("queryComponent", async () => {
+      if (!fixture.component) return;
 
-      const expectedCount = fixture.uniqueComponentCount ?? fixture.overview.componentCount;
-      expect(matches).toHaveLength(expectedCount);
+      const result = await queryComponent(filePath, fixture.component.refdes);
+      expect(isErrorResult(result)).toBe(false);
+      const comp = result as ComponentResult;
 
-      if (fixture.component) {
-        const comp = matches.find((c) => c.refdes === fixture.component!.refdes);
-        expect(comp).toBeDefined();
-
-        if (fixture.component.packageRef !== undefined) {
-          expect(comp!.packageRef).toBe(fixture.component.packageRef);
-        }
-        if (fixture.component.layer !== undefined) {
-          expect(comp!.layer).toBe(fixture.component.layer);
-        }
-        if (fixture.component.mountType !== undefined) {
-          expect(comp!.mountType).toBe(fixture.component.mountType);
-        }
-        expect(comp!.x).toBeCloseTo(fixture.component.x, 0);
-        expect(comp!.y).toBeCloseTo(fixture.component.y, 0);
-        if (fixture.component.rotation !== undefined) {
-          expect(comp!.rotation).toBe(fixture.component.rotation);
-        }
+      expect(comp.refdes).toBe(fixture.component.refdes);
+      if (fixture.component.packageRef !== undefined) {
+        expect(comp.packageRef).toBe(fixture.component.packageRef);
+      }
+      if (fixture.component.layer !== undefined) {
+        expect(comp.layer).toBe(fixture.component.layer);
+      }
+      if (fixture.component.mountType !== undefined) {
+        expect(comp.mountType).toBe(fixture.component.mountType);
+      }
+      expect(comp.x).toBeCloseTo(fixture.component.x, 0);
+      expect(comp.y).toBeCloseTo(fixture.component.y, 0);
+      if (fixture.component.rotation !== undefined) {
+        expect(comp.rotation).toBe(fixture.component.rotation);
       }
     });
 
