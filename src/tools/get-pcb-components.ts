@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type {
   ComponentInfo,
+  ComponentNetSummary,
   ComponentResult,
   ErrorResult,
   PadGeometry,
@@ -22,8 +23,7 @@ import { withTelemetry } from "../telemetry.js";
 export const queryComponents = async (
   filePath: string,
   pattern: string,
-  packagePattern?: string,
-  includePads = false
+  packagePattern?: string
 ): Promise<QueryComponentsResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
@@ -154,14 +154,64 @@ export const queryComponents = async (
     }
   });
 
-  // Optional Pass 3: Extract pad geometry when include_pads is set.
-  let padGeometryMap: Map<string, PadGeometry[]> | undefined;
-  if (includePads) {
+  // Pass 3: Scan LogicalNet sections for net connectivity.
+  const netsByComponent = new Map<
+    string,
+    Map<string, { pinCount: number; componentPins: string[] }>
+  >();
+  for (const refdes of placements.keys()) {
+    netsByComponent.set(refdes, new Map());
+  }
+  {
+    let insideLogicalNet = false;
+    let currentNetName = "";
+    let currentNetPinCount = 0;
+    let currentPinsByRefdes = new Map<string, string[]>();
+
+    await streamAllLines(filePath, (line) => {
+      if (line.includes("<LogicalNet ")) {
+        const name = attr(line, "name");
+        insideLogicalNet = Boolean(name);
+        currentNetName = name ?? "";
+        currentNetPinCount = 0;
+        currentPinsByRefdes = new Map();
+      }
+
+      if (insideLogicalNet) {
+        if (line.includes("<PinRef ")) {
+          const compRef = attr(line, "componentRef");
+          const pin = attr(line, "pin");
+          if (compRef && pin) {
+            currentNetPinCount++;
+            if (netsByComponent.has(compRef)) {
+              const pins = currentPinsByRefdes.get(compRef) ?? [];
+              pins.push(pin);
+              currentPinsByRefdes.set(compRef, pins);
+            }
+          }
+        }
+        if (line.includes("</LogicalNet>")) {
+          for (const [refdes, pins] of currentPinsByRefdes) {
+            netsByComponent.get(refdes)!.set(currentNetName, {
+              pinCount: currentNetPinCount,
+              componentPins: pins.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+            });
+          }
+          insideLogicalNet = false;
+        }
+      }
+
+      if (line.includes("<Step>") || line.includes("<LayerFeature")) return false;
+    });
+  }
+
+  // Pass 4: Extract pad geometry.
+  const padGeometryMap = new Map<string, PadGeometry[]>();
+  {
     const lines = await loadAllLines(filePath);
     const f = extractMicronFactorFromLines(lines);
     const shapes = extractShapes(lines, f);
     const packages = extractPackages(lines);
-    padGeometryMap = new Map();
 
     for (const [refdes, placement] of placements) {
       const pkg = packages.get(placement.packageRef);
@@ -198,16 +248,27 @@ export const queryComponents = async (
     }
   }
 
-  // Merge placement + BOM + parsed package + optional pads
+  // Merge placement + BOM + parsed package + nets + pads
   const matches: ComponentResult[] = [];
   for (const [refdes, placement] of placements) {
     const parsed = parsePackageRef(placement.packageRef);
-    const pads = padGeometryMap?.get(refdes);
+    const pads = padGeometryMap.get(refdes);
+    const netMap = netsByComponent.get(refdes);
+    const nets: ComponentNetSummary[] = netMap
+      ? [...netMap.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([netName, data]) => ({
+            netName,
+            pins: data.componentPins,
+            pinCount: data.pinCount,
+          }))
+      : [];
     matches.push({
       ...placement,
       ...(parsed ? { parsed } : {}),
       description: bomDescriptions.get(refdes),
       characteristics: bomCharacteristics.get(refdes) ?? {},
+      nets,
       ...(pads ? { pads } : {}),
     });
   }
@@ -219,10 +280,10 @@ export const queryComponents = async (
 
 export const register = (server: McpServer): void => {
   server.registerTool(
-    "query_components",
+    "get_pcb_components",
     {
       description:
-        "Find components by refdes pattern in an IPC-2581 file. Returns placement coordinates, rotation, layer, package, and BOM data.",
+        "Find components by refdes pattern in an IPC-2581 file. Returns placement, package, BOM data, connected nets with pin names, and per-pin pad geometry.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
@@ -234,14 +295,10 @@ export const register = (server: McpServer): void => {
           .describe(
             "Optional regex pattern to filter by package/footprint name (e.g., 'BGA', 'QFP', 'SOT23'). ANDed with refdes pattern."
           ),
-        include_pads: z
-          .boolean()
-          .default(false)
-          .describe("Include per-pin pad geometry (shape, size, position). Default: false"),
       },
     },
-    withTelemetry("query_components", async ({ file, pattern, package: pkg, include_pads }) => {
-      const result = await queryComponents(file, pattern, pkg, include_pads);
+    withTelemetry("get_pcb_components", async ({ file, pattern, package: pkg }) => {
+      const result = await queryComponents(file, pattern, pkg);
       return formatResult(result);
     })
   );

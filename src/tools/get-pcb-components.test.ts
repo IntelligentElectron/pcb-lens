@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { queryComponents } from "./query-components.js";
+import { queryComponents } from "./get-pcb-components.js";
 import { isErrorResult } from "./lib/types.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
@@ -252,7 +252,7 @@ const PAD_XML = `<IPC-2581>
   </Step>
 </IPC-2581>`;
 
-describe("queryComponents -- include_pads", () => {
+describe("queryComponents -- pad geometry", () => {
   let padXml: string;
 
   beforeAll(() => {
@@ -260,16 +260,8 @@ describe("queryComponents -- include_pads", () => {
     writeFileSync(padXml, PAD_XML);
   });
 
-  it("omits pads by default", async () => {
+  it("includes pads in results", async () => {
     const result = await queryComponents(padXml, "^U1$");
-    expect(isErrorResult(result)).toBe(false);
-    if (!isErrorResult(result)) {
-      expect(result.matches[0].pads).toBeUndefined();
-    }
-  });
-
-  it("includes pads when include_pads is true", async () => {
-    const result = await queryComponents(padXml, "^U1$", undefined, true);
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const comp = result.matches[0];
@@ -279,7 +271,7 @@ describe("queryComponents -- include_pads", () => {
   });
 
   it("returns correct pad shapes", async () => {
-    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const pads = result.matches[0].pads!;
@@ -295,7 +287,7 @@ describe("queryComponents -- include_pads", () => {
   });
 
   it("pads have correct positions in microns", async () => {
-    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const pads = result.matches[0].pads!;
@@ -312,7 +304,7 @@ describe("queryComponents -- include_pads", () => {
   });
 
   it("pads are sorted by pin number", async () => {
-    const result = await queryComponents(padXml, "^U1$", undefined, true);
+    const result = await queryComponents(padXml, "^U1$");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const pads = result.matches[0].pads!;

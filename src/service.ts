@@ -5,12 +5,12 @@
  * All tool logic is exposed as standalone async functions for programmatic use.
  */
 
-export { getDesignOverview } from "./tools/get-design-overview.js";
-export { queryComponents } from "./tools/query-components.js";
-export { queryNet } from "./tools/query-net.js";
-export { exportCadenceBoard } from "./tools/export-cadence-board.js";
+export { getDesignOverview } from "./tools/get-pcb-metadata.js";
+export { queryComponents } from "./tools/get-pcb-components.js";
+export { queryNet } from "./tools/get-pcb-net.js";
+export { exportCadenceBoard } from "./tools/export-cadence-ipc2581.js";
 export { exportCadenceConstraints } from "./tools/export-cadence-constraints.js";
-export { queryConstraints } from "./tools/query-constraints.js";
+export { queryConstraints } from "./tools/get-constraints.js";
 
 // Re-export types that appear in public API signatures
 export type {
@@ -23,7 +23,7 @@ export type {
   QueryComponentsResult,
   NetPin,
   NetRouteInfo,
-  NetViaInfo,
+  NetVia,
   QueryNetResult,
   QueryNetsResult,
   CadenceInstall,

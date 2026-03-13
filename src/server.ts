@@ -10,14 +10,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { VERSION } from "./cli/version.js";
 import { initTelemetry } from "./telemetry.js";
-import { register as registerGetDesignOverview } from "./tools/get-design-overview.js";
-import { register as registerQueryComponents } from "./tools/query-components.js";
-import { register as registerQueryNet } from "./tools/query-net.js";
-import { register as registerQueryNetsByComponent } from "./tools/query-nets-by-component.js";
-import { register as registerQueryViaInPad } from "./tools/query-via-in-pad.js";
-import { register as registerExportCadenceBoard } from "./tools/export-cadence-board.js";
+import { register as registerGetPcbMetadata } from "./tools/get-pcb-metadata.js";
+import { register as registerGetPcbComponents } from "./tools/get-pcb-components.js";
+import { register as registerGetPcbNet } from "./tools/get-pcb-net.js";
+import { register as registerExportCadenceIpc2581 } from "./tools/export-cadence-ipc2581.js";
 import { register as registerExportCadenceConstraints } from "./tools/export-cadence-constraints.js";
-import { register as registerQueryConstraints } from "./tools/query-constraints.js";
+import { register as registerGetConstraints } from "./tools/get-constraints.js";
 
 // =============================================================================
 // Server Instructions
@@ -31,13 +29,12 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 
 ## Workflow Guidance
 
-1. If starting from a Cadence Allegro .brd file, use \`export_cadence_board\` to generate the IPC-2581 XML first (Windows only)
-2. To access design constraints (trace width rules, spacing rules, net classes, stackup), use \`export_cadence_constraints\` to generate a .tcfx file, then \`query_constraints\` to read it
-3. Use \`get_design_overview\` first to understand the design structure, layer stackup, and size
-4. Use \`query_components\` to find component placements by refdes pattern (regex)
-5. Use \`query_net\` to trace a net's routing, trace widths, vias, and connected pins
-6. Use \`query_nets_by_component\` to get all nets connected to a component
-7. Use \`render_net\` to visualize a net's routing geometry as SVG
+1. If starting from a Cadence Allegro .brd file, use \`export_cadence_ipc2581\` to generate the IPC-2581 XML first (Windows only)
+2. To access design constraints (trace width rules, spacing rules, net classes, stackup), use \`export_cadence_constraints\` to generate a .tcfx file, then \`get_constraints\` to read it
+3. Use \`get_pcb_metadata\` first to understand the design structure, layer stackup, and size
+4. Use \`get_pcb_components\` to find component placements by refdes pattern (regex)
+5. Use \`get_pcb_net\` to trace a net's routing, trace widths, vias, and connected pins
+6. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips
 
@@ -76,14 +73,12 @@ export const createServer = (): McpServer => {
     }
   );
 
-  registerGetDesignOverview(server);
-  registerQueryComponents(server);
-  registerQueryNet(server);
-  registerQueryNetsByComponent(server);
-  registerQueryViaInPad(server);
-  registerExportCadenceBoard(server);
+  registerGetPcbMetadata(server);
+  registerGetPcbComponents(server);
+  registerGetPcbNet(server);
+  registerExportCadenceIpc2581(server);
   registerExportCadenceConstraints(server);
-  registerQueryConstraints(server);
+  registerGetConstraints(server);
   // TODO: register render-net once PNG output via resvg-wasm is stable in compiled binaries
 
   return server;

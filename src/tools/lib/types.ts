@@ -108,6 +108,7 @@ export interface ComponentResult {
   mountType?: string;
   description?: string;
   characteristics: Record<string, string>;
+  nets: ComponentNetSummary[];
   pads?: PadGeometry[];
 }
 
@@ -136,14 +137,17 @@ export interface NetRouteInfo {
   layerName: string;
   traceWidths: number[];
   segmentCount: number;
+  traceLength: number;
 }
 
 /**
- * Via info for a net.
+ * Individual via location on a net.
  */
-export interface NetViaInfo {
-  padstackRef: string;
-  count: number;
+export interface NetVia {
+  x: number;
+  y: number;
+  drillDiameter: number;
+  layer: string;
 }
 
 /**
@@ -169,9 +173,10 @@ export interface QueryNetResult {
   netName: string;
   pins: Record<string, string[]>;
   routing?: NetRouteInfo[];
-  vias?: NetViaInfo[];
+  vias?: NetVia[];
   totalSegments?: number;
   totalVias?: number;
+  totalTraceLength?: number;
   layersUsed: string[];
 }
 
@@ -191,41 +196,6 @@ export interface ComponentNetSummary {
   netName: string;
   pins: string[];
   pinCount: number;
-}
-
-/**
- * Result from query_nets_by_component tool.
- */
-export interface QueryNetsByComponentResult {
-  refdes: string;
-  nets: ComponentNetSummary[];
-}
-
-/**
- * Classification of a pad's via relationship.
- */
-export interface PadViaClassification {
-  pin: string;
-  x: number;
-  y: number;
-  classification: "via-in-pad" | "dog-bone" | "no-via";
-  viaDistance_um?: number;
-}
-
-/**
- * Result from query_via_in_pad tool.
- */
-export interface ViaInPadResult {
-  refdes: string;
-  packageRef: string;
-  units: string;
-  pads: PadViaClassification[];
-  summary: {
-    viaInPad: number;
-    dogBone: number;
-    noVia: number;
-    total: number;
-  };
 }
 
 /**
