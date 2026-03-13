@@ -12,7 +12,8 @@ import { withTelemetry } from "../telemetry.js";
 
 export const queryComponents = async (
   filePath: string,
-  pattern: string
+  pattern: string,
+  packagePattern?: string
 ): Promise<QueryComponentsResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
@@ -20,6 +21,13 @@ export const queryComponents = async (
   const validation = validatePattern(pattern);
   if ("error" in validation) return validation;
   const { regex } = validation;
+
+  let packageRegex: RegExp | undefined;
+  if (packagePattern) {
+    const pkgValidation = validatePattern(packagePattern);
+    if ("error" in pkgValidation) return pkgValidation;
+    packageRegex = pkgValidation.regex;
+  }
 
   const factor = await extractMicronFactor(filePath);
 
@@ -71,8 +79,19 @@ export const queryComponents = async (
     }
   });
 
+  // Filter by package pattern if provided
+  if (packageRegex) {
+    for (const [refdes, comp] of placements) {
+      if (!packageRegex.test(comp.packageRef)) {
+        placements.delete(refdes);
+      }
+    }
+  }
+
+  const baseResult = { pattern, ...(packagePattern ? { packagePattern } : {}), units: "MICRON" };
+
   if (placements.size === 0) {
-    return { pattern, units: "MICRON", matches: [] };
+    return { ...baseResult, matches: [] };
   }
 
   // Pass 2: Collect BOM data for matched refdes.
@@ -133,7 +152,7 @@ export const queryComponents = async (
 
   matches.sort((a, b) => a.refdes.localeCompare(b.refdes));
 
-  return { pattern, units: "MICRON", matches };
+  return { ...baseResult, matches };
 };
 
 export const register = (server: McpServer): void => {
@@ -147,10 +166,16 @@ export const register = (server: McpServer): void => {
         pattern: z
           .string()
           .describe("Regex pattern for component refdes (e.g., '^U1$', '^C\\\\d+', 'R10[0-9]')"),
+        package_pattern: z
+          .string()
+          .optional()
+          .describe(
+            "Optional regex pattern to filter by package/footprint name (e.g., 'BGA', 'QFP', 'SOT23'). ANDed with refdes pattern."
+          ),
       },
     },
-    withTelemetry("query_components", async ({ file, pattern }) => {
-      const result = await queryComponents(file, pattern);
+    withTelemetry("query_components", async ({ file, pattern, package_pattern }) => {
+      const result = await queryComponents(file, pattern, package_pattern);
       return formatResult(result);
     })
   );
