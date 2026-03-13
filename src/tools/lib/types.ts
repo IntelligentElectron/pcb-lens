@@ -189,6 +189,7 @@ export interface QueryNetsResult {
  */
 export interface ComponentNetSummary {
   netName: string;
+  pins: string[];
   pinCount: number;
 }
 

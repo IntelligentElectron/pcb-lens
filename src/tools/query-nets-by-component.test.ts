@@ -104,21 +104,27 @@ describe("queryNetsByComponent -- basic", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Pin counts
+// Pin data
 // ---------------------------------------------------------------------------
-describe("queryNetsByComponent -- pin counts", () => {
-  it("returns correct pin count for NET_A (2 pins: U1.1, R1.2)", async () => {
+describe("queryNetsByComponent -- pins", () => {
+  it("returns component's own pins on NET_A", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
     const netA = r.nets.find((n) => n.netName === "NET_A");
     expect(netA).toBeDefined();
-    expect(netA!.pinCount).toBe(2);
+    expect(netA!.pins).toEqual(["1"]);
   });
 
-  it("returns correct pin count for NET_B (2 pins: U1.3, C1.1)", async () => {
+  it("returns component's own pins on NET_B", async () => {
     const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
     const netB = r.nets.find((n) => n.netName === "NET_B");
     expect(netB).toBeDefined();
-    expect(netB!.pinCount).toBe(2);
+    expect(netB!.pins).toEqual(["3"]);
+  });
+
+  it("pinCount reflects total pins on the net (all components)", async () => {
+    const r = expectSuccess(await queryNetsByComponent(inlineXml, "U1"));
+    const netA = r.nets.find((n) => n.netName === "NET_A");
+    expect(netA!.pinCount).toBe(2); // U1.1 + R1.2
   });
 
   it("single-pin net has pinCount 1", async () => {
@@ -126,6 +132,7 @@ describe("queryNetsByComponent -- pin counts", () => {
     const agnd = r.nets.find((n) => n.netName === "AGND");
     expect(agnd).toBeDefined();
     expect(agnd!.pinCount).toBe(1);
+    expect(agnd!.pins).toEqual(["AGND"]);
   });
 });
 

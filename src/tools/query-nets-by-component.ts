@@ -20,34 +20,40 @@ export const queryNetsByComponent = async (
   }
 
   // Single pass: scan LogicalNet sections, collect nets that reference this component.
-  const netPinCounts = new Map<string, number>();
+  const netData = new Map<string, { pinCount: number; componentPins: string[] }>();
   let insideLogicalNet = false;
   let currentNetName = "";
-  let currentNetHasComponent = false;
   let currentNetPinCount = 0;
+  let currentComponentPins: string[] = [];
 
   await streamAllLines(filePath, (line) => {
     if (line.includes("<LogicalNet ")) {
       const name = attr(line, "name");
       insideLogicalNet = Boolean(name);
       currentNetName = name ?? "";
-      currentNetHasComponent = false;
       currentNetPinCount = 0;
+      currentComponentPins = [];
     }
 
     if (insideLogicalNet) {
       if (line.includes("<PinRef ")) {
         const compRef = attr(line, "componentRef");
-        if (compRef) {
+        const pin = attr(line, "pin");
+        if (compRef && pin) {
           currentNetPinCount++;
           if (compRef === refdes) {
-            currentNetHasComponent = true;
+            currentComponentPins.push(pin);
           }
         }
       }
       if (line.includes("</LogicalNet>")) {
-        if (currentNetHasComponent && currentNetName) {
-          netPinCounts.set(currentNetName, currentNetPinCount);
+        if (currentComponentPins.length > 0 && currentNetName) {
+          netData.set(currentNetName, {
+            pinCount: currentNetPinCount,
+            componentPins: currentComponentPins.sort((a, b) =>
+              a.localeCompare(b, undefined, { numeric: true })
+            ),
+          });
         }
         insideLogicalNet = false;
       }
@@ -59,16 +65,16 @@ export const queryNetsByComponent = async (
 
   // Filter out ground nets unless include_ground is true
   if (!includeGround) {
-    for (const netName of [...netPinCounts.keys()]) {
+    for (const netName of [...netData.keys()]) {
       if (GROUND_PATTERN.test(netName)) {
-        netPinCounts.delete(netName);
+        netData.delete(netName);
       }
     }
   }
 
-  const nets: ComponentNetSummary[] = [...netPinCounts.entries()]
+  const nets: ComponentNetSummary[] = [...netData.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([netName, pinCount]) => ({ netName, pinCount }));
+    .map(([netName, data]) => ({ netName, pins: data.componentPins, pinCount: data.pinCount }));
 
   return { refdes, includeGround, nets };
 };
