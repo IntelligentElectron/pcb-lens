@@ -203,9 +203,9 @@ export const queryNet = async (
           const diameter = numAttr(line, "diameter") ?? 0;
           if (x !== undefined && y !== undefined) {
             acc.vias.push({
-              x: Math.round(x * factor * 100) / 100,
-              y: Math.round(y * factor * 100) / 100,
-              drillDiameter: Math.round(diameter * factor * 100) / 100,
+              x: Math.round(x * factor),
+              y: Math.round(y * factor),
+              drillDiameter: Math.round(diameter * factor),
               layer: currentLayerName,
             });
           }
@@ -224,10 +224,10 @@ export const queryNet = async (
           if (currentSetLineDescId) {
             const width = lineDescDict.get(currentSetLineDescId);
             if (width !== undefined) {
-              layerRoute.widths.add(width * factor);
+              layerRoute.widths.add(Math.round(width * factor));
             }
           } else if (currentSetInlineWidth !== undefined) {
-            layerRoute.widths.add(currentSetInlineWidth * factor);
+            layerRoute.widths.add(Math.round(currentSetInlineWidth * factor));
           }
         }
 
@@ -248,7 +248,7 @@ export const queryNet = async (
           layerName,
           traceWidths: [...data.widths].sort((a, b) => a - b),
           segmentCount: data.segments,
-          traceLength: Math.round(data.traceLength * 100) / 100,
+          traceLength: Math.round(data.traceLength),
         });
       }
 
@@ -256,8 +256,7 @@ export const queryNet = async (
 
       const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
       const totalVias = vias.length;
-      const totalTraceLength =
-        Math.round(routing.reduce((sum, r) => sum + r.traceLength, 0) * 100) / 100;
+      const totalTraceLength = Math.round(routing.reduce((sum, r) => sum + r.traceLength, 0));
 
       // Merge PhyNetPoint layers with routing-derived layers
       const layerSet = new Set(acc.phyNetLayers);

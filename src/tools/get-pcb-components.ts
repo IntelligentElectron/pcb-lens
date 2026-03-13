@@ -71,8 +71,8 @@ export const queryComponents = async (
       if (line.includes("<Location ")) {
         const x = numAttr(line, "x");
         const y = numAttr(line, "y");
-        if (x !== undefined) comp.x = x * factor;
-        if (y !== undefined) comp.y = y * factor;
+        if (x !== undefined) comp.x = Math.round(x * factor);
+        if (y !== undefined) comp.y = Math.round(y * factor);
       }
 
       if (line.includes("<Xform ")) {
@@ -236,8 +236,8 @@ export const queryComponents = async (
         );
         const shape = shapes.get(pinDef.shapeId);
         if (shape) {
-          const w = Math.round(shape.width * 100) / 100;
-          const h = Math.round(shape.height * 100) / 100;
+          const w = Math.round(shape.width);
+          const h = Math.round(shape.height);
           const key = `${shape.type}:${w}:${h}`;
           let idx = shapeIdx.get(key);
           if (idx === undefined) {
@@ -245,7 +245,7 @@ export const queryComponents = async (
             shapeList.push({ shape: shape.type, width: w, height: h });
             shapeIdx.set(key, idx);
           }
-          rows.push([pinName, Math.round(pos.x * 100) / 100, Math.round(pos.y * 100) / 100, idx]);
+          rows.push([pinName, Math.round(pos.x), Math.round(pos.y), idx]);
         }
       }
       rows.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));

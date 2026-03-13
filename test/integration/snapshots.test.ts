@@ -169,8 +169,8 @@ const FIXTURES: FixtureConfig[] = [
       packageRef: "SDDCONV7_635_3708X586X72",
       layer: "BOTTOM",
       mountType: "SMT",
-      x: 165417.5,
-      y: 189227.46,
+      x: 165418,
+      y: 189227,
       rotation: 180,
     },
     net: {
@@ -299,7 +299,7 @@ const FIXTURES: FixtureConfig[] = [
       layer: "TOP",
       mountType: "SMT",
       x: -33880,
-      y: 81497.5,
+      y: 81498,
       rotation: 0,
     },
     net: {
@@ -324,7 +324,7 @@ const FIXTURES: FixtureConfig[] = [
       packageRef: "SOIC16",
       layer: "TOP",
       mountType: "SMT",
-      x: 649.6,
+      x: 650,
       y: 6350,
       rotation: 270,
     },
@@ -385,8 +385,8 @@ for (const fixture of FIXTURES) {
         if (fixture.component.mountType !== undefined) {
           expect(comp!.mountType).toBe(fixture.component.mountType);
         }
-        expect(comp!.x).toBeCloseTo(fixture.component.x, 2);
-        expect(comp!.y).toBeCloseTo(fixture.component.y, 2);
+        expect(comp!.x).toBeCloseTo(fixture.component.x, 0);
+        expect(comp!.y).toBeCloseTo(fixture.component.y, 0);
         if (fixture.component.rotation !== undefined) {
           expect(comp!.rotation).toBe(fixture.component.rotation);
         }
