@@ -182,6 +182,33 @@ export interface QueryNetsByComponentResult {
 }
 
 /**
+ * Classification of a pad's via relationship.
+ */
+export interface PadViaClassification {
+  pin: string;
+  x: number;
+  y: number;
+  classification: "via-in-pad" | "dog-bone" | "no-via";
+  viaDistance_um?: number;
+}
+
+/**
+ * Result from query_via_in_pad tool.
+ */
+export interface ViaInPadResult {
+  refdes: string;
+  packageRef: string;
+  units: string;
+  pads: PadViaClassification[];
+  summary: {
+    viaInPad: number;
+    dogBone: number;
+    noVia: number;
+    total: number;
+  };
+}
+
+/**
  * Detected Cadence SPB installation.
  */
 export interface CadenceInstall {

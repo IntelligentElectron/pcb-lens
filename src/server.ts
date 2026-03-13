@@ -14,6 +14,7 @@ import { register as registerGetDesignOverview } from "./tools/get-design-overvi
 import { register as registerQueryComponents } from "./tools/query-components.js";
 import { register as registerQueryNet } from "./tools/query-net.js";
 import { register as registerQueryNetsByComponent } from "./tools/query-nets-by-component.js";
+import { register as registerQueryViaInPad } from "./tools/query-via-in-pad.js";
 import { register as registerExportCadenceBoard } from "./tools/export-cadence-board.js";
 import { register as registerExportCadenceConstraints } from "./tools/export-cadence-constraints.js";
 import { register as registerQueryConstraints } from "./tools/query-constraints.js";
@@ -79,6 +80,7 @@ export const createServer = (): McpServer => {
   registerQueryComponents(server);
   registerQueryNet(server);
   registerQueryNetsByComponent(server);
+  registerQueryViaInPad(server);
   registerExportCadenceBoard(server);
   registerExportCadenceConstraints(server);
   registerQueryConstraints(server);
