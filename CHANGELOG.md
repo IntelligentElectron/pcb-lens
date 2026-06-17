@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-06-17
+
+### Fixed
+
+- Documentation now matches the registered tool names. Five tool docs were renamed and rewritten field-by-field against the actual schemas and result types: `export_cadence_board` → `export_cadence_ipc2581`, `get_design_overview` → `get_pcb_metadata`, `query_components` → `get_pcb_component`, `query_net` → `get_pcb_net`, `query_constraints` → `get_constraints`. Corrected drifted response schemas (notably `get_pcb_net` via geometry and `get_pcb_component` lookup model) and error strings, and updated both README indexes
+- Removed the `render_net` reference from the server's MCP instructions, since that tool is not registered (it remains dormant in source)
+
 ## [1.0.0] - 2026-06-17
 
 First stable release.
