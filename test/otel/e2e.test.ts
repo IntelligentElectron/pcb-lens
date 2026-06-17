@@ -112,7 +112,10 @@ describe("OpenTelemetry end-to-end", () => {
         () =>
           receiver
             .spans()
-            .some((s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "success") &&
+            .some(
+              (s) =>
+                s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "success"
+            ) &&
           receiver.metrics().some((m) => m.name === "tool.calls") &&
           receiver.logs().some((l) => l.body === "tool/get_pcb_metadata success")
       );
@@ -120,7 +123,9 @@ describe("OpenTelemetry end-to-end", () => {
 
       const span = receiver
         .spans()
-        .find((s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "success")!;
+        .find(
+          (s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "success"
+        )!;
       expect(span.attributes["tool.name"]).toBe("get_pcb_metadata");
       expect(typeof span.attributes["tool.duration_ms"]).toBe("number");
 
@@ -159,13 +164,17 @@ describe("OpenTelemetry end-to-end", () => {
       const got = await waitFor(() =>
         receiver
           .spans()
-          .some((s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "error")
+          .some(
+            (s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "error"
+          )
       );
       expect(got).toBe(true);
 
       const span = receiver
         .spans()
-        .find((s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "error")!;
+        .find(
+          (s) => s.name === "tool/get_pcb_metadata" && s.attributes["tool.outcome"] === "error"
+        )!;
       expect(span.attributes["error.type"]).toBeDefined();
 
       await waitFor(() => receiver.metrics().some((m) => m.name === "tool.errors"));
