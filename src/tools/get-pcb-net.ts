@@ -188,6 +188,8 @@ export const queryNet = async (
       // Conductor segments encoded as <Line startX startY endX endY> rather than
       // a <Polyline>. Cadence uses these for single-segment traces; a net routed
       // entirely with <Line> elements previously returned no routing at all.
+      // Only conductor layers reach here (skipLayers excludes REF-route/REF-both),
+      // and a Line is only counted when it carries start/end coordinates.
       if (line.includes("<Line ")) {
         const sx = numAttr(line, "startX");
         const sy = numAttr(line, "startY");

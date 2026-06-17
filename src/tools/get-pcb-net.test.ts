@@ -9,6 +9,8 @@ import type { QueryNetsResult } from "./lib/types.js";
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
 const BEAGLEBONE = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
 const hasBeagleBoneFixture = existsSync(BEAGLEBONE);
+const TESTCASE1_REVC = path.join(FIXTURE_DIR, "testcase1-RevC.xml");
+const hasTestcase1Fixture = existsSync(TESTCASE1_REVC);
 
 // ---------------------------------------------------------------------------
 // Inline fixture -- covers LogicalNet pins, PhyNetPoint layers, LayerFeature
@@ -338,6 +340,26 @@ describe("queryNet -- <Line> conductor routing", () => {
     expect(top!.traceWidths).toContain(100); // 0.10mm -> 100 micron
     expect(top!.traceLength).toBe(5000); // 3-4-5 triangle: 5mm -> 5000 micron
     expect(net.totalTraceLength).toBe(5000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real-fixture regression guard for <Line> routing (issue #39). On testcase1
+// RevC the net UN21RES96PA0 is routed on TOP with a mix of <Polyline> and
+// <Line> segments; the 180-micron trace width is contributed only by the
+// <Line> segments, so its presence proves they are now parsed.
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasTestcase1Fixture)("queryNet -- <Line> routing on testcase1 RevC", () => {
+  it("includes the <Line>-only trace width and extra segments for UN21RES96PA0", async () => {
+    const r = expectSuccess(await queryNet(TESTCASE1_REVC, "^UN21RES96PA0$"));
+    const net = r.matches[0];
+    expect(net.routing).toBeDefined();
+    const top = net.routing!.find((rt) => rt.layerName === "TOP");
+    expect(top).toBeDefined();
+    // 180 micron appears only once <Line> segments are parsed (was [300, 500]).
+    expect(top!.traceWidths).toContain(180);
+    // TOP previously reported 3 segments (polylines only); <Line> segments add more.
+    expect(top!.segmentCount).toBeGreaterThan(3);
   });
 });
 
