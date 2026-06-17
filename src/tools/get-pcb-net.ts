@@ -124,7 +124,7 @@ export const queryNet = async (
   let currentLayerName = "";
   let insideMatchedSet = false;
   let currentSetNetName = "";
-  let currentSetHasPolyline = false;
+  let currentSetHasConductor = false;
   let currentSetLineDescId: string | undefined;
   let currentSetInlineWidth: number | undefined;
   let inPolyline = false;
@@ -142,7 +142,7 @@ export const queryNet = async (
         netName && matchedNames.has(netName) && !skipLayers.has(currentLayerName)
       );
       currentSetNetName = netName ?? "";
-      currentSetHasPolyline = false;
+      currentSetHasConductor = false;
       currentSetLineDescId = undefined;
       currentSetInlineWidth = undefined;
       polyLength = 0;
@@ -160,7 +160,7 @@ export const queryNet = async (
       }
 
       if (line.includes("<Polyline")) {
-        currentSetHasPolyline = true;
+        currentSetHasConductor = true;
         inPolyline = true;
         polyPoints = [];
       }
@@ -182,6 +182,24 @@ export const queryNet = async (
         }
         if (line.includes("</Polyline>")) {
           inPolyline = false;
+        }
+      }
+
+      // Conductor segments encoded as <Line startX startY endX endY> rather than
+      // a <Polyline>. Cadence uses these for single-segment traces; a net routed
+      // entirely with <Line> elements previously returned no routing at all.
+      // Only conductor layers reach here (skipLayers excludes REF-route/REF-both),
+      // and a Line is only counted when it carries start/end coordinates.
+      if (line.includes("<Line ")) {
+        const sx = numAttr(line, "startX");
+        const sy = numAttr(line, "startY");
+        const ex = numAttr(line, "endX");
+        const ey = numAttr(line, "endY");
+        if (sx !== undefined && sy !== undefined && ex !== undefined && ey !== undefined) {
+          currentSetHasConductor = true;
+          const dx = (ex - sx) * factor;
+          const dy = (ey - sy) * factor;
+          polyLength += Math.sqrt(dx * dx + dy * dy);
         }
       }
 
@@ -214,7 +232,7 @@ export const queryNet = async (
       }
 
       if (line.includes("</Set>")) {
-        if (currentSetHasPolyline && currentLayerName) {
+        if (currentSetHasConductor && currentLayerName) {
           if (!acc.routeMap.has(currentLayerName)) {
             acc.routeMap.set(currentLayerName, { widths: new Set(), segments: 0, traceLength: 0 });
           }
