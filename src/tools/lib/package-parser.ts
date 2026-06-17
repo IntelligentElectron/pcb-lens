@@ -24,6 +24,11 @@ export type { ParsedPackage };
  * Deliberately excludes chip passives (RES/CAP/IND/INDP/FER/FB) and families
  * whose trailing number is a case-size or JEDEC package code rather than a pin
  * count (e.g. SOT23, CAPAE). For those the count must come from pad/net geometry.
+ *
+ * This list is intentionally not exhaustive: it covers the common surface-mount
+ * IC families. Edge cases (e.g. SIP<n>, TO<n>) are omitted on purpose -- when a
+ * family is absent the caller still gets the authoritative geometry-derived
+ * count, so the worst case is a missing name hint, never a wrong one.
  */
 const PIN_COUNT_FAMILIES = new Set([
   "BGA",

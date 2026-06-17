@@ -7,6 +7,7 @@ import type {
   NetRow,
   PadRow,
   PadShape,
+  ParsedPackage,
 } from "./lib/types.js";
 import {
   extractShapes,
@@ -15,7 +16,6 @@ import {
   transformPin,
 } from "./lib/geometry.js";
 import { parsePackageRef } from "./lib/package-parser.js";
-import type { ParsedPackage } from "./lib/types.js";
 import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js";
 import {
   extractMicronFactor,

@@ -107,6 +107,8 @@ export const extractShapes = (lines: string[], f: number): Map<string, Shape> =>
     }
     // Polygon/Contour pad shapes (common for chip passives in some exports): no
     // width/height attribute, so report the bounding box of the outline points.
+    // We enter on either tag but emit only on </Contour>, matching the standard
+    // <Contour><Polygon>...</Polygon></Contour> wrapper this export uses.
     if (currentId && (line.includes("<Contour") || line.includes("<Polygon"))) {
       inContour = true;
     }
