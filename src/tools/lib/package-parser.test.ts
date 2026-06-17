@@ -46,25 +46,59 @@ describe("parsePackageRef", () => {
     expect(result!.bodySize_mm).toBeUndefined();
   });
 
-  it("parses simple resistor package", () => {
+  it("parses whitelisted IC family with a true pin count (SOIC8)", () => {
+    const result = parsePackageRef("SOIC8");
+    expect(result).not.toBeNull();
+    expect(result!.packageFamily).toBe("SOIC");
+    expect(result!.pinCount).toBe(8);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Chip passives and JEDEC-coded families: the trailing digits are a case-size
+  // or package code, NOT a pin count. The family is surfaced but pinCount is
+  // left undefined for the caller to derive from geometry (issue #38).
+  // ---------------------------------------------------------------------------
+  it("does not treat a chip-resistor case size as a pin count", () => {
     const result = parsePackageRef("RES0402");
     expect(result).not.toBeNull();
     expect(result!.packageFamily).toBe("RES");
-    expect(result!.pinCount).toBe(402);
+    expect(result!.pinCount).toBeUndefined();
   });
 
-  it("parses SOT with pin count", () => {
+  it("does not treat chip cap / inductor / ferrite case sizes as pin counts", () => {
+    for (const [ref, family] of [
+      ["CAP0402", "CAP"],
+      ["C0402", "C"],
+      ["IND0201", "IND"],
+      ["INDP0603", "INDP"],
+      ["F0603", "F"],
+    ] as const) {
+      const result = parsePackageRef(ref);
+      expect(result).not.toBeNull();
+      expect(result!.packageFamily).toBe(family);
+      expect(result!.pinCount).toBeUndefined();
+    }
+  });
+
+  it("does not treat a SOT JEDEC code as a pin count", () => {
     const result = parsePackageRef("SOT23");
     expect(result).not.toBeNull();
     expect(result!.packageFamily).toBe("SOT");
-    expect(result!.pinCount).toBe(23);
+    expect(result!.pinCount).toBeUndefined();
   });
 
-  it("parses CAPAE (aluminum electrolytic)", () => {
+  it("does not treat CAPAE body dimensions as a pin count", () => {
     const result = parsePackageRef("CAPAE660X610");
     expect(result).not.toBeNull();
     expect(result!.packageFamily).toBe("CAPAE");
-    expect(result!.pinCount).toBe(660);
+    expect(result!.pinCount).toBeUndefined();
+  });
+
+  it("surfaces the family even when the name has no trailing digits", () => {
+    const result = parsePackageRef("DIODEM");
+    expect(result).not.toBeNull();
+    expect(result!.packageFamily).toBe("DIODEM");
+    expect(result!.pinCount).toBeUndefined();
   });
 
   // ---------------------------------------------------------------------------
