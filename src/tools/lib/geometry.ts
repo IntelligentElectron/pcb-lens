@@ -25,7 +25,8 @@ export interface Shape {
 export interface PinDef {
   offsetX: number;
   offsetY: number;
-  shapeId: string;
+  /** Inline pad shape id; absent when the shape is reached via `padstackRef`. */
+  shapeId?: string;
   /**
    * Padstack referenced by the pad (`padstackDefRef`). Used to resolve the pad
    * shape when the pad has no inline `<StandardPrimitiveRef>` (common for chip
@@ -64,8 +65,14 @@ export const extractShapes = (lines: string[], f: number): Map<string, Shape> =>
   scanLines(lines, (line) => {
     if (line.includes("<EntryStandard ")) {
       currentId = attr(line, "id") ?? "";
+      // Reset the contour state, including the bounding box, so a missing
+      // </Contour> in malformed XML cannot bleed stale bounds into the next shape.
       inContour = false;
       contourPoints = 0;
+      minX = Infinity;
+      minY = Infinity;
+      maxX = -Infinity;
+      maxY = -Infinity;
     }
     // Rectangular primitives (RectCenter and rounded/chamfered/cornered variants)
     // all expose width/height; we model them all as a rectangle.
@@ -103,7 +110,11 @@ export const extractShapes = (lines: string[], f: number): Map<string, Shape> =>
     if (currentId && (line.includes("<Contour") || line.includes("<Polygon"))) {
       inContour = true;
     }
-    if (currentId && inContour && (line.includes("<PolyBegin ") || line.includes("<PolyStepSegment "))) {
+    if (
+      currentId &&
+      inContour &&
+      (line.includes("<PolyBegin ") || line.includes("<PolyStepSegment "))
+    ) {
       const x = numAttr(line, "x");
       const y = numAttr(line, "y");
       if (x !== undefined && y !== undefined) {
@@ -154,7 +165,7 @@ export const extractPackages = (lines: string[]): Map<string, Map<string, PinDef
       packages.get(currentPkg)!.set(padPin, {
         offsetX: padOffset.x,
         offsetY: padOffset.y,
-        shapeId: padShapeId,
+        ...(padShapeId ? { shapeId: padShapeId } : {}),
         ...(padstackRef ? { padstackRef } : {}),
       });
     }
@@ -299,6 +310,8 @@ export const extractPadstackShapes = (lines: string[]): Map<string, string> => {
     if (line.includes("</PadStackDef>")) {
       currentName = "";
     }
+    // PadStackDef elements precede Package definitions in the IPC-2581 CadData
+    // ordering, so stop scanning once packages begin (same as extractViaPadSizes).
     if (line.includes("<Package ")) return false;
   });
 

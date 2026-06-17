@@ -211,9 +211,12 @@ export const queryComponent = async (
           f
         );
         // Prefer the pad's inline shape; fall back to the shape of the
-        // referenced padstack (chip passives often carry only the latter).
+        // referenced padstack (chip passives often carry only the latter). If
+        // neither resolves (e.g. an unknown primitive type), the pad is skipped
+        // rather than emitted without geometry.
         const shapeId =
-          pinDef.shapeId || (pinDef.padstackRef ? padstackShapes.get(pinDef.padstackRef) : undefined);
+          pinDef.shapeId ||
+          (pinDef.padstackRef ? padstackShapes.get(pinDef.padstackRef) : undefined);
         const shape = shapeId ? shapes.get(shapeId) : undefined;
         if (shape) {
           const w = Math.round(shape.width);
@@ -255,11 +258,11 @@ export const queryComponent = async (
 
   const nameParsed = parsePackageRef(p.packageRef);
   const pinCount = authoritativePinCount ?? nameParsed?.pinCount;
+  // parsePackageRef only returns null for empty / letter-less refs (no family to
+  // report), so there is nothing useful to emit in that case even with a pin count.
   const parsed: ParsedPackage | undefined = nameParsed
     ? { ...nameParsed, ...(pinCount !== undefined ? { pinCount } : {}) }
-    : pinCount !== undefined
-      ? { packageFamily: "UNKNOWN", pinCount }
-      : undefined;
+    : undefined;
 
   const netRows: NetRow[] = [...netMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))

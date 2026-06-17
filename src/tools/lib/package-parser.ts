@@ -12,23 +12,10 @@
  * returns null for unrecognized formats.
  */
 
-export interface ParsedPackage {
-  packageFamily: string;
-  /**
-   * Pin/pad count, only when the package name is an authoritative source for it.
-   * The full Cadence format encodes it explicitly; for the simple format it is
-   * trusted only for families where the leading number is genuinely a pin/ball
-   * count (see PIN_COUNT_FAMILIES). For chip passives (RES/CAP/IND/INDP) and
-   * packages like SOT/CAPAE the trailing digits are an imperial case-size or
-   * JEDEC code, not a pin count, so this is left undefined and the caller should
-   * derive the count from pad/net geometry instead.
-   */
-  pinCount?: number;
-  bodySize_mm?: { width: number; height: number };
-  pitch_mm?: number;
-  ballHeight_mm?: number;
-  ubmDiameter_mm?: number;
-}
+// ParsedPackage is defined in types.ts (the single source of truth) and
+// re-exported here for callers that import it alongside parsePackageRef.
+import type { ParsedPackage } from "./types.js";
+export type { ParsedPackage };
 
 /**
  * Families where the digits immediately after the family prefix in the simple
