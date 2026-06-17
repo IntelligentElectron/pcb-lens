@@ -1,6 +1,6 @@
-# get_design_overview
+# get_pcb_metadata
 
-Get overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes.
+Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes.
 
 ## Description
 
@@ -45,7 +45,7 @@ interface SectionInfo {
 **Call:**
 ```json
 {
-  "tool": "get_design_overview",
+  "tool": "get_pcb_metadata",
   "arguments": {
     "file": "/designs/motherboard_ipc2581.xml"
   }
@@ -86,7 +86,7 @@ interface SectionInfo {
 **Error (file not found):**
 ```json
 {
-  "error": "File not found: /designs/missing.xml"
+  "error": "File not found: '/designs/missing.xml'"
 }
 ```
 

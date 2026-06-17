@@ -30,11 +30,11 @@ All physical values (coordinates, trace widths) are normalized to **microns**, r
 
 | Tool | Description |
 |------|-------------|
-| [`get_design_overview`](tools/get_design_overview.md) | Get metadata, layer stackup, component/net counts, and section sizes for an IPC-2581 file |
-| [`query_components`](tools/query_components.md) | Find components by refdes pattern with placement coordinates and BOM data |
-| [`query_net`](tools/query_net.md) | Query a net by name pattern for pin connections, routing per layer, and via info |
-| [`query_constraints`](tools/query_constraints.md) | Query layout constraints from a Cadence `.tcfx` file |
-| [`export_cadence_board`](tools/export_cadence_board.md) | Export a Cadence Allegro `.brd` file to IPC-2581 XML (Windows only) |
+| [`get_pcb_metadata`](tools/get_pcb_metadata.md) | Get an overview of an IPC-2581 file: metadata, layer stackup, component/net counts, and section sizes |
+| [`get_pcb_component`](tools/get_pcb_component.md) | Look up a single component by exact refdes with placement, BOM, net, and pad data |
+| [`get_pcb_net`](tools/get_pcb_net.md) | Query a net by name pattern for pin connections, routing per layer, and via info |
+| [`get_constraints`](tools/get_constraints.md) | Read layout constraints from a Cadence `.tcfx` file |
+| [`export_cadence_ipc2581`](tools/export_cadence_ipc2581.md) | Export a Cadence Allegro `.brd` file to IPC-2581 XML (Windows only) |
 | [`export_cadence_constraints`](tools/export_cadence_constraints.md) | Export a Cadence Allegro `.brd` file to `.tcfx` constraint XML (Windows only) |
 
 ## Example Queries

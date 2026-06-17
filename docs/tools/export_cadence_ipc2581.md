@@ -1,10 +1,10 @@
-# export_cadence_board
+# export_cadence_ipc2581
 
 Export a Cadence Allegro `.brd` file to IPC-2581 XML.
 
 ## Description
 
-Invokes the Cadence `ipc2581_out.exe` utility to convert an Allegro board file into IPC-2581 XML format. The exported file can then be analyzed by the other pcb-lens tools (`get_design_overview`, `query_components`, `query_net`). Windows only; requires a Cadence SPB installation (auto-detected from `C:/Cadence`). Calls are serialized internally to avoid Cadence license conflicts.
+Invokes the Cadence `ipc2581_out.exe` utility to convert an Allegro board file into IPC-2581 XML format. The exported file can then be analyzed by the other pcb-lens tools (`get_pcb_metadata`, `get_pcb_component`, `get_pcb_net`). Windows only; requires a Cadence SPB installation (auto-detected from `C:/Cadence`). Calls are serialized internally to avoid Cadence license conflicts.
 
 ## Input Parameters
 
@@ -17,7 +17,7 @@ Invokes the Cadence `ipc2581_out.exe` utility to convert an Allegro board file i
 ## Response Schema
 
 ```typescript
-interface ExportCadenceBoardResult {
+interface ExportCadenceIpc2581Result {
   success: boolean;
   outputPath: string;
   revision: "B" | "C";
@@ -33,7 +33,7 @@ interface ExportCadenceBoardResult {
 Call:
 ```json
 {
-  "tool": "export_cadence_board",
+  "tool": "export_cadence_ipc2581",
   "arguments": {
     "board": "C:/projects/ddr4_dimm/board.brd"
   }
@@ -53,7 +53,7 @@ Response:
 **Non-Windows error:**
 ```json
 {
-  "error": "export_cadence_board requires Windows (current platform: darwin)"
+  "error": "Cadence export is only available on Windows. Requires a Windows environment with Cadence SPB installed."
 }
 ```
 

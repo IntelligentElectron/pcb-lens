@@ -1,4 +1,4 @@
-# query_constraints
+# get_constraints
 
 Query layout constraints from a Cadence `.tcfx` file.
 
@@ -70,7 +70,7 @@ interface CrossSectionLayer {
 Call:
 ```json
 {
-  "tool": "query_constraints",
+  "tool": "get_constraints",
   "arguments": {
     "file": "/designs/board_constraints.tcfx"
   }
@@ -98,7 +98,7 @@ Response:
 Call:
 ```json
 {
-  "tool": "query_constraints",
+  "tool": "get_constraints",
   "arguments": {
     "file": "/designs/board_constraints.tcfx",
     "section": "PhysicalCSet"
@@ -148,7 +148,7 @@ Response:
 Call:
 ```json
 {
-  "tool": "query_constraints",
+  "tool": "get_constraints",
   "arguments": {
     "file": "/designs/board_constraints.tcfx",
     "section": "Design"
@@ -189,7 +189,7 @@ Response:
 **Section not found:**
 ```json
 {
-  "error": "Section 'FooBar' not found in board_constraints.tcfx. Available sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, Design, Region"
+  "error": "Section 'FooBar' not found in file"
 }
 ```
 
