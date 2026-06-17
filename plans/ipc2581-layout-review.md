@@ -2,7 +2,7 @@
 
 **Status:** Reference — original prototype plan; validated and now realized by the current
 pcb-lens tools
-**Date:** early 2026 (original) · reviewed 2026-06-17
+**Date:** 2026-02 (original) · reviewed 2026-06-17
 **Goal:** Validate that IPC-2581 RevC XML is navigable enough for LLM-driven PCB layout review
 with thin extraction tooling, and decide where tooling is actually needed.
 

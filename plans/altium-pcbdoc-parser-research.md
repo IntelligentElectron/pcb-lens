@@ -26,7 +26,7 @@ analogous to how pcb-lens parses IPC-2581 XML today.
 | Tool | Lang | License | PcbDoc coverage | Notes |
 |---|---|---|---|---|
 | **KiCad `altium_pcb.cpp`** | C++ | **GPLv3** | Board/stackup, Components, Nets, Rules, Polygons, Vias, Tracks, Pads, Arcs, Fills, Regions, Classes | Most complete + actively maintained. **GPLv3 — cannot be copied or ported into Apache-2.0 pcb-lens.** Usable only as a black-box behavioral reference. |
-| **AltiumSharp** (`issus/AltiumSharp`) | C#/.NET | **Apache-2.0** ✓ (verified) | Read+write all 4 doc types; layout primitives, per-net copper, board outline, layer stack, design rules | Cleanest library-shaped port source; Apache-2.0 is compatible with pcb-lens → **recommended port source.** |
+| **AltiumSharp** (`issus/AltiumSharp`) | C#/.NET | **Apache-2.0** ✓ ([LICENSE](https://github.com/issus/AltiumSharp/blob/master/LICENSE)) | Read+write all 4 doc types; layout primitives, per-net copper, board outline, layer stack, design rules | Cleanest library-shaped port source; Apache-2.0 is compatible with pcb-lens → **recommended port source.** |
 | **AtoK** (stevegrn) | C#/.NET | GPLv3 | PcbDoc-only via OpenMCDF; Nets/Tracks/Vias/Pads/Polygons/Rules/Dimensions/DiffPairs/Classes/Models | GPLv3 — reference only, not portable. |
 | **altium2kicad** (thesourcerer8) | Perl | n/a | unpack→convert PcbDoc+SchDoc; `unpack.pl` is a clean CDF decomposer | Old/low-activity. Rule-extraction extent uncertain (verification vote split). |
 | **pluots/altium** | Rust | Apache-2.0 | **Cannot read PcbDoc/PcbLib today** (alpha; SchDoc/SchLib partial) | Not usable now; 0.2.0 rewrite in progress as of Feb 2026. |
@@ -48,8 +48,11 @@ What is legal:
 - Run KiCad as an external CLI tool (no source incorporation) — heavy, undesirable for an MCP server.
 
 The clean route is therefore: **port from AltiumSharp** — verified **Apache-2.0**
-(`issus/AltiumSharp`), compatible with pcb-lens's Apache-2.0. Reverse-engineering the record
-formats from format facts remains the fallback if a port proves impractical.
+([`issus/AltiumSharp`](https://github.com/issus/AltiumSharp/blob/master/LICENSE)), compatible
+with pcb-lens's Apache-2.0. (The separate `OriginalCircuit.Altium.*` helper repos are MIT —
+also permissive — but are independent of the core library, not transitive dependencies of a
+port.) Reverse-engineering the record formats from format facts remains the fallback if a port
+proves impractical.
 
 ## Recommended implementation path
 
