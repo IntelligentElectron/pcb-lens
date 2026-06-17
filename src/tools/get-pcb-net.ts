@@ -20,7 +20,7 @@ import {
   validatePattern,
   type NetAccumulator,
 } from "./shared.js";
-import { withTelemetry } from "../telemetry.js";
+import { withTelemetry } from "../telemetry/index.js";
 
 export const queryNet = async (
   filePath: string,

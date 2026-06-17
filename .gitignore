@@ -49,3 +49,6 @@ test/integration/fixtures/
 # Telemetry
 telemetry.jsonl
 telemetry-*.zip
+
+# Playwright artifacts
+.playwright*

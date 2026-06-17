@@ -17,7 +17,7 @@ import {
   formatResult,
   validateFile,
 } from "./shared.js";
-import { withTelemetry } from "../telemetry.js";
+import { withTelemetry } from "../telemetry/index.js";
 
 export const queryComponent = async (
   filePath: string,

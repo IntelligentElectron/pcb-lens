@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { spawn } from "node:child_process";
 import { VERSION, GITHUB_REPO, BINARY_NAME } from "./version.js";
+import { getCurrentExecutablePath, isCompiledBinary } from "./executable.js";
 
 /** GitHub release information. */
 interface GitHubRelease {
@@ -189,20 +190,6 @@ const downloadFile = async (url: string, destPath: string): Promise<void> => {
 };
 
 /**
- * Get the path to the current executable.
- */
-export const getCurrentExecutablePath = (): string => {
-  // For Bun-compiled binaries, process.execPath points to the binary itself
-  // For Node.js, process.argv[1] is the script path
-  if (process.execPath.includes("node") || process.execPath.includes("bun")) {
-    // Running via node/bun interpreter - use argv[1]
-    return process.argv[1];
-  }
-  // Compiled binary - use execPath
-  return process.execPath;
-};
-
-/**
  * Generate a unique backup path with timestamp to avoid conflicts with locked files.
  * On Windows, previous backup files may still be locked by the old process.
  */
@@ -344,6 +331,12 @@ export const reexec = (): never => {
  * @returns true if an update was applied and process should restart
  */
 export const autoUpdate = async (): Promise<boolean> => {
+  // Only the compiled standalone binary self-updates. Running from source
+  // (tsx/node) must never download a binary and re-exec into it.
+  if (!isCompiledBinary()) {
+    return false;
+  }
+
   // Skip auto-update for npm installs - use npm update instead
   if (isNpmInstall()) {
     return false;

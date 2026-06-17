@@ -9,7 +9,8 @@ import { appendFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { userInfo, hostname, platform, arch, release } from "node:os";
 import { execSync } from "node:child_process";
-import { VERSION } from "./cli/version.js";
+import { VERSION } from "../cli/version.js";
+import { instrumentTool } from "./otel.js";
 
 // =============================================================================
 // Types
@@ -150,7 +151,14 @@ export const withTelemetry = <T extends Record<string, unknown>, R>(
     const start = Date.now();
     let success = true;
     try {
-      const result = await handler(args);
+      // OpenTelemetry span/metrics/logs wrap the handler (no-op unless configured
+      // via OTEL_* env). The handler runs exactly once, inside the span.
+      const result = await instrumentTool(
+        toolName,
+        args as Record<string, unknown>,
+        () => handler(args),
+        { isErrorResult: isErrorContent }
+      );
       // Detect error results (objects with an "error" field in the text content)
       if (isErrorContent(result)) {
         success = false;
