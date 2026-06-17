@@ -22,7 +22,7 @@ If a pattern matches all nets in a design (for example `.`, `.*`, or `.+`), the 
 ```typescript
 interface QueryNetsResult {
   pattern: string;
-  units: string;
+  units: string; // Always "MICRON"
   matches: QueryNetResult[];
 }
 
@@ -178,4 +178,3 @@ Response:
 - All physical values are normalized to microns
 - `layersUsed` merges layers from PhyNet points and routing geometry
 - Routing within each match is sorted by layer name
-```
