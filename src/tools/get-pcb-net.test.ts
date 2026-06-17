@@ -297,6 +297,51 @@ describe("queryNet -- routing and vias", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Conductors encoded as <Line> rather than <Polyline> (issue #39). A net routed
+// entirely with <Line> segments previously returned no routing at all.
+// ---------------------------------------------------------------------------
+describe("queryNet -- <Line> conductor routing", () => {
+  const LINE_XML = `<IPC-2581>
+  <Content>
+    <EntryLineDesc id="LD_SIG"><LineDesc lineWidth="0.10"/></EntryLineDesc>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="SIG1">
+    <PinRef pin="1" componentRef="U1"/>
+    <PinRef pin="2" componentRef="U2"/>
+  </LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="SIG1">
+        <Features>
+          <Line startX="0" startY="0" endX="3" endY="4"><LineDescRef id="LD_SIG"/></Line>
+        </Features>
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+
+  let lineXml: string;
+  beforeAll(() => {
+    lineXml = path.join(tempDir, "line-routed.xml");
+    writeFileSync(lineXml, LINE_XML);
+  });
+
+  it("returns routing for a net routed with <Line> segments", async () => {
+    const r = expectSuccess(await queryNet(lineXml, "^SIG1$"));
+    const net = r.matches[0];
+    expect(net.routing).toBeDefined();
+    const top = net.routing!.find((rt) => rt.layerName === "TOP");
+    expect(top).toBeDefined();
+    expect(top!.segmentCount).toBe(1);
+    expect(top!.traceWidths).toContain(100); // 0.10mm -> 100 micron
+    expect(top!.traceLength).toBe(5000); // 3-4-5 triangle: 5mm -> 5000 micron
+    expect(net.totalTraceLength).toBe(5000);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------------
 describe("queryNet -- edge cases", () => {
