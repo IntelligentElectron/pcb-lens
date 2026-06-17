@@ -34,11 +34,10 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 3. Use \`get_pcb_metadata\` first to understand the design structure, layer stackup, and size
 4. Use \`get_pcb_component\` to look up a single component by exact refdes
 5. Use \`get_pcb_net\` to trace a net's routing, trace widths, vias, and connected pins
-6. Use \`render_net\` to visualize a net's routing geometry as SVG
 
 ## Tool Usage Tips
 
-- All query/render tools accept an IPC-2581 XML file path as the first argument
+- All query tools accept an IPC-2581 XML file path as the first argument
 - Component refdes is an exact match (e.g., "U5", "C10", "R22")
 - Net name patterns use regex (e.g., "DDR_D0", "^VCC", "CLK")
 - All physical values (coordinates, trace widths) are normalized to microns regardless of the source file's native unit
