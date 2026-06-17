@@ -103,33 +103,6 @@ Install [OpenAI Codex](https://developers.openai.com/codex/cli/), then run:
 codex mcp add pcb-lens -- pcb-lens
 ```
 
-### Gemini CLI
-
-Install [Gemini CLI](https://geminicli.com/docs/get-started/installation/), then run:
-
-```bash
-gemini mcp add --scope user pcb-lens pcb-lens
-```
-
-### VS Code (GitHub Copilot)
-
-Download [VS Code](https://code.visualstudio.com/)
-
-Add to `.vscode/mcp.json` in your project:
-
-```json
-{
-  "servers": {
-    "pcb-lens": {
-      "type": "stdio",
-      "command": "pcb-lens"
-    }
-  }
-}
-```
-
-Then enable it in **Configure Tools** (click the tools icon in Copilot chat).
-
 ## Supported Platforms
 
 | Platform | Binary |
