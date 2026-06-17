@@ -117,16 +117,16 @@ notice) — relevant if we reproduce spec text or ship a derived parser.
 Primary-heavy. Official Siemens/odbplusplus spec PDFs (v7.0, v8.1, Update 4), the OdbDesign
 and ODBPy repos, PyPI, KiCad source, plus IPC-2581-vs-ODB++ comparison pieces.
 
-- ODB++ Design Format Specification (v8.1 Update 4): https://odbplusplus.com/design/odb-design-format-specification/
-- Siemens ODB++ resources: https://www.siemens.com/en-us/products/pcb/odb-plus-plus/resources/
-- ODB++ spec PDF (8.1): https://odbplusplus.com/wp-content/uploads/sites/2/2020/03/odb_spec_user.pdf
-- ODB++ Format Description (v7.0): https://odbplusplus.com/wp-content/uploads/sites/2/2020/03/ODB_Format_Description_v7.pdf
-- Introduction to ODB++ (8.1): https://odbplusplus.com/wp-content/uploads/sites/2/2020/03/Introduction-to-ODB-version-8-1.pdf
-- OdbDesign (C++, AGPL-3.0): https://github.com/nam20485/OdbDesign
-- ODBPy (Python, Apache-2.0): https://github.com/ulikoehler/ODBPy
-- PyOdbDesignLib: https://pypi.org/project/PyOdbDesignLib/
-- ODB++ GitHub topic: https://github.com/topics/odbplusplus
-- Cadence brd2odb help: https://odbplusplus.com/wp-content/uploads/sites/2/2023/06/brd2odb_help.pdf
+- ODB++ Design Format Specification (v8.1 Update 4): <https://odbplusplus.com/design/odb-design-format-specification/>
+- Siemens ODB++ resources: <https://www.siemens.com/en-us/products/pcb/odb-plus-plus/resources/>
+- ODB++ spec PDF (8.1): <https://odbplusplus.com/wp-content/uploads/sites/2/2020/03/odb_spec_user.pdf>
+- ODB++ Format Description (v7.0): <https://odbplusplus.com/wp-content/uploads/sites/2/2020/03/ODB_Format_Description_v7.pdf>
+- Introduction to ODB++ (8.1): <https://odbplusplus.com/wp-content/uploads/sites/2/2020/03/Introduction-to-ODB-version-8-1.pdf>
+- OdbDesign (C++, AGPL-3.0): <https://github.com/nam20485/OdbDesign>
+- ODBPy (Python, Apache-2.0): <https://github.com/ulikoehler/ODBPy>
+- PyOdbDesignLib: <https://pypi.org/project/PyOdbDesignLib/>
+- ODB++ GitHub topic: <https://github.com/topics/odbplusplus>
+- Cadence brd2odb help: <https://odbplusplus.com/wp-content/uploads/sites/2/2023/06/brd2odb_help.pdf>
 
 > Research method: deep-research workflow — 101 agents, 19 sources fetched, 88 claims
 > extracted, 25 adversarially verified (23 confirmed, 2 killed).

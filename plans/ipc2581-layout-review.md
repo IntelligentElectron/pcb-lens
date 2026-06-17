@@ -1,5 +1,19 @@
 # IPC-2581 Layout Review — Research & Prototype Plan
 
+**Status:** Reference — original prototype plan; validated and now realized by the current
+pcb-lens tools
+**Date:** early 2026 (original) · reviewed 2026-06-17
+**Goal:** Validate that IPC-2581 RevC XML is navigable enough for LLM-driven PCB layout review
+with thin extraction tooling, and decide where tooling is actually needed.
+
+## Bottom line
+
+IPC-2581 RevC is navigable enough for LLM-driven layout review: a small set of thin
+extraction tools over the XML (metadata, component, net, constraints) is sufficient — which is
+what the current pcb-lens MCP tools implement. This document is kept as the original design
+input. For reading Cadence Allegro `.brd` *directly* (without the IPC-2581 export), see
+[allegro-brd-direct-read.md](allegro-brd-direct-read.md).
+
 ## Context
 
 We want to enable LLM-driven PCB layout review for Cadence Allegro designs. The netlist MCP server already handles schematic connectivity; this would add the physical layout dimension — component placement, footprints, traces, planes, spacing, etc.
@@ -62,7 +76,7 @@ This will be a new project, separate from the netlist MCP server. The netlist se
 ## References
 
 - [IPC-2581 Consortium](http://www.ipc2581.com/) — test cases, spec info
-- [OpenAllegroParser](https://github.com/Werni2A/OpenAllegroParser) — FOSS .brd parser (future option for direct binary parsing)
+- [OpenAllegroParser](https://github.com/Werni2A/OpenAllegroParser) — early FOSS Allegro parser. **Note:** never implemented a `.brd` parser (only `.pad`) and is archived (2022); not a viable path. For reading `.brd` directly, see [allegro-brd-direct-read.md](allegro-brd-direct-read.md) (KiCad 10's `pcbnew` importer).
 - [boardui](https://github.com/midub/boardui) — IPC-2581 web viewer with parser package
 - [Cadence IPC-2581 Export Guide](https://community.cadence.com/cadence_blogs_8/b/pcb/posts/ipc-2581-pcb)
 - [Sierra Circuits: How to Export IPC-2581](https://www.protoexpress.com/kb/how-to-export-and-get-started-with-ipc-2581/)
