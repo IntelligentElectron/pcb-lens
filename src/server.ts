@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { VERSION } from "./cli/version.js";
-import { initTelemetry } from "./telemetry.js";
+import { initTelemetry, initOtel } from "./telemetry/index.js";
 import { register as registerGetPcbMetadata } from "./tools/get-pcb-metadata.js";
 import { register as registerGetPcbComponent } from "./tools/get-pcb-component.js";
 import { register as registerGetPcbNet } from "./tools/get-pcb-net.js";
@@ -89,6 +89,8 @@ export const createServer = (): McpServer => {
  */
 export const runServer = async (): Promise<void> => {
   initTelemetry(crypto.randomUUID());
+  // Opt-in OpenTelemetry (no-op unless OTEL_* env is configured).
+  await initOtel({ serviceName: "pcb-lens", serviceVersion: VERSION });
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);

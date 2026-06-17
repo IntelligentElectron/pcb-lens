@@ -5,13 +5,9 @@
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { VERSION, GITHUB_REPO, BINARY_NAME } from "./version.js";
-import { exportTelemetry } from "../telemetry.js";
-import {
-  checkForUpdate,
-  performUpdate,
-  isNpmInstall,
-  getCurrentExecutablePath,
-} from "./updater.js";
+import { exportTelemetry } from "../telemetry/index.js";
+import { checkForUpdate, performUpdate, isNpmInstall } from "./updater.js";
+import { getCurrentExecutablePath } from "./executable.js";
 import { confirm } from "./prompts.js";
 import { removeFromPath } from "./shell.js";
 

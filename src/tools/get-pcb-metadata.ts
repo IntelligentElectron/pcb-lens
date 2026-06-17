@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { DesignOverview, ErrorResult, LayerInfo, SectionInfo } from "./lib/types.js";
 import { attr, streamAllLines } from "./lib/xml-utils.js";
 import { formatResult, validateFile } from "./shared.js";
-import { withTelemetry } from "../telemetry.js";
+import { withTelemetry } from "../telemetry/index.js";
 
 export const getDesignOverview = async (
   filePath: string

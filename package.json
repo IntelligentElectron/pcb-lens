@@ -1,6 +1,6 @@
 {
   "name": "@intelligentelectron/pcb-lens",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MCP server for IPC-2581 PCB layout analysis and review",
   "type": "module",
   "main": "dist/index.js",
@@ -64,6 +64,18 @@
   "homepage": "https://github.com/IntelligentElectron/pcb-lens#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api-logs": "^0.219.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.219.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.219.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.219.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "^0.219.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.219.0",
+    "@opentelemetry/resources": "^2.8.0",
+    "@opentelemetry/sdk-logs": "^0.219.0",
+    "@opentelemetry/sdk-metrics": "^2.8.0",
+    "@opentelemetry/sdk-node": "^0.219.0",
     "@resvg/resvg-wasm": "^2.6.2",
     "zod": "^4.3.6"
   },

@@ -12,7 +12,7 @@ import type {
   ErrorResult,
 } from "./lib/types.js";
 import { formatResult } from "./shared.js";
-import { withTelemetry } from "../telemetry.js";
+import { withTelemetry } from "../telemetry/index.js";
 
 // =============================================================================
 // File validation

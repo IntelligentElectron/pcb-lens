@@ -7,7 +7,7 @@ import { z } from "zod";
 import { detectCadenceInstalls, requireWindows, serializeCadenceCall } from "./lib/cadence.js";
 import type { ErrorResult, ExportCadenceConstraintsResult } from "./lib/types.js";
 import { formatResult } from "./shared.js";
-import { withTelemetry } from "../telemetry.js";
+import { withTelemetry } from "../telemetry/index.js";
 
 const execAsync = promisify(exec);
 
