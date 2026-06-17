@@ -50,6 +50,7 @@ interface PadShape {
   height: number;                   // Microns
 }
 
+// pinCount is the net's total pin count across all components, not this component's pin count
 type NetRow = [netName: string, pins: string[], pinCount: number];
 type PadRow = [pin: string, x: number, y: number, shapeIndex: number];
 ```
@@ -153,7 +154,7 @@ Response:
 
 ## Notes
 
-- Component lookup is an exact refdes match (not a pattern). Use `get_pcb_net` to trace connectivity by net, or `get_pcb_metadata` for an overview of the design.
+- Component lookup is an exact refdes match (not a pattern); there is no bulk/pattern component query. To find candidate refdes values, use `get_pcb_metadata` for component counts and design structure, or `get_pcb_net` to trace connectivity by net, then query individual refdes values here.
 - Uses multiple passes: component placement, then BOM data, then `LogicalNet` connectivity, then pad geometry from the package definition.
 - Coordinates and dimensions are normalized to microns; rotation is in degrees counterclockwise.
 - `parsed` is only present when `packageRef` matches a recognized Cadence package naming convention.
