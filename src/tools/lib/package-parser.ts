@@ -12,14 +12,51 @@
  * returns null for unrecognized formats.
  */
 
-export interface ParsedPackage {
-  packageFamily: string;
-  pinCount: number;
-  bodySize_mm?: { width: number; height: number };
-  pitch_mm?: number;
-  ballHeight_mm?: number;
-  ubmDiameter_mm?: number;
-}
+// ParsedPackage is defined in types.ts (the single source of truth) and
+// re-exported here for callers that import it alongside parsePackageRef.
+import type { ParsedPackage } from "./types.js";
+export type { ParsedPackage };
+
+/**
+ * Families where the digits immediately after the family prefix in the simple
+ * footprint name denote the pin/ball count (e.g. BGA256, QFN48, SOIC8).
+ *
+ * Deliberately excludes chip passives (RES/CAP/IND/INDP/FER/FB) and families
+ * whose trailing number is a case-size or JEDEC package code rather than a pin
+ * count (e.g. SOT23, CAPAE). For those the count must come from pad/net geometry.
+ *
+ * This list is intentionally not exhaustive: it covers the common surface-mount
+ * IC families. Edge cases (e.g. SIP<n>, TO<n>) are omitted on purpose -- when a
+ * family is absent the caller still gets the authoritative geometry-derived
+ * count, so the worst case is a missing name hint, never a wrong one.
+ */
+const PIN_COUNT_FAMILIES = new Set([
+  "BGA",
+  "CBGA",
+  "PBGA",
+  "FBGA",
+  "UBGA",
+  "WLCSP",
+  "CSP",
+  "QFN",
+  "VQFN",
+  "QFP",
+  "TQFP",
+  "LQFP",
+  "MQFP",
+  "DFN",
+  "SON",
+  "LGA",
+  "SOIC",
+  "SOP",
+  "SSOP",
+  "TSSOP",
+  "TSOP",
+  "MSOP",
+  "HSOP",
+  "DIP",
+  "PLCC",
+]);
 
 /**
  * Convert a Cadence P-as-decimal number to a real number.
@@ -38,8 +75,11 @@ const cadenceToMm = (raw: string): number => parseInt(raw, 10) / 100;
 //   group 6: component height (after second X)
 const CADENCE_FULL = /^([A-Z]+?)(\d+)C(\d+)P\d+X\d+_(\d+)X(\d+)X(\d+)$/i;
 
-// Simpler variant: BGA256_1MM or PKG123 (family + pin count only)
+// Simpler variant: BGA256_1MM or PKG123 (family + trailing number)
 const CADENCE_SIMPLE = /^([A-Z]+?)(\d+)/i;
+
+// Family token only, no trailing digits (e.g. DIODEM, TESTPOINT)
+const FAMILY_ONLY = /^([A-Za-z]+)/;
 
 export const parsePackageRef = (packageRef: string): ParsedPackage | null => {
   const fullMatch = CADENCE_FULL.exec(packageRef);
@@ -60,13 +100,22 @@ export const parsePackageRef = (packageRef: string): ParsedPackage | null => {
   const simpleMatch = CADENCE_SIMPLE.exec(packageRef);
   if (simpleMatch) {
     const [, family, pins] = simpleMatch;
+    const fam = family.toUpperCase();
     const pinCount = parseInt(pins, 10);
-    if (pinCount > 0) {
-      return {
-        packageFamily: family.toUpperCase(),
-        pinCount,
-      };
+    // Only trust the trailing number as a pin count for families where it
+    // genuinely encodes one. For everything else (chip passives, SOT, CAPAE,
+    // ...) surface the family but leave pinCount for geometry to determine.
+    if (PIN_COUNT_FAMILIES.has(fam) && pinCount > 0) {
+      return { packageFamily: fam, pinCount };
     }
+    return { packageFamily: fam };
+  }
+
+  // No trailing digits: still surface the family so `parsed` is emitted
+  // consistently for every component (e.g. DIODEM, TESTPOINT).
+  const familyOnly = FAMILY_ONLY.exec(packageRef);
+  if (familyOnly) {
+    return { packageFamily: familyOnly[1].toUpperCase() };
   }
 
   return null;

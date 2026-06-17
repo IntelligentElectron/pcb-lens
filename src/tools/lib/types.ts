@@ -75,7 +75,14 @@ export interface ComponentInfo {
  */
 export interface ParsedPackage {
   packageFamily: string;
-  pinCount: number;
+  /**
+   * Pin/pad count. Optional because the package name alone is not an authoritative
+   * source: for chip passives (RES/CAP/IND/INDP) and packages like SOT/CAPAE the
+   * trailing digits are an imperial case-size or JEDEC code, not a pin count. When
+   * present here it is the authoritative count derived from pad/net geometry, or a
+   * trusted name-derived count for families where the name genuinely encodes it.
+   */
+  pinCount?: number;
   bodySize_mm?: { width: number; height: number };
   pitch_mm?: number;
   ballHeight_mm?: number;
@@ -86,7 +93,8 @@ export interface ParsedPackage {
  * Unique pad shape definition, referenced by index from pad rows.
  */
 export interface PadShape {
-  shape: "rect" | "circle";
+  /** "polygon" pads are reported by their bounding box (width/height). */
+  shape: "rect" | "circle" | "oval" | "polygon";
   width: number;
   height: number;
 }

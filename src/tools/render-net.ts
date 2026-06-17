@@ -440,7 +440,7 @@ const generateSvg = (data: RenderData, netName: string): string => {
     const pinDef = pkg.get(np.pin);
     if (!pinDef) continue;
     const pos = transformPin(comp, pinDef, factor);
-    const shape = shapes.get(pinDef.shapeId);
+    const shape = pinDef.shapeId ? shapes.get(pinDef.shapeId) : undefined;
     if (!shape) continue;
     const layer = comp.layer || "TOP";
     const color = layerColors.get(layer) ?? "#7f8c8d";
@@ -587,7 +587,7 @@ export const renderNet = async (
     const pkg = packages.get(comp.packageRef);
     if (!pkg) continue;
     const pin = pkg.get(np.pin);
-    if (pin && shapes.has(pin.shapeId)) resolvedPads++;
+    if (pin && pin.shapeId && shapes.has(pin.shapeId)) resolvedPads++;
   }
 
   const svg = generateSvg(

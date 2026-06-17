@@ -7,8 +7,14 @@ import type {
   NetRow,
   PadRow,
   PadShape,
+  ParsedPackage,
 } from "./lib/types.js";
-import { extractShapes, extractPackages, transformPin } from "./lib/geometry.js";
+import {
+  extractShapes,
+  extractPackages,
+  extractPadstackShapes,
+  transformPin,
+} from "./lib/geometry.js";
 import { parsePackageRef } from "./lib/package-parser.js";
 import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js";
 import {
@@ -183,6 +189,7 @@ export const queryComponent = async (
     const f = extractMicronFactorFromLines(lines);
     const shapes = extractShapes(lines, f);
     const packages = extractPackages(lines);
+    const padstackShapes = extractPadstackShapes(lines);
 
     const pkg = packages.get(p.packageRef);
     if (pkg) {
@@ -203,7 +210,14 @@ export const queryComponent = async (
           pinDef,
           f
         );
-        const shape = shapes.get(pinDef.shapeId);
+        // Prefer the pad's inline shape; fall back to the shape of the
+        // referenced padstack (chip passives often carry only the latter). If
+        // neither resolves (e.g. an unknown primitive type), the pad is skipped
+        // rather than emitted without geometry.
+        const shapeId =
+          pinDef.shapeId ||
+          (pinDef.padstackRef ? padstackShapes.get(pinDef.padstackRef) : undefined);
+        const shape = shapeId ? shapes.get(shapeId) : undefined;
         if (shape) {
           const w = Math.round(shape.width);
           const h = Math.round(shape.height);
@@ -223,8 +237,33 @@ export const queryComponent = async (
     }
   }
 
-  // Build result
-  const parsed = parsePackageRef(p.packageRef);
+  // Build result.
+  //
+  // Authoritative pin count comes from geometry, not the package name: prefer the
+  // parsed pad rows (true land-pattern pad count), then fall back to the distinct
+  // pins of this component seen on logical nets. The name-derived count is only a
+  // last resort for families whose name genuinely encodes it (e.g. a BGA whose
+  // pads failed to parse). This keeps chip passives at their real count (2) rather
+  // than the case-size digits the old code reported.
+  const connectedPins = new Set<string>();
+  for (const data of netMap.values()) {
+    for (const pin of data.componentPins) connectedPins.add(pin);
+  }
+  const authoritativePinCount =
+    padRows && padRows.length > 0
+      ? padRows.length
+      : connectedPins.size > 0
+        ? connectedPins.size
+        : undefined;
+
+  const nameParsed = parsePackageRef(p.packageRef);
+  const pinCount = authoritativePinCount ?? nameParsed?.pinCount;
+  // parsePackageRef only returns null for empty / letter-less refs (no family to
+  // report), so there is nothing useful to emit in that case even with a pin count.
+  const parsed: ParsedPackage | undefined = nameParsed
+    ? { ...nameParsed, ...(pinCount !== undefined ? { pinCount } : {}) }
+    : undefined;
+
   const netRows: NetRow[] = [...netMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([netName, data]) => [netName, data.componentPins, data.pinCount]);

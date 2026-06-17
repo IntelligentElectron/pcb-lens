@@ -8,6 +8,10 @@ import { isErrorResult } from "./lib/types.js";
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
 const BEAGLEBONE_REVB6 = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
 const hasBeagleBoneFixture = existsSync(BEAGLEBONE_REVB6);
+const PARALLELLA_REVB = path.join(FIXTURE_DIR, "parallella-RevB.xml");
+const hasParallellaFixture = existsSync(PARALLELLA_REVB);
+const TESTCASE1_REVC = path.join(FIXTURE_DIR, "testcase1-RevC.xml");
+const hasTestcase1Fixture = existsSync(TESTCASE1_REVC);
 
 // ---------------------------------------------------------------------------
 // Inline fixtures
@@ -234,6 +238,113 @@ describe("queryComponent -- pad geometry", () => {
     }
   });
 
+  // Issue #40: chip-passive pads that reference their shape only through a
+  // padstack (no inline <StandardPrimitiveRef>) must still resolve, and oval
+  // primitives must be supported. Previously these returned empty pad geometry.
+  it("resolves pad shape via padstackDefRef when there is no inline primitive", async () => {
+    const xml = `<IPC-2581>
+  <Content>
+    <EntryStandard id="OVAL_1"><Oval width="0.3" height="0.4"/></EntryStandard>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <Ecad><CadData>
+    <PadStackDef name="CHIP_PAD">
+      <PadstackPadDef padUse="REGULAR"><StandardPrimitiveRef id="OVAL_1"/></PadstackPadDef>
+    </PadStackDef>
+    <Package name="RES0402">
+      <LandPattern>
+        <Pad padstackDefRef="CHIP_PAD"><Location x="-0.5" y="0"/><PinRef pin="1"/></Pad>
+        <Pad padstackDefRef="CHIP_PAD"><Location x="0.5" y="0"/><PinRef pin="2"/></Pad>
+      </LandPattern>
+    </Package>
+  </CadData></Ecad>
+  <Step>
+    <Component refDes="R1" packageRef="RES0402" layerRef="TOP"><Location x="10" y="20"/></Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "passive-padstack.xml");
+    writeFileSync(f, xml);
+    const result = await queryComponent(f, "R1");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      // #40: pads are populated, not empty.
+      expect(result.padRows).toHaveLength(2);
+      expect(result.padShapes).toHaveLength(1);
+      expect(result.padShapes![0].shape).toBe("oval");
+      expect(result.padShapes![0].width).toBe(300);
+      expect(result.padShapes![0].height).toBe(400);
+      // #38: pin count is the real pad count (2), not the case-size code (402).
+      expect(result.parsed).toBeDefined();
+      expect(result.parsed!.packageFamily).toBe("RES");
+      expect(result.parsed!.pinCount).toBe(2);
+    }
+  });
+
+  // Issue #40: pad shapes defined as a <Contour><Polygon> (no width/height
+  // attribute) must be reported by their bounding box, not dropped.
+  it("resolves a polygon/contour pad shape by bounding box", async () => {
+    const xml = `<IPC-2581>
+  <Content>
+    <EntryStandard id="SHAPE_LS_POLY">
+      <Contour>
+        <Polygon>
+          <PolyBegin x="-0.2" y="-0.3"/>
+          <PolyStepSegment x="0.2" y="-0.3"/>
+          <PolyStepSegment x="0.2" y="0.3"/>
+          <PolyStepSegment x="-0.2" y="0.3"/>
+          <PolyStepSegment x="-0.2" y="-0.3"/>
+        </Polygon>
+      </Contour>
+    </EntryStandard>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <Ecad><CadData>
+    <Package name="SR0603">
+      <Pin number="1" type="SURFACE"><Location x="-0.5" y="0"/><StandardPrimitiveRef id="SHAPE_LS_POLY"/></Pin>
+      <Pin number="2" type="SURFACE"><Location x="0.5" y="0"/><StandardPrimitiveRef id="SHAPE_LS_POLY"/></Pin>
+    </Package>
+  </CadData></Ecad>
+  <Step>
+    <Component refDes="R7" packageRef="SR0603" layerRef="TOP"><Location x="10" y="20"/></Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "passive-contour.xml");
+    writeFileSync(f, xml);
+    const result = await queryComponent(f, "R7");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.padRows).toHaveLength(2);
+      expect(result.padShapes).toHaveLength(1);
+      expect(result.padShapes![0].shape).toBe("polygon");
+      expect(result.padShapes![0].width).toBe(400); // 0.4mm bbox -> 400 micron
+      expect(result.padShapes![0].height).toBe(600); // 0.6mm bbox -> 600 micron
+    }
+  });
+
+  // Issue #38: without geometry, a chip-passive case size must NOT be emitted as
+  // a pin count; the family is still surfaced.
+  it("does not invent a pin count from a chip-passive case size", async () => {
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <Step>
+    <Component refDes="C9" packageRef="C0402" layerRef="TOP"><Location x="0" y="0"/></Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "passive-nogeo.xml");
+    writeFileSync(f, xml);
+    const result = await queryComponent(f, "C9");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.parsed).toBeDefined();
+      expect(result.parsed!.packageFamily).toBe("C");
+      expect(result.parsed!.pinCount).toBeUndefined();
+    }
+  });
+
   it("deduplicates identical pad shapes", async () => {
     const xml = `<IPC-2581>
   <Content>
@@ -263,6 +374,64 @@ describe("queryComponent -- pad geometry", () => {
       for (const row of result.padRows!) {
         expect(row[3]).toBe(0);
       }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real-world chip passives (issues #38 / #40) on a Cadence Allegro export.
+// Ground truth: every chip passive is a two-terminal part, so pinCount must be
+// 2 and pad geometry must be non-empty -- regardless of the case-size digits in
+// the footprint name.
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasParallellaFixture)("queryComponent -- parallella passives", () => {
+  it("reports pinCount 2 and two pads for a chip capacitor (C0402)", async () => {
+    const result = await queryComponent(PARALLELLA_REVB, "C162");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.packageRef).toMatch(/^C0402/);
+      expect(result.parsed).toBeDefined();
+      expect(result.parsed!.pinCount).toBe(2);
+      expect(result.padRows).toBeDefined();
+      expect(result.padRows!.length).toBe(2);
+    }
+  });
+
+  it("reports pinCount 2 for a ferrite bead (F0603)", async () => {
+    const result = await queryComponent(PARALLELLA_REVB, "F1");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.parsed).toBeDefined();
+      expect(result.parsed!.pinCount).toBe(2);
+    }
+  });
+
+  it("keeps an authoritative pin count for a multi-pin IC (TSSOP24)", async () => {
+    const result = await queryComponent(PARALLELLA_REVB, "U37");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.parsed).toBeDefined();
+      expect(result.parsed!.packageFamily).toBe("TSSOP");
+      expect(result.parsed!.pinCount).toBe(24);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real-world chip passives whose pads are defined as <Contour><Polygon> shapes
+// (issue #40, the encoding used by this Cadence RevC export). R1 is a chip
+// resistor in the SR0603_85 land pattern: two pads, pinCount 2.
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasTestcase1Fixture)("queryComponent -- testcase1 RevC contour pads", () => {
+  it("returns two pads and pinCount 2 for a chip resistor with polygon pads", async () => {
+    const result = await queryComponent(TESTCASE1_REVC, "R1");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.packageRef).toMatch(/^SR0603/);
+      expect(result.parsed!.pinCount).toBe(2);
+      expect(result.padRows).toBeDefined();
+      expect(result.padRows!.length).toBe(2);
+      expect(result.padShapes!.length).toBeGreaterThan(0);
     }
   });
 });
