@@ -26,7 +26,7 @@ analogous to how pcb-lens parses IPC-2581 XML today.
 | Tool | Lang | License | PcbDoc coverage | Notes |
 |---|---|---|---|---|
 | **KiCad `altium_pcb.cpp`** | C++ | **GPLv3** | Board/stackup, Components, Nets, Rules, Polygons, Vias, Tracks, Pads, Arcs, Fills, Regions, Classes | Most complete + actively maintained. **GPLv3 — cannot be copied or ported into Apache-2.0 pcb-lens.** Usable only as a black-box behavioral reference. |
-| **AltiumSharp** (`OriginalCircuit.Altium`) | C#/.NET | **unverified — must confirm** | Read+write all 4 doc types; layout primitives, per-net copper, board outline, layer stack, design rules | Cleanest library-shaped port source **if** its license is permissive. |
+| **AltiumSharp** (`issus/AltiumSharp`) | C#/.NET | **Apache-2.0** ✓ ([LICENSE](https://github.com/issus/AltiumSharp/blob/master/LICENSE)) | Read+write all 4 doc types; layout primitives, per-net copper, board outline, layer stack, design rules | Cleanest library-shaped port source; Apache-2.0 is compatible with pcb-lens → **recommended port source.** |
 | **AtoK** (stevegrn) | C#/.NET | GPLv3 | PcbDoc-only via OpenMCDF; Nets/Tracks/Vias/Pads/Polygons/Rules/Dimensions/DiffPairs/Classes/Models | GPLv3 — reference only, not portable. |
 | **altium2kicad** (thesourcerer8) | Perl | n/a | unpack→convert PcbDoc+SchDoc; `unpack.pl` is a clean CDF decomposer | Old/low-activity. Rule-extraction extent uncertain (verification vote split). |
 | **pluots/altium** | Rust | Apache-2.0 | **Cannot read PcbDoc/PcbLib today** (alpha; SchDoc/SchLib partial) | Not usable now; 0.2.0 rewrite in progress as of Feb 2026. |
@@ -47,8 +47,12 @@ What is legal:
   format structure and these facts are not copyrightable.
 - Run KiCad as an external CLI tool (no source incorporation) — heavy, undesirable for an MCP server.
 
-The clean route is therefore: **port from AltiumSharp if its license is permissive**;
-otherwise reverse-engineer the record formats from the format facts directly.
+The clean route is therefore: **port from AltiumSharp** — verified **Apache-2.0**
+([`issus/AltiumSharp`](https://github.com/issus/AltiumSharp/blob/master/LICENSE)), compatible
+with pcb-lens's Apache-2.0. (The separate `OriginalCircuit.Altium.*` helper repos are MIT —
+also permissive — but are independent of the core library, not transitive dependencies of a
+port.) Reverse-engineering the record formats from format facts remains the fallback if a port
+proves impractical.
 
 ## Recommended implementation path
 
@@ -62,8 +66,9 @@ otherwise reverse-engineer the record formats from the format facts directly.
    (typically a `uint8` type tag + length-prefixed subrecords). Prioritize what mirrors the
    IPC-2581 tools: `Board6` (stackup/layers), `Nets6`, `Components6`, `Rules6` (constraints),
    then routing primitives `Tracks6`/`Arcs6`/`Vias6`/`Pads6`/`Polygons6`/`Regions6`.
-3. **Resolve the license fork first** (see Open questions) — it determines whether step 2 is a
-   port or a from-scratch reverse-engineering effort.
+3. **Port source is AltiumSharp** (Apache-2.0, verified) — step 2 is a port, not a from-scratch
+   reverse-engineering effort. Reverse-engineering from format facts remains the fallback only
+   if the C#→TS port proves impractical.
 
 ## Caveats
 
@@ -81,8 +86,9 @@ otherwise reverse-engineer the record formats from the format facts directly.
 
 ## Open questions / next actions
 
-- **Confirm AltiumSharp / `OriginalCircuit.Altium` license.** This is the gating decision: a
-  permissive license makes it the port source; otherwise reverse-engineer from format facts.
+- ~~Confirm AltiumSharp license.~~ **Resolved (2026-06-17):** `issus/AltiumSharp` is
+  **Apache-2.0** (the related `OriginalCircuit.Altium.*` helper repos are MIT) — compatible with
+  pcb-lens, so it is the port source rather than a reference-only fallback.
 - How stable are Altium's inner binary record formats across Altium Designer versions, and which
   versions are the surveyed parsers validated against?
 - Does any tool extract the complete design-rule/constraint set **verbatim** (not mapped into
