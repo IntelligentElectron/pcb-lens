@@ -182,7 +182,7 @@ describe("queryComponent -- pad geometry", () => {
   });
 
   it("includes padRows and deduplicated padShapes", async () => {
-    const result = await queryComponent(padXml, "U1");
+    const result = await queryComponent(padXml, "U1", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       expect(result.padRows).toBeDefined();
@@ -194,7 +194,7 @@ describe("queryComponent -- pad geometry", () => {
   });
 
   it("returns correct pad shapes via shapeIndex", async () => {
-    const result = await queryComponent(padXml, "U1");
+    const result = await queryComponent(padXml, "U1", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const rows = result.padRows!;
@@ -214,7 +214,7 @@ describe("queryComponent -- pad geometry", () => {
   });
 
   it("pads have correct positions in microns", async () => {
-    const result = await queryComponent(padXml, "U1");
+    const result = await queryComponent(padXml, "U1", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const rows = result.padRows!;
@@ -229,7 +229,7 @@ describe("queryComponent -- pad geometry", () => {
   });
 
   it("pads are sorted by pin number", async () => {
-    const result = await queryComponent(padXml, "U1");
+    const result = await queryComponent(padXml, "U1", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       const rows = result.padRows!;
@@ -265,11 +265,12 @@ describe("queryComponent -- pad geometry", () => {
 </IPC-2581>`;
     const f = path.join(tempDir, "passive-padstack.xml");
     writeFileSync(f, xml);
-    const result = await queryComponent(f, "R1");
+    const result = await queryComponent(f, "R1", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       // #40: pads are populated, not empty.
       expect(result.padRows).toHaveLength(2);
+      expect(result.padCount).toBe(2);
       expect(result.padShapes).toHaveLength(1);
       expect(result.padShapes![0].shape).toBe("oval");
       expect(result.padShapes![0].width).toBe(300);
@@ -312,7 +313,7 @@ describe("queryComponent -- pad geometry", () => {
 </IPC-2581>`;
     const f = path.join(tempDir, "passive-contour.xml");
     writeFileSync(f, xml);
-    const result = await queryComponent(f, "R7");
+    const result = await queryComponent(f, "R7", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       expect(result.padRows).toHaveLength(2);
@@ -345,6 +346,26 @@ describe("queryComponent -- pad geometry", () => {
     }
   });
 
+  // Issue #41: per-pin pad coordinates are heavy, so they are omitted by default
+  // and returned only when detail="full" is requested. The pad count and deduped
+  // shapes remain available in both modes.
+  it("omits raw padRows by default but keeps padCount and padShapes (summary)", async () => {
+    const summary = await queryComponent(padXml, "U1");
+    expect(isErrorResult(summary)).toBe(false);
+    if (!isErrorResult(summary)) {
+      expect(summary.padCount).toBe(2);
+      expect(summary.padShapes).toHaveLength(2);
+      expect(summary).not.toHaveProperty("padRows");
+      expect(summary).not.toHaveProperty("padColumns");
+    }
+    const full = await queryComponent(padXml, "U1", "full");
+    expect(isErrorResult(full)).toBe(false);
+    if (!isErrorResult(full)) {
+      expect(full.padRows).toHaveLength(2);
+      expect(full.padColumns).toEqual(["pin", "x", "y", "shapeIndex"]);
+    }
+  });
+
   it("deduplicates identical pad shapes", async () => {
     const xml = `<IPC-2581>
   <Content>
@@ -366,7 +387,7 @@ describe("queryComponent -- pad geometry", () => {
 </IPC-2581>`;
     const f = path.join(tempDir, "dedup.xml");
     writeFileSync(f, xml);
-    const result = await queryComponent(f, "U1");
+    const result = await queryComponent(f, "U1", "full");
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       expect(result.padShapes).toHaveLength(1);
@@ -392,8 +413,9 @@ describe.skipIf(!hasParallellaFixture)("queryComponent -- parallella passives", 
       expect(result.packageRef).toMatch(/^C0402/);
       expect(result.parsed).toBeDefined();
       expect(result.parsed!.pinCount).toBe(2);
-      expect(result.padRows).toBeDefined();
-      expect(result.padRows!.length).toBe(2);
+      // Summary mode (default) reports padCount; pads still resolved (issue #40).
+      expect(result.padCount).toBe(2);
+      expect(result.padShapes!.length).toBeGreaterThan(0);
     }
   });
 
@@ -429,8 +451,7 @@ describe.skipIf(!hasTestcase1Fixture)("queryComponent -- testcase1 RevC contour 
     if (!isErrorResult(result)) {
       expect(result.packageRef).toMatch(/^SR0603/);
       expect(result.parsed!.pinCount).toBe(2);
-      expect(result.padRows).toBeDefined();
-      expect(result.padRows!.length).toBe(2);
+      expect(result.padCount).toBe(2);
       expect(result.padShapes!.length).toBeGreaterThan(0);
     }
   });

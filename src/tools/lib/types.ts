@@ -126,9 +126,14 @@ export interface ComponentResult {
   characteristics: Record<string, string>;
   netColumns: ["netName", "pins", "pinCount"];
   netRows: NetRow[];
+  /** Total number of pads in the land pattern (present whenever pad geometry resolved). */
+  padCount?: number;
   padShapes?: PadShape[];
+  /** Per-pin pad coordinates. Only included when detail="full" is requested. */
   padColumns?: ["pin", "x", "y", "shapeIndex"];
   padRows?: PadRow[];
+  /** True when a detail array was capped to stay within the response budget. */
+  truncated?: boolean;
 }
 
 /**
@@ -158,6 +163,16 @@ export interface ViaDrill {
 }
 
 /**
+ * Via rollup by drill type + layer: a compact count returned by default in place
+ * of the full per-via coordinate array.
+ */
+export interface ViaCount {
+  diameter: number;
+  layer: string;
+  count: number;
+}
+
+/**
  * Columnar via data: rows of [x, y, drillIndex].
  */
 export type ViaRow = [x: number, y: number, drillIndex: number];
@@ -183,15 +198,23 @@ export interface RenderNetResult {
  */
 export interface QueryNetResult {
   netName: string;
+  /** Total number of connected pins on the net (independent of any pins-map cap). */
+  pinCount: number;
   pins: Record<string, string[]>;
   routing?: NetRouteInfo[];
+  /** Compact via rollup (count per drill type + layer), returned by default. */
+  viaCounts?: ViaCount[];
+  /** Drill-type legend for viaRows. Only included when detail="full" is requested. */
   viaDrills?: ViaDrill[];
+  /** Per-via coordinates. Only included when detail="full" is requested. */
   viaColumns?: ["x", "y", "drillIndex"];
   viaRows?: ViaRow[];
   totalSegments?: number;
   totalVias?: number;
   totalTraceLength?: number;
   layersUsed: string[];
+  /** True when a detail array was capped to stay within the response budget. */
+  truncated?: boolean;
 }
 
 /**

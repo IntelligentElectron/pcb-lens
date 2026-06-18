@@ -260,8 +260,8 @@ describe("queryNet -- routing and vias", () => {
     expect(botRoute!.traceWidths).toContain(250);
   });
 
-  it("NET_A has 2 total segments and 1 via with coordinates", async () => {
-    const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
+  it("NET_A has 2 total segments and 1 via with coordinates (detail=full)", async () => {
+    const r = expectSuccess(await queryNet(inlineXml, "^NET_A$", "full"));
     expect(r.matches[0].totalSegments).toBe(2);
     expect(r.matches[0].totalVias).toBe(1);
     expect(r.matches[0].viaRows).toBeDefined();
@@ -360,6 +360,67 @@ describe.skipIf(!hasTestcase1Fixture)("queryNet -- <Line> routing on testcase1 R
     expect(top!.traceWidths).toContain(180);
     // TOP previously reported 3 segments (polylines only); <Line> segments add more.
     expect(top!.segmentCount).toBeGreaterThan(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Token-bounding: summary by default, full opt-in, hard cap (issue #41).
+// ---------------------------------------------------------------------------
+describe("queryNet -- token bounding", () => {
+  it("returns a compact via rollup and no raw via rows by default (summary)", async () => {
+    const r = expectSuccess(await queryNet(inlineXml, "^NET_A$"));
+    const net = r.matches[0];
+    expect(net.pinCount).toBe(2); // U1.1 + R1.2
+    expect(net.viaCounts).toBeDefined();
+    expect(net.viaCounts![0]).toEqual({ diameter: 300, layer: "TOP", count: 1 });
+    expect(net.totalVias).toBe(1);
+    // Raw per-via arrays are omitted in summary mode.
+    expect(net).not.toHaveProperty("viaRows");
+    expect(net).not.toHaveProperty("viaColumns");
+    expect(net).not.toHaveProperty("viaDrills");
+  });
+
+  it("includes raw via rows alongside the rollup when detail=full", async () => {
+    const r = expectSuccess(await queryNet(inlineXml, "^NET_A$", "full"));
+    const net = r.matches[0];
+    expect(net.viaCounts).toBeDefined();
+    expect(net.viaRows).toBeDefined();
+    expect(net.viaColumns).toEqual(["x", "y", "drillIndex"]);
+  });
+
+  it("caps raw via rows at the budget and flags truncated (detail=full)", async () => {
+    const VIA_COUNT = 2100; // > MAX_DETAIL_ROWS (2000)
+    const holes = Array.from(
+      { length: VIA_COUNT },
+      (_, i) => `<Hole platingStatus="VIA" x="${i}" y="${i}" diameter="0.3"/>`
+    ).join("\n        ");
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="BIGNET"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="BIGNET">
+        ${holes}
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "many-vias.xml");
+    writeFileSync(f, xml);
+
+    // Summary stays compact regardless of via count.
+    const summary = expectSuccess(await queryNet(f, "^BIGNET$"));
+    expect(summary.matches[0].totalVias).toBe(VIA_COUNT);
+    expect(summary.matches[0]).not.toHaveProperty("viaRows");
+
+    // Full mode caps the raw array but still reports the true total.
+    const full = expectSuccess(await queryNet(f, "^BIGNET$", "full"));
+    const net = full.matches[0];
+    expect(net.totalVias).toBe(VIA_COUNT);
+    expect(net.viaRows!.length).toBe(2000);
+    expect(net.truncated).toBe(true);
   });
 });
 

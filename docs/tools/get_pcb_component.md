@@ -1,10 +1,12 @@
 # get_pcb_component
 
-Look up a single component by exact refdes. Returns placement, package, BOM data, connected nets, and per-pin pad geometry.
+Look up a single component by exact refdes. Returns placement, package, BOM data, connected nets, and a pad-geometry summary (with per-pin coordinates on request).
 
 ## Description
 
-Look up a single component by exact refdes in an IPC-2581 file. Returns placement (x/y/rotation/layer/mount type), package (with parsed Cadence package details when recognizable), BOM data (description and characteristics like value, tolerance, etc.), connected nets with the component's pin names, and per-pin pad geometry. Useful for inspecting a specific IC, capacitor, or resistor.
+Look up a single component by exact refdes in an IPC-2581 file. Returns placement (x/y/rotation/layer/mount type), package (with parsed Cadence package details when recognizable), BOM data (description and characteristics like value, tolerance, etc.), connected nets with the component's pin names, and a pad-geometry summary (pad count + deduped pad shapes). Pass `detail="full"` for per-pin pad coordinates. Useful for inspecting a specific IC, capacitor, or resistor.
+
+Responses are token-bounded by design: the per-pin pad coordinate array (`padRows`) is heavy for high-pin-count parts, so it is omitted by default in favor of `padCount` + `padShapes`. Callers that need every pad coordinate pass `detail="full"`; even then the array is capped (with `truncated: true` set) to stay within a safe size.
 
 ## Input Parameters
 
@@ -12,6 +14,7 @@ Look up a single component by exact refdes in an IPC-2581 file. Returns placemen
 |-----------|------|----------|---------|-------------|
 | `file` | string | Yes | - | Path to IPC-2581 XML file |
 | `refdes` | string | Yes | - | Exact component reference designator (e.g., `'U5'`, `'C10'`, `'R22'`) |
+| `detail` | `"summary"` \| `"full"` | No | `"summary"` | `summary` returns pad count + shapes only; `full` adds per-pin pad x/y coordinates (capped) |
 
 ## Response Schema
 
@@ -20,7 +23,7 @@ interface ComponentResult {
   refdes: string;
   units: string;                    // Always "MICRON"
   packageRef: string;
-  parsed?: ParsedPackage;           // Present when the packageRef matches Cadence naming conventions
+  parsed?: ParsedPackage;           // Present when a package family can be derived from packageRef
   x: number;                        // Microns
   y: number;                        // Microns
   rotation: number;                 // Degrees counterclockwise
@@ -30,14 +33,16 @@ interface ComponentResult {
   characteristics: Record<string, string>;  // e.g. { "TOL": "1%", "VALUE": "100nF" }
   netColumns: ["netName", "pins", "pinCount"];
   netRows: NetRow[];                // [netName, pins, pinCount], sorted by netName
+  padCount?: number;                // Total pads in the land pattern (present when pad geometry resolved)
   padShapes?: PadShape[];           // Unique pad shapes, referenced by index from padRows
-  padColumns?: ["pin", "x", "y", "shapeIndex"];
-  padRows?: PadRow[];               // [pin, x, y, shapeIndex], sorted by pin
+  padColumns?: ["pin", "x", "y", "shapeIndex"]; // detail="full" only
+  padRows?: PadRow[];               // [pin, x, y, shapeIndex], sorted by pin; detail="full" only (capped)
+  truncated?: boolean;              // true when padRows was capped to the response budget
 }
 
 interface ParsedPackage {
   packageFamily: string;
-  pinCount: number;
+  pinCount?: number;                // Authoritative count from geometry; absent when it cannot be determined
   bodySize_mm?: { width: number; height: number };
   pitch_mm?: number;
   ballHeight_mm?: number;
@@ -45,7 +50,7 @@ interface ParsedPackage {
 }
 
 interface PadShape {
-  shape: "rect" | "circle";
+  shape: "rect" | "circle" | "oval" | "polygon";  // "polygon" pads are reported by bounding box
   width: number;                    // Microns
   height: number;                   // Microns
 }
@@ -90,9 +95,35 @@ Response:
     ["DDR_D0", ["B4"], 2],
     ["VCC_3V3", ["A1", "A2"], 14]
   ],
+  "padCount": 256,
   "padShapes": [
     { "shape": "circle", "width": 250, "height": 250 }
-  ],
+  ]
+}
+```
+
+**Look up an IC with per-pin pad coordinates (`detail="full"`):**
+
+Call:
+```json
+{
+  "tool": "get_pcb_component",
+  "arguments": {
+    "file": "/designs/motherboard_ipc2581.xml",
+    "refdes": "U15",
+    "detail": "full"
+  }
+}
+```
+
+Response (adds `padColumns`/`padRows` alongside `padCount`/`padShapes`):
+```json
+{
+  "refdes": "U15",
+  "units": "MICRON",
+  "packageRef": "BGA-256_17x17",
+  "padCount": 256,
+  "padShapes": [{ "shape": "circle", "width": 250, "height": 250 }],
   "padColumns": ["pin", "x", "y", "shapeIndex"],
   "padRows": [
     ["A1", 45120000, 31380000, 0],
@@ -157,8 +188,8 @@ Response:
 - Component lookup is an exact refdes match (not a pattern); there is no bulk/pattern component query. To find candidate refdes values, use `get_pcb_metadata` for component counts and design structure, or `get_pcb_net` to trace connectivity by net, then query individual refdes values here.
 - Uses multiple passes: component placement, then BOM data, then `LogicalNet` connectivity, then pad geometry from the package definition.
 - Coordinates and dimensions are normalized to microns; rotation is in degrees counterclockwise.
-- `parsed` is only present when `packageRef` matches a recognized Cadence package naming convention.
+- `parsed` is present whenever a package family can be derived from `packageRef`. Its `pinCount` is the authoritative count from pad/net geometry (not the case-size digits in the footprint name); it is omitted only when no count can be determined.
 - `netRows` lists each net the component connects to, the component's pins on that net, and the net's total pin count; rows are sorted by net name.
-- `padShapes`/`padColumns`/`padRows` are only present when the package definition and pad geometry can be resolved; `padRows` are sorted by pin.
+- `padCount` and `padShapes` are present whenever pad geometry resolves. The per-pin `padColumns`/`padRows` coordinates are returned only with `detail="full"`, sorted by pin, and capped (with `truncated: true`) to keep responses token-bounded. Pad shapes defined as a polygon/contour are reported by their bounding box (`shape: "polygon"`).
 - The `characteristics` record contains key-value pairs from the BOM (varies by design, common keys include VALUE, TOL, VOLTAGE).
 - `mountType` and `description` may be absent if the IPC-2581 file omits them.
