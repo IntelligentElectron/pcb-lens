@@ -12,6 +12,8 @@ const BEAGLEBONE = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
 const hasBeagleBoneFixture = existsSync(BEAGLEBONE);
 const TESTCASE1_REVC = path.join(FIXTURE_DIR, "testcase1-RevC.xml");
 const hasTestcase1Fixture = existsSync(TESTCASE1_REVC);
+const PARALLELLA_REVB = path.join(FIXTURE_DIR, "parallella-RevB.xml");
+const hasParallellaFixture = existsSync(PARALLELLA_REVB);
 
 // ---------------------------------------------------------------------------
 // Inline fixture -- covers LogicalNet pins, PhyNetPoint layers, LayerFeature
@@ -362,6 +364,99 @@ describe.skipIf(!hasTestcase1Fixture)("queryNet -- <Line> routing on testcase1 R
     expect(top!.traceWidths).toContain(180);
     // TOP previously reported 3 segments (polylines only); <Line> segments add more.
     expect(top!.segmentCount).toBeGreaterThan(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Poured copper (issue #39). Nets are frequently filled as <Contour>/<Polygon>
+// shapes (with a <FillDescRef>) rather than centerline <Polyline>/<Line>
+// conductors -- modern Cadence/Allegro pours even short signal traces this way.
+// Such a net is fully routed, so it must report routing on its copper layers; a
+// filled shape has no centerline, so width/length are absent (not fabricated).
+// A <Polygon> inside a <Pad> is a pad outline, not routing, and must be ignored.
+// ---------------------------------------------------------------------------
+describe("queryNet -- poured copper (Contour/Polygon) routing", () => {
+  const POUR_XML = `<IPC-2581>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="POUR1">
+    <PinRef pin="1" componentRef="U1"/>
+    <PinRef pin="2" componentRef="U2"/>
+  </LogicalNet>
+  <LogicalNet name="PADONLY">
+    <PinRef pin="1" componentRef="U3"/>
+  </LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="POUR1">
+        <Features>
+          <Contour>
+            <Polygon>
+              <PolyBegin x="0" y="0"/>
+              <PolyStepSegment x="1" y="0"/>
+              <PolyStepSegment x="1" y="1"/>
+              <PolyStepSegment x="0" y="0"/>
+              <FillDescRef id="SOLID_FILL"/>
+            </Polygon>
+          </Contour>
+        </Features>
+      </Set>
+      <Set net="PADONLY">
+        <Pad padstackDefRef="PS1">
+          <Location x="5" y="5"/>
+          <Polygon>
+            <PolyBegin x="5" y="5"/>
+            <PolyStepSegment x="6" y="5"/>
+            <PolyStepSegment x="6" y="6"/>
+            <PolyStepSegment x="5" y="5"/>
+          </Polygon>
+          <PinRef pin="1" componentRef="U3"/>
+        </Pad>
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+
+  let pourXml: string;
+  beforeAll(() => {
+    pourXml = path.join(tempDir, "poured.xml");
+    writeFileSync(pourXml, POUR_XML);
+  });
+
+  it("reports a poured net as routed on its copper layer, without fabricating width/length", async () => {
+    const r = expectSuccess(await queryNet(pourXml, "^POUR1$"));
+    const net = r.matches[0];
+    expect(net.routing).toBeDefined();
+    const top = net.routing!.find((rt) => rt.layerName === "TOP");
+    expect(top).toBeDefined();
+    expect(top!.segmentCount).toBe(1);
+    // A filled shape has no centerline: width/length are not invented.
+    expect(top!.traceWidths).toEqual([]);
+    expect(top!.traceLength).toBe(0);
+    expect(net.layersUsed).toContain("TOP");
+  });
+
+  it("does not count a <Polygon> inside a <Pad> as routing", async () => {
+    const r = expectSuccess(await queryNet(pourXml, "^PADONLY$"));
+    const net = r.matches[0];
+    // The only polygon for this net is a pad outline, so the net has no routing.
+    expect(net.routing).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real-fixture regression for poured copper (issue #39). On parallella RevB the
+// 2-pin net N22934179 is routed entirely as a <Contour><Polygon> fill, so before
+// the fix it returned empty routing despite being fully routed. It must now report
+// routing on its copper layer.
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasParallellaFixture)("queryNet -- poured copper on parallella RevB", () => {
+  it("returns routing for the poured 2-pin net N22934179", async () => {
+    const r = expectSuccess(await queryNet(PARALLELLA_REVB, "^N22934179$"));
+    const net = r.matches[0];
+    expect(net.routing).toBeDefined();
+    expect(net.routing!.length).toBeGreaterThan(0);
+    expect(net.routing!.some((rt) => rt.segmentCount > 0)).toBe(true);
   });
 });
 

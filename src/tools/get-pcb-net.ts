@@ -131,6 +131,7 @@ export const queryNet = async (
   let currentSetHasConductor = false;
   let currentSetLineDescId: string | undefined;
   let currentSetInlineWidth: number | undefined;
+  let inPad = false;
   let inPolyline = false;
   let polyPoints: { x: number; y: number }[] = [];
   let polyLength = 0;
@@ -149,11 +150,17 @@ export const queryNet = async (
       currentSetHasConductor = false;
       currentSetLineDescId = undefined;
       currentSetInlineWidth = undefined;
+      inPad = false;
       polyLength = 0;
     }
 
     if (insideMatchedSet) {
       const acc = accumulators.get(currentSetNetName)!;
+
+      // Track pad context so custom pad outlines (which also use <Polygon>) are
+      // not miscounted as routing copper below.
+      if (line.includes("<Pad ")) inPad = true;
+      if (line.includes("</Pad>")) inPad = false;
 
       if (line.includes("<PinRef ")) {
         const compRef = attr(line, "componentRef");
@@ -205,6 +212,18 @@ export const queryNet = async (
           const dy = (ey - sy) * factor;
           polyLength += Math.sqrt(dx * dx + dy * dy);
         }
+      }
+
+      // Poured copper: nets are frequently filled as <Contour>/<Polygon> shapes
+      // (carrying a <FillDescRef>) rather than centerline <Polyline>/<Line>
+      // conductors. Modern Cadence/Allegro pours even short signal traces and all
+      // planes this way, so such nets previously reported empty routing despite
+      // being fully routed. Count the shape as routing presence on the layer so the
+      // net is reported routed; a filled shape has no centerline width or length, so
+      // we record only the layer + a segment and leave traceWidths/traceLength empty.
+      // The inPad guard avoids counting custom pad outlines as routing copper.
+      if (!inPad && (line.includes("<Contour") || line.includes("<Polygon"))) {
+        currentSetHasConductor = true;
       }
 
       if (line.includes("<LineDescRef ")) {
@@ -357,7 +376,7 @@ export const register = (server: McpServer): void => {
     "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), and a compact via rollup (count per drill type). Pass detail='full' for raw per-via coordinates (capped). Rejects patterns that match all nets.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing reports the layers a net has copper on and a per-layer segment count; trace widths and lengths are reported for centerline-routed copper (Polyline/Line) and may be absent for shape/plane-routed (poured) copper, which has no centerline. Pass detail='full' for raw per-via coordinates (capped). Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
