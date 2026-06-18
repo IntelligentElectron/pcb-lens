@@ -1,10 +1,10 @@
 # get_pcb_net
 
-Query nets by name pattern. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), a compact via rollup, and layers used.
+Query nets by name pattern. Returns grouped connected pins, per-layer routing (segment counts, plus trace widths and lengths for centerline-routed copper), a compact via rollup, and layers used.
 
 ## Description
 
-Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), and a compact via rollup (count per drill type). Pass `detail="full"` for raw per-via coordinates (capped). Rejects patterns that match all nets.
+Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing reports the layers a net has copper on and a per-layer segment count; trace widths and lengths are reported for centerline-routed copper (Polyline/Line) and may be absent for shape/plane-routed (poured) copper, which has no centerline. Pass `detail="full"` for raw per-via coordinates (capped). Rejects patterns that match all nets.
 
 Finds all nets whose names match the given regex pattern, then collects connectivity and routing data for each match. Pin connectivity is grouped by component refdes to reduce response size. Empty routing/via fields and zero-value summary fields are omitted to keep payloads compact.
 
@@ -47,9 +47,9 @@ interface QueryNetResult {
 
 interface NetRouteInfo {
   layerName: string;
-  traceWidths: number[]; // Unique widths in microns
-  segmentCount: number;
-  traceLength: number;   // microns
+  traceWidths: number[]; // Unique widths in microns; empty for shape/plane-routed (poured) copper
+  segmentCount: number;  // Number of conductor-bearing <Set> elements on the layer (centerline traces and/or poured shapes); a Set with multiple shapes counts once
+  traceLength: number;   // microns; 0 for poured copper, which has no centerline length
 }
 
 interface ViaCount {
@@ -208,7 +208,7 @@ Response (`viaColumns`/`viaRows` now present; each `viaRows` entry's `drillIndex
 - Uses three passes: (1) match nets and collect LogicalNet/PhyNet data, (2) build a LineDesc dictionary, (3) collect routing and vias from LayerFeature sections
 - Reference layers (`REF-route`, `REF-both`) are skipped to avoid counting template geometry
 - `traceWidths` contains unique widths found on each layer (not one entry per segment)
-- Routing is parsed from both `<Polyline>` and `<Line>` conductor segments
+- Routing is parsed from `<Polyline>` and `<Line>` centerline conductors and from poured copper shapes (`<Contour>`/`<Polygon>`). Centerline conductors contribute trace widths and lengths; poured shapes contribute only layer presence and a segment count (no centerline width or length), so a net poured as filled copper still reports as routed
 - Vias are collected from `Hole` elements with `platingStatus="VIA"`. By default they are summarized as `viaCounts` (count per unique drill type + layer). With `detail="full"`, `viaRows` carry per-via coordinates and each row's `drillIndex` references `viaCounts` by position; the raw `viaRows` array is capped (with `truncated: true`) to keep responses token-bounded
 - On extreme-fanout nets the connected-pin list is capped (to at most a fixed number of pins) before being grouped into the `pins` map, setting `truncated: true`; `pinCount` always reports the true total connected-pin count
 - All physical values are normalized to microns
