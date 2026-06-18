@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-06-17
+
+### Fixed
+
+- `get_pcb_component` no longer reports a wrong `parsed.pinCount` for two-terminal chip passives. The count was derived from the digits after the family prefix in the package name, which for `RES`/`CAP`/`IND`/`INDP` chip parts is the imperial case-size code (so `RES0402` reported `402` instead of `2`). Pin count is now derived authoritatively from pad/net geometry; the package name is trusted only for families where the number genuinely encodes a pin count. `parsed` is also emitted consistently, including when the package name has no trailing digits (#38)
+- `get_pcb_component` now returns pad geometry for chip-passive and other footprints that previously came back empty. `extractShapes` handles oval, rounded/chamfered/cornered rectangle, and polygon/contour pad primitives (contours reported by bounding box), and pads can resolve their shape through a `padstackDefRef` when there is no inline primitive (#40)
+- `get_pcb_net` now returns trace routing for nets routed with `<Line>` conductor segments, not just `<Polyline>`. Previously a net routed entirely with `<Line>` elements returned no per-layer trace widths, lengths, or segment counts at all (#39)
+
+### Changed
+
+- **Tool responses are now token-bounded, which changes the default output shape** (#41). Per-coordinate arrays are summarized by default so a single query can no longer blow the caller's context:
+  - `get_pcb_net` returns a compact `viaCounts` rollup (count per drill type + layer) by default; the raw per-via `viaRows`/`viaColumns` are now returned only with `detail="full"`. The redundant `viaDrills` field was removed — a `viaRows` entry's `drillIndex` references `viaCounts` by position. A `pinCount` total is now included.
+  - `get_pcb_component` returns `padCount` + deduped `padShapes` by default; the per-pin `padRows`/`padColumns` are now returned only with `detail="full"`.
+  - Both tools accept a new `detail` parameter (`"summary"` default, or `"full"`). Even in `full` mode the raw coordinate arrays are capped and the response is flagged `truncated: true`, so no response can exceed a safe size.
+
 ## [1.0.1] - 2026-06-17
 
 ### Fixed
