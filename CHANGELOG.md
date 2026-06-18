@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-06-17
+
+### Fixed
+
+- `get_pcb_net` now reports routing for nets routed as filled copper shapes (`<Contour>`/`<Polygon>`), not just centerline conductors (`<Polyline>`/`<Line>`). Modern Cadence/Allegro pours even short signal traces and all planes as filled copper, so those nets previously returned empty `routing` (only `layersUsed` populated) despite being fully routed. A poured shape is now recorded as routing presence on its layer (the layer plus a per-`<Set>` segment count); a filled shape has no centerline, so `traceWidths`/`traceLength` are left empty rather than fabricated, and a `<Contour>` inside a `<Pad>` is not counted as routing (#39)
+
+### Changed
+
+- The opt-in `detail="full"` coordinate cap is tightened so even a full response stays within a typical tool-response budget (#41 follow-up). The single `MAX_DETAIL_ROWS = 2000` cap was split into `MAX_COORD_ROWS = 300` for the heavy per-coordinate arrays (`viaRows`/`padRows`) and `MAX_PIN_ROWS = 2000` for the connectivity pin list. A `detail="full"` query on the largest net now returns at most 300 coordinate rows (~18 KB) instead of 2000 (~93 KB), with `truncated: true` and the true totals preserved, while high-fanout connectivity (e.g. a 1265-pin GND) is kept under the separate, higher pin cap
+
 ## [1.0.2] - 2026-06-17
 
 ### Fixed
