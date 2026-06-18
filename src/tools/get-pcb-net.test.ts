@@ -655,6 +655,51 @@ describe("queryNet -- token bounding", () => {
     expect(perIndex[0]).toBeGreaterThanOrEqual(perIndex[2] * 4);
   });
 
+  it("distributes the leftover budget when spans don't divide evenly (detail=full)", async () => {
+    // 500/300/100 vias (900 total) with cap 300: the proportional floors are
+    // 166/100/33 = 299, so one row is left over and must be handed to the span
+    // with the largest fractional remainder (the 500-via span). If the remainder
+    // were dropped, the sample would be 299 rows; asserting an exact full budget
+    // proves the largest-remainder distribution ran.
+    const spans = [
+      { dia: "0.3", n: 500 },
+      { dia: "0.5", n: 300 },
+      { dia: "0.7", n: 100 },
+    ];
+    const holes = spans
+      .flatMap((s, si) =>
+        Array.from(
+          { length: s.n },
+          (_, i) => `<Hole platingStatus="VIA" x="${si * 1000 + i}" y="0" diameter="${s.dia}"/>`
+        )
+      )
+      .join("\n        ");
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="UNEVEN"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="UNEVEN">
+        ${holes}
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "uneven-spans.xml");
+    writeFileSync(f, xml);
+
+    const net = expectSuccess(await queryNet(f, "^UNEVEN$", "full")).matches[0];
+    expect(net.totalVias).toBe(900);
+    // Exactly the full budget: the leftover row was distributed, not dropped.
+    expect(net.viaRows!.length).toBe(MAX_COORD_ROWS);
+    expect(net.truncated).toBe(true);
+    const perIndex = [0, 0, 0];
+    for (const [, , drillIndex] of net.viaRows!) perIndex[drillIndex]++;
+    expect(perIndex.every((c) => c > 0)).toBe(true);
+  });
+
   it("caps the pins map on extreme-fanout nets but reports the true pinCount", async () => {
     const PIN_COUNT = MAX_PIN_ROWS + 100;
     // One pin each on a distinct refdes -> > MAX_PIN_ROWS refdes entries.

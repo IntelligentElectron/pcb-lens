@@ -359,10 +359,8 @@ export const queryNet = async (
         // included only when the caller opts into detail="full" (capped).
         result.viaCounts = viaCounts;
         if (detail === "full") {
-          // Stratify the cap across drill spans (the row's drillIndex) so the
-          // truncated sample spans every via type rather than being taken
-          // entirely from whichever span appears first in the file. The compact
-          // viaCounts rollup still carries the true per-span totals.
+          // Stratify across drill spans (row's drillIndex) so the truncated
+          // sample spans every via type, not just the first span in the file.
           const capped = capRowsStratified(viaRows, MAX_COORD_ROWS, (row) => row[2]);
           result.viaColumns = ["x", "y", "drillIndex"];
           result.viaRows = capped.rows;

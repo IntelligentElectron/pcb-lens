@@ -56,18 +56,12 @@ export const capDetailRows = <T>(rows: T[], cap: number): { rows: T[]; truncated
 
 /**
  * Cap grouped coordinate rows to `cap`, apportioning the budget across groups in
- * proportion to each group's share of the total rather than taking the first
- * `cap` rows. A plain head-slice biases the truncated sample toward whichever
- * group appears first in the file (e.g. all vias from one drill span); this
- * spreads the sample across every group so a `detail="full"` response is
- * representative of the whole net.
- *
- * The budget is apportioned with the largest-remainder (Hamilton) method: each
- * group gets `floor(cap * groupSize / total)` rows, then the leftover budget
- * goes to the groups with the largest fractional remainders. Rows keep their
- * original order within a group, and groups are emitted in first-appearance
- * order, so the output is deterministic. `truncated` is true whenever any row
- * was dropped. With a single group this reduces to a head-slice.
+ * proportion to each group's share of the total (largest-remainder / Hamilton
+ * method) rather than head-slicing, which would bias the sample toward whichever
+ * group appears first in the file (e.g. all vias from one drill span). Order is
+ * preserved within a group and across groups, so the result is deterministic;
+ * `truncated` is true whenever a row was dropped, and a single group reduces to
+ * a head-slice.
  */
 export const capRowsStratified = <T>(
   rows: T[],
