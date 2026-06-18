@@ -180,9 +180,13 @@ describe("queryNet -- layer extraction from PhyNetPoint", () => {
 
   it("includes layers from PhyNetPoint only (no routing) for PWR_VCC", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^PWR_VCC$"));
-    const layers = r.matches[0].layersUsed;
-    expect(layers).toContain("INNER1");
-    expect(layers).toContain("INNER2");
+    const net = r.matches[0];
+    // PhyNetPoint populates layersUsed; with no conductor geometry, routing stays empty.
+    expect(net.layersUsed).toContain("INNER1");
+    expect(net.layersUsed).toContain("INNER2");
+    expect(net.routing).toBeUndefined();
+    expect(net.totalSegments).toBeUndefined();
+    expect(net.totalTraceLength).toBeUndefined();
   });
 
   it("includes layers from both PhyNetPoint and routing for NET_B", async () => {
