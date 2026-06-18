@@ -648,11 +648,52 @@ describe("queryNet -- token bounding", () => {
     expect(perIndex[0]).toBeGreaterThan(0);
     expect(perIndex[1]).toBeGreaterThan(0);
     expect(perIndex[2]).toBeGreaterThan(0);
-    expect(perIndex[0] + perIndex[1] + perIndex[2]).toBe(MAX_COORD_ROWS);
-    // Roughly proportional to span size (600:300:100): larger span -> more rows.
-    expect(perIndex[0]).toBeGreaterThan(perIndex[1]);
-    expect(perIndex[1]).toBeGreaterThan(perIndex[2]);
-    expect(perIndex[0]).toBeGreaterThanOrEqual(perIndex[2] * 4);
+    // Exact Hamilton allocation: shares 0.6/0.3/0.1 of the cap. At cap 300 the
+    // quotas are integers (180/90/30), so there is no remainder and the split is
+    // exact. Asserting exact counts (not just a ratio) makes an algorithm
+    // regression visible rather than masked by slack.
+    expect(perIndex).toEqual([MAX_COORD_ROWS * 0.6, MAX_COORD_ROWS * 0.3, MAX_COORD_ROWS * 0.1]);
+  });
+
+  it("may drop a span below its proportional share but keeps it in the rollup (detail=full)", async () => {
+    // 1 via on one drill (index 0) + 999 on another (index 1), cap 300. The
+    // 1-via span's share (0.3 rows) floors to 0 and loses the single leftover
+    // row to the larger span's bigger remainder, so it gets no rows in the
+    // sample. This is the documented boundary of the Hamilton method; viaCounts
+    // still reports the dropped span's true total.
+    const holes = [
+      `<Hole platingStatus="VIA" x="0" y="0" diameter="0.3"/>`,
+      ...Array.from(
+        { length: 999 },
+        (_, i) => `<Hole platingStatus="VIA" x="${i + 1}" y="0" diameter="0.5"/>`
+      ),
+    ].join("\n        ");
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="TINYSPAN"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="TINYSPAN">
+        ${holes}
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "tiny-span.xml");
+    writeFileSync(f, xml);
+
+    const net = expectSuccess(await queryNet(f, "^TINYSPAN$", "full")).matches[0];
+    // Both spans are preserved in the rollup with their true totals...
+    expect(net.viaCounts!.map((c) => c.count)).toEqual([1, 999]);
+    expect(net.viaRows!.length).toBe(MAX_COORD_ROWS);
+    expect(net.truncated).toBe(true);
+    // ...but the 1-via span gets zero rows in the truncated sample.
+    const perIndex = [0, 0];
+    for (const [, , drillIndex] of net.viaRows!) perIndex[drillIndex]++;
+    expect(perIndex[0]).toBe(0);
+    expect(perIndex[1]).toBe(MAX_COORD_ROWS);
   });
 
   it("distributes the leftover budget when spans don't divide evenly (detail=full)", async () => {

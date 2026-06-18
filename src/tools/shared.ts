@@ -61,7 +61,10 @@ export const capDetailRows = <T>(rows: T[], cap: number): { rows: T[]; truncated
  * group appears first in the file (e.g. all vias from one drill span). Order is
  * preserved within a group and across groups, so the result is deterministic;
  * `truncated` is true whenever a row was dropped, and a single group reduces to
- * a head-slice.
+ * a head-slice. A group whose proportional share rounds below one row may get
+ * zero rows (a property of the method), so this does not guarantee every group
+ * is represented; callers needing the true per-group totals should read those
+ * from the rollup (e.g. `viaCounts`), which is unaffected by this cap.
  */
 export const capRowsStratified = <T>(
   rows: T[],
