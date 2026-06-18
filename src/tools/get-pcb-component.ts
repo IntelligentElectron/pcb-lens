@@ -18,16 +18,19 @@ import {
 import { parsePackageRef } from "./lib/package-parser.js";
 import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js";
 import {
+  capDetailRows,
   extractMicronFactor,
   extractMicronFactorFromLines,
   formatResult,
   validateFile,
+  type Detail,
 } from "./shared.js";
 import { withTelemetry } from "../telemetry/index.js";
 
 export const queryComponent = async (
   filePath: string,
-  refdes: string
+  refdes: string,
+  detail: Detail = "summary"
 ): Promise<ComponentResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
@@ -268,6 +271,20 @@ export const queryComponent = async (
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([netName, data]) => [netName, data.componentPins, data.pinCount]);
 
+  // Pad geometry: always surface the deduped shapes and a pad count. The raw
+  // per-pin coordinate array (padRows) is the heavy part, so it is included only
+  // when the caller opts into detail="full", and even then capped to the budget.
+  let padFields: Partial<ComponentResult> = {};
+  if (padShapes && padRows) {
+    padFields = { padCount: padRows.length, padShapes };
+    if (detail === "full") {
+      const capped = capDetailRows(padRows);
+      padFields.padColumns = ["pin", "x", "y", "shapeIndex"];
+      padFields.padRows = capped.rows;
+      if (capped.truncated) padFields.truncated = true;
+    }
+  }
+
   return {
     refdes: p.refdes,
     units: "MICRON",
@@ -282,9 +299,7 @@ export const queryComponent = async (
     characteristics,
     netColumns: ["netName", "pins", "pinCount"],
     netRows,
-    ...(padShapes && padRows
-      ? { padShapes, padColumns: ["pin", "x", "y", "shapeIndex"] as const, padRows }
-      : {}),
+    ...padFields,
   };
 };
 
@@ -293,16 +308,22 @@ export const register = (server: McpServer): void => {
     "get_pcb_component",
     {
       description:
-        "Look up a single component by exact refdes in an IPC-2581 file. Returns placement, package, BOM data, connected nets with pin names, and per-pin pad geometry.",
+        "Look up a single component by exact refdes in an IPC-2581 file. Returns placement, package, BOM data, connected nets with pin names, and a pad-geometry summary (pad count + deduped pad shapes). Pass detail='full' for per-pin pad coordinates (capped).",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         refdes: z
           .string()
           .describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
+        detail: z
+          .enum(["summary", "full"])
+          .default("summary")
+          .describe(
+            "Response detail. 'summary' (default) returns pad count + shapes only; 'full' adds per-pin pad x/y coordinates (capped to stay within the response budget)."
+          ),
       },
     },
-    withTelemetry("get_pcb_component", async ({ file, refdes }) => {
-      const result = await queryComponent(file, refdes);
+    withTelemetry("get_pcb_component", async ({ file, refdes, detail }) => {
+      const result = await queryComponent(file, refdes, detail);
       return formatResult(result);
     })
   );

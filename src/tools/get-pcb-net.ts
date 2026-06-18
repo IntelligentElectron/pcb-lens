@@ -4,6 +4,7 @@ import type {
   ErrorResult,
   QueryNetResult,
   NetRouteInfo,
+  ViaCount,
   ViaDrill,
   ViaRow,
   QueryNetsResult,
@@ -12,19 +13,22 @@ import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
 import {
   addPin,
   buildLineDescDict,
+  capDetailRows,
   extractMicronFactor,
   formatResult,
   groupPinsByRefdes,
   makeAccumulator,
   validateFile,
   validatePattern,
+  type Detail,
   type NetAccumulator,
 } from "./shared.js";
 import { withTelemetry } from "../telemetry/index.js";
 
 export const queryNet = async (
   filePath: string,
-  pattern: string
+  pattern: string,
+  detail: Detail = "summary"
 ): Promise<QueryNetsResult | ErrorResult> => {
   const err = await validateFile(filePath);
   if (err) return err;
@@ -271,9 +275,9 @@ export const queryNet = async (
         });
       }
 
-      // Deduplicate drill types, build columnar via rows
       const drillList: ViaDrill[] = [];
       const drillIdx = new Map<string, number>();
+      const drillCounts: number[] = [];
       const viaRows: ViaRow[] = [];
       for (const v of acc.vias) {
         const key = `${v.diameter}:${v.layer}`;
@@ -281,10 +285,17 @@ export const queryNet = async (
         if (idx === undefined) {
           idx = drillList.length;
           drillList.push({ diameter: v.diameter, layer: v.layer });
+          drillCounts.push(0);
           drillIdx.set(key, idx);
         }
+        drillCounts[idx]++;
         viaRows.push([v.x, v.y, idx]);
       }
+      const viaCounts: ViaCount[] = drillList.map((d, i) => ({
+        diameter: d.diameter,
+        layer: d.layer,
+        count: drillCounts[i],
+      }));
 
       const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
       const totalVias = viaRows.length;
@@ -295,19 +306,35 @@ export const queryNet = async (
       for (const r of routing) layerSet.add(r.layerName);
       const layersUsed = [...layerSet].sort();
 
+      // Connected pins. The grouped map is the core connectivity payload, but it
+      // grows without bound on huge-fanout nets (power/ground). Cap the flat pin
+      // list before grouping so we never allocate or return more than the budget,
+      // while pinCount still reports the true total.
+      const pinCount = acc.pins.length;
+      const cappedPins = capDetailRows(acc.pins);
+      const pins = groupPinsByRefdes(cappedPins.rows);
+
       const result: QueryNetResult = {
         netName,
-        pins: groupPinsByRefdes(acc.pins),
+        pinCount,
+        pins,
         layersUsed,
       };
+      if (cappedPins.truncated) result.truncated = true;
 
       if (routing.length > 0) {
         result.routing = routing;
       }
-      if (viaRows.length > 0) {
-        result.viaDrills = drillList;
-        result.viaColumns = ["x", "y", "drillIndex"];
-        result.viaRows = viaRows;
+      if (viaCounts.length > 0) {
+        // Compact rollup is returned by default; raw per-via coordinates are
+        // included only when the caller opts into detail="full" (capped).
+        result.viaCounts = viaCounts;
+        if (detail === "full") {
+          const capped = capDetailRows(viaRows);
+          result.viaColumns = ["x", "y", "drillIndex"];
+          result.viaRows = capped.rows;
+          if (capped.truncated) result.truncated = true;
+        }
       }
       if (totalSegments > 0) {
         result.totalSegments = totalSegments;
@@ -330,16 +357,22 @@ export const register = (server: McpServer): void => {
     "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), and via information. Rejects patterns that match all nets.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, routing per layer (trace widths, trace lengths, segment counts), and a compact via rollup (count per drill type). Pass detail='full' for raw per-via coordinates (capped). Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
           .string()
           .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
+        detail: z
+          .enum(["summary", "full"])
+          .default("summary")
+          .describe(
+            "Response detail. 'summary' (default) returns via counts only; 'full' adds raw per-via x/y coordinates (capped to stay within the response budget)."
+          ),
       },
     },
-    withTelemetry("get_pcb_net", async ({ file, pattern }) => {
-      const result = await queryNet(file, pattern);
+    withTelemetry("get_pcb_net", async ({ file, pattern, detail }) => {
+      const result = await queryNet(file, pattern, detail);
       return formatResult(result);
     })
   );

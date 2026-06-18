@@ -15,6 +15,31 @@ export const formatResult = (result: unknown): { content: { type: "text"; text: 
 });
 
 // =============================================================================
+// Response Detail / Token Budget
+//
+// These tools are meant to be a token-efficient way for an agent to inspect a
+// layout, so no single response should be large enough to blow the caller's
+// context. By default, heavy per-coordinate arrays (per-via, per-pad) are
+// summarized into compact rollups; callers that genuinely need every coordinate
+// pass detail="full". As a hard backstop, even "full" responses cap the raw
+// arrays at MAX_DETAIL_ROWS and flag the result as truncated.
+// =============================================================================
+
+export type Detail = "summary" | "full";
+
+export const MAX_DETAIL_ROWS = 2000;
+
+/**
+ * Cap a detail array to MAX_DETAIL_ROWS. Returns the (possibly sliced) array and
+ * whether it was truncated, so callers can surface an explicit `truncated` flag
+ * alongside the true total count.
+ */
+export const capDetailRows = <T>(rows: T[]): { rows: T[]; truncated: boolean } =>
+  rows.length > MAX_DETAIL_ROWS
+    ? { rows: rows.slice(0, MAX_DETAIL_ROWS), truncated: true }
+    : { rows, truncated: false };
+
+// =============================================================================
 // File Validation
 // =============================================================================
 

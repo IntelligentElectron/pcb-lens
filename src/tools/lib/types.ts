@@ -126,9 +126,14 @@ export interface ComponentResult {
   characteristics: Record<string, string>;
   netColumns: ["netName", "pins", "pinCount"];
   netRows: NetRow[];
+  /** Total number of pads in the land pattern (present whenever pad geometry resolved). */
+  padCount?: number;
   padShapes?: PadShape[];
+  /** Per-pin pad coordinates. Only included when detail="full" is requested. */
   padColumns?: ["pin", "x", "y", "shapeIndex"];
   padRows?: PadRow[];
+  /** True when a detail array was capped to stay within the response budget. */
+  truncated?: boolean;
 }
 
 /**
@@ -150,11 +155,22 @@ export interface NetRouteInfo {
 }
 
 /**
- * Unique via drill type, referenced by index from via rows.
+ * Unique via drill type. Internal only: used while deduplicating drill types to
+ * build `viaCounts` and the `viaRows` drillIndex; it is not part of any response.
  */
 export interface ViaDrill {
   diameter: number;
   layer: string;
+}
+
+/**
+ * Via rollup by drill type + layer: a compact count returned by default in place
+ * of the full per-via coordinate array.
+ */
+export interface ViaCount {
+  diameter: number;
+  layer: string;
+  count: number;
 }
 
 /**
@@ -183,15 +199,28 @@ export interface RenderNetResult {
  */
 export interface QueryNetResult {
   netName: string;
+  /** Total number of connected pins on the net (independent of any pins-map cap). */
+  pinCount: number;
   pins: Record<string, string[]>;
   routing?: NetRouteInfo[];
-  viaDrills?: ViaDrill[];
+  /**
+   * Compact via rollup (count per drill type + layer), returned by default. In
+   * detail="full" mode, viaRows[].drillIndex references this array by position.
+   */
+  viaCounts?: ViaCount[];
+  /** Per-via coordinates. Only included when detail="full" is requested. */
   viaColumns?: ["x", "y", "drillIndex"];
   viaRows?: ViaRow[];
   totalSegments?: number;
   totalVias?: number;
   totalTraceLength?: number;
   layersUsed: string[];
+  /**
+   * True when data was truncated to stay within the response budget: either the
+   * detail="full" viaRows array or the connected-pin list (capped before being
+   * grouped into `pins`). totalVias / pinCount still report the true totals.
+   */
+  truncated?: boolean;
 }
 
 /**
