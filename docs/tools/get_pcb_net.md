@@ -48,7 +48,7 @@ interface QueryNetResult {
 interface NetRouteInfo {
   layerName: string;
   traceWidths: number[]; // Unique widths in microns; empty for shape/plane-routed (poured) copper
-  segmentCount: number;  // Count of conductor features on the layer (centerline traces + poured shapes)
+  segmentCount: number;  // Number of conductor-bearing <Set> elements on the layer (centerline traces and/or poured shapes); a Set with multiple shapes counts once
   traceLength: number;   // microns; 0 for poured copper, which has no centerline length
 }
 

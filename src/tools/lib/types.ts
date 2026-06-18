@@ -150,6 +150,8 @@ export interface NetPin {
 export interface NetRouteInfo {
   layerName: string;
   traceWidths: number[];
+  // Number of conductor-bearing <Set> elements on the layer (centerline traces
+  // and/or poured shapes); a Set with multiple shapes counts once.
   segmentCount: number;
   traceLength: number;
 }

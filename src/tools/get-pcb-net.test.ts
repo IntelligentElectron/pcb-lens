@@ -385,9 +385,32 @@ describe("queryNet -- poured copper (Contour/Polygon) routing", () => {
   <LogicalNet name="PADONLY">
     <PinRef pin="1" componentRef="U3"/>
   </LogicalNet>
+  <LogicalNet name="MULTIPOUR">
+    <PinRef pin="1" componentRef="U4"/>
+  </LogicalNet>
   <Step>
     <PhyNetGroup/>
     <LayerFeature layerRef="TOP">
+      <Set net="MULTIPOUR">
+        <Features>
+          <Contour>
+            <Polygon>
+              <PolyBegin x="0" y="0"/>
+              <PolyStepSegment x="1" y="0"/>
+              <PolyStepSegment x="1" y="1"/>
+              <PolyStepSegment x="0" y="0"/>
+            </Polygon>
+          </Contour>
+          <Contour>
+            <Polygon>
+              <PolyBegin x="3" y="3"/>
+              <PolyStepSegment x="4" y="3"/>
+              <PolyStepSegment x="4" y="4"/>
+              <PolyStepSegment x="3" y="3"/>
+            </Polygon>
+          </Contour>
+        </Features>
+      </Set>
       <Set net="POUR1">
         <Features>
           <Contour>
@@ -441,6 +464,15 @@ describe("queryNet -- poured copper (Contour/Polygon) routing", () => {
     const net = r.matches[0];
     // The only polygon for this net is a pad outline, so the net has no routing.
     expect(net.routing).toBeUndefined();
+  });
+
+  it("counts multiple poured shapes in one <Set> as a single segment", async () => {
+    const r = expectSuccess(await queryNet(pourXml, "^MULTIPOUR$"));
+    const net = r.matches[0];
+    const top = net.routing!.find((rt) => rt.layerName === "TOP");
+    expect(top).toBeDefined();
+    // segmentCount is Set-level: two <Contour> shapes in one <Set> count once.
+    expect(top!.segmentCount).toBe(1);
   });
 });
 

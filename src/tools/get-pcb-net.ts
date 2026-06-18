@@ -221,7 +221,10 @@ export const queryNet = async (
       // being fully routed. Count the shape as routing presence on the layer so the
       // net is reported routed; a filled shape has no centerline width or length, so
       // we record only the layer + a segment and leave traceWidths/traceLength empty.
-      // The inPad guard avoids counting custom pad outlines as routing copper.
+      // The inPad guard avoids counting custom pad outlines as routing copper. We do
+      // not inspect the <FillDescRef>, so an unfilled boundary contour (if present)
+      // would also be counted as routing copper; this has not been observed in
+      // practice but is worth noting if richer shape handling is added later.
       if (!inPad && (line.includes("<Contour") || line.includes("<Polygon"))) {
         currentSetHasConductor = true;
       }
