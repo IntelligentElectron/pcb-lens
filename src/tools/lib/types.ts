@@ -155,7 +155,8 @@ export interface NetRouteInfo {
 }
 
 /**
- * Unique via drill type, referenced by index from via rows.
+ * Unique via drill type. Internal only: used while deduplicating drill types to
+ * build `viaCounts` and the `viaRows` drillIndex; it is not part of any response.
  */
 export interface ViaDrill {
   diameter: number;

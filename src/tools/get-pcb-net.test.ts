@@ -267,8 +267,9 @@ describe("queryNet -- routing and vias", () => {
     expect(r.matches[0].totalVias).toBe(1);
     expect(r.matches[0].viaRows).toBeDefined();
     expect(r.matches[0].viaRows![0]).toEqual([500, 500, 0]);
-    // viaRows[].drillIndex references viaCounts by position.
+    // viaRows[].drillIndex references viaCounts by position; viaDrills is gone.
     expect(r.matches[0].viaCounts![0]).toEqual({ diameter: 300, layer: "TOP", count: 1 });
+    expect(r.matches[0]).not.toHaveProperty("viaDrills");
   });
 
   it("NET_B on TOP has trace width 200 microns (inline LineDesc)", async () => {
