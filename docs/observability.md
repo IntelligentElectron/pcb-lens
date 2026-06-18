@@ -25,7 +25,7 @@ A span named `tool/<tool_name>` (for example, `tool/get_pcb_metadata`) is create
 | `tool.outcome` | string | `success` or `error`. |
 | `tool.duration_ms` | number | Wall-clock duration of the tool call in milliseconds. |
 | `error.type` | string | Present only on failure. The error name (e.g. `Error`), or `tool_error` when the tool returned a structured error result. |
-| `tool.args` | string | JSON-serialized tool arguments. **Only recorded when `OTEL_CAPTURE_TOOL_ARGS=1`** (off by default; arguments may be sensitive). |
+| `tool.args` | string | JSON-serialized tool arguments. **Only recorded when `OTEL_CAPTURE_TOOL_ARGS` is `1` or `true`** (off by default; arguments may be sensitive). |
 
 The span status is set to `ERROR` on failure (and the exception is recorded), `OK` otherwise.
 
@@ -61,6 +61,8 @@ These apply to every span, metric, and log record:
 | `service.version` | The running server version. |
 | `enduser.id` | The host OS account name of whoever is running the server. This attributes usage to the per-session user without any configuration. (Omitted if the username cannot be read.) |
 
+> **Privacy note:** `enduser.id` carries the host OS username and is sent to whatever OTLP backend you configure — appearing on every trace, metric, and log. If that backend is a third-party or managed cloud service, confirm this is acceptable under your data policy before enabling telemetry. To collect no telemetry at all, leave the endpoint unset (or set `OTEL_SDK_DISABLED=true`).
+
 Add your own resource attributes with `OTEL_RESOURCE_ATTRIBUTES` (see below).
 
 ## Configuration
@@ -89,7 +91,7 @@ Application-specific option:
 |----------|---------|
 | `OTEL_CAPTURE_TOOL_ARGS` | Set to `1`/`true` to also record raw tool arguments as the `tool.args` span attribute. Off by default — arguments (file paths, net names) may be sensitive. |
 
-> **Protocol note:** Because the server ships as a standalone compiled binary, only the HTTP OTLP exporters are bundled. Use `http/protobuf` (the default, port `4318` on most collectors) or `http/json`. If you point at a gRPC-only endpoint (`4317`), switch the backend to accept OTLP/HTTP instead.
+> **Protocol note:** Because the server ships as a standalone compiled binary, only the HTTP OTLP exporters are bundled. Use `http/protobuf` (the default) or `http/json`, both on the OTLP/HTTP port (`4318` on most collectors). If you point at a gRPC-only endpoint (`4317`), switch the backend to accept OTLP/HTTP instead.
 
 ## Integration guides
 
