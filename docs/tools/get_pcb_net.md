@@ -210,7 +210,7 @@ Response (`viaColumns`/`viaRows` now present; each `viaRows` entry's `drillIndex
 - `traceWidths` contains unique widths found on each layer (not one entry per segment)
 - Routing is parsed from both `<Polyline>` and `<Line>` conductor segments
 - Vias are collected from `Hole` elements with `platingStatus="VIA"`. By default they are summarized as `viaCounts` (count per unique drill type + layer). With `detail="full"`, `viaRows` carry per-via coordinates and each row's `drillIndex` references `viaCounts` by position; the raw `viaRows` array is capped (with `truncated: true`) to keep responses token-bounded
-- On extreme-fanout nets the number of refdes entries in the `pins` map is capped (setting `truncated: true`); `pinCount` always reports the true total connected-pin count
+- On extreme-fanout nets the connected-pin list is capped (to at most a fixed number of pins) before being grouped into the `pins` map, setting `truncated: true`; `pinCount` always reports the true total connected-pin count
 - All physical values are normalized to microns
 - `layersUsed` merges layers from PhyNet points and routing geometry
 - Routing within each match is sorted by layer name

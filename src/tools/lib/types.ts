@@ -216,9 +216,9 @@ export interface QueryNetResult {
   totalTraceLength?: number;
   layersUsed: string[];
   /**
-   * True when a capped array was truncated to stay within the response budget:
-   * either the detail="full" viaRows array or the grouped pins map (its refdes
-   * entries). totalVias / pinCount still report the true totals.
+   * True when data was truncated to stay within the response budget: either the
+   * detail="full" viaRows array or the connected-pin list (capped before being
+   * grouped into `pins`). totalVias / pinCount still report the true totals.
    */
   truncated?: boolean;
 }

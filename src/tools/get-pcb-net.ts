@@ -307,12 +307,12 @@ export const queryNet = async (
       const layersUsed = [...layerSet].sort();
 
       // Connected pins. The grouped map is the core connectivity payload, but it
-      // grows without bound on huge-fanout nets (power/ground), so cap the number
-      // of refdes entries as a backstop while always reporting the true pinCount.
-      const groupedPins = groupPinsByRefdes(acc.pins);
+      // grows without bound on huge-fanout nets (power/ground). Cap the flat pin
+      // list before grouping so we never allocate or return more than the budget,
+      // while pinCount still reports the true total.
       const pinCount = acc.pins.length;
-      const cappedPins = capDetailRows(Object.entries(groupedPins));
-      const pins = Object.fromEntries(cappedPins.rows);
+      const cappedPins = capDetailRows(acc.pins);
+      const pins = groupPinsByRefdes(cappedPins.rows);
 
       const result: QueryNetResult = {
         netName,

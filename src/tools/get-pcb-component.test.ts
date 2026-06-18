@@ -347,8 +347,8 @@ describe("queryComponent -- pad geometry", () => {
     }
   });
 
-  // Issue #41: per-pin pad coordinates are heavy, so they are omitted by default
-  // and returned only when detail="full" is requested. The pad count and deduped
+  // Per-pin pad coordinates are heavy, so they are omitted by default and
+  // returned only when detail="full" is requested. The pad count and deduped
   // shapes remain available in both modes.
   it("omits raw padRows by default but keeps padCount and padShapes (summary)", async () => {
     const summary = await queryComponent(padXml, "U1");
@@ -367,8 +367,8 @@ describe("queryComponent -- pad geometry", () => {
     }
   });
 
-  // Issue #41: even detail="full" caps the raw padRows array and flags truncated,
-  // while padCount still reports the true pad total.
+  // Even detail="full" caps the raw padRows array and flags truncated, while
+  // padCount still reports the true pad total.
   it("caps padRows at the budget and flags truncated (detail=full)", async () => {
     const PAD_COUNT = MAX_DETAIL_ROWS + 100;
     const pins = Array.from(

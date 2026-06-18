@@ -366,7 +366,8 @@ describe.skipIf(!hasTestcase1Fixture)("queryNet -- <Line> routing on testcase1 R
 });
 
 // ---------------------------------------------------------------------------
-// Token-bounding: summary by default, full opt-in, hard cap (issue #41).
+// Token-bounding: heavy coordinate arrays are summarized by default so a single
+// query can never blow the caller's context; full geometry is opt-in and capped.
 // ---------------------------------------------------------------------------
 describe("queryNet -- token bounding", () => {
   it("returns a compact via rollup and no raw via rows by default (summary)", async () => {
@@ -388,6 +389,37 @@ describe("queryNet -- token bounding", () => {
     expect(net.viaCounts).toBeDefined();
     expect(net.viaRows).toBeDefined();
     expect(net.viaColumns).toEqual(["x", "y", "drillIndex"]);
+  });
+
+  it("aligns viaRows drillIndex with viaCounts across multiple drill types", async () => {
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="MIX"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="MIX">
+        <Hole platingStatus="VIA" x="0" y="0" diameter="0.3"/>
+        <Hole platingStatus="VIA" x="1" y="1" diameter="0.5"/>
+        <Hole platingStatus="VIA" x="2" y="2" diameter="0.3"/>
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "mixed-drills.xml");
+    writeFileSync(f, xml);
+    const net = expectSuccess(await queryNet(f, "^MIX$", "full")).matches[0];
+    // First-seen drill (300) is index 0, second (500) is index 1.
+    expect(net.viaCounts).toEqual([
+      { diameter: 300, layer: "TOP", count: 2 },
+      { diameter: 500, layer: "TOP", count: 1 },
+    ]);
+    // Each viaRows entry's drillIndex resolves to the matching viaCounts entry.
+    for (const [, , drillIndex] of net.viaRows!) {
+      expect(net.viaCounts![drillIndex]).toBeDefined();
+    }
+    expect(net.viaRows!.map((r) => r[2])).toEqual([0, 1, 0]);
   });
 
   it("caps raw via rows at the budget and flags truncated (detail=full)", async () => {
