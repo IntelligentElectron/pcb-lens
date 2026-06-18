@@ -27,7 +27,7 @@ A span named `tool/<tool_name>` (for example, `tool/get_pcb_metadata`) is create
 | `error.type` | string | Present only on failure. The error name (e.g. `Error`), or `tool_error` when the tool returned a structured error result. |
 | `tool.args` | string | JSON-serialized tool arguments. **Only recorded when `OTEL_CAPTURE_TOOL_ARGS` is `1` or `true`** (off by default; arguments may be sensitive). |
 
-The span status is set to `ERROR` on failure (and the exception is recorded), `OK` otherwise.
+The span status is set to `ERROR` on failure, `OK` otherwise. A thrown exception is recorded on the span; a structured tool-error result sets `error.type` to `tool_error` without attaching an exception.
 
 ### Metrics
 
@@ -79,13 +79,14 @@ Telemetry is configured **purely through the standard OpenTelemetry environment 
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (default) or `http/json`. `grpc` is **not** bundled in the standalone binaries and falls back to `http/protobuf` with a warning on stderr. |
 | `OTEL_SERVICE_NAME` | Service identity in the `service.name` resource attribute. Defaults to `pcb-lens`. |
 | `OTEL_RESOURCE_ATTRIBUTES` | Additional resource attributes, e.g. `deployment.environment=prod,team=hw`. |
-| `OTEL_TRACES_SAMPLER` | Standard OTel trace sampler selection. |
+| `OTEL_TRACES_SAMPLER` | Standard OTel trace sampler selection (e.g. `traceidratio`). |
+| `OTEL_TRACES_SAMPLER_ARG` | Argument for the sampler, e.g. `0.1` for `traceidratio`. Used together with `OTEL_TRACES_SAMPLER`. |
 | `OTEL_BSP_SCHEDULE_DELAY` | Batch span processor export interval (ms). |
 | `OTEL_BLRP_SCHEDULE_DELAY` | Batch log record processor export interval (ms). |
 | `OTEL_METRIC_EXPORT_INTERVAL` | Metric export interval in ms (default `60000`). |
 | `OTEL_SDK_DISABLED` | Set to `true`/`1` to force telemetry off even if an endpoint is configured. |
 
-The sampler and batch/interval knobs (`OTEL_TRACES_SAMPLER`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BLRP_SCHEDULE_DELAY`) are standard OpenTelemetry variables read directly by the SDK, so you won't find them referenced in this project's code.
+The sampler and batch/interval knobs (`OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BLRP_SCHEDULE_DELAY`) are standard OpenTelemetry variables read directly by the SDK, so you won't find them referenced in this project's code.
 
 Application-specific option:
 
@@ -93,7 +94,7 @@ Application-specific option:
 |----------|---------|
 | `OTEL_CAPTURE_TOOL_ARGS` | Set to `1`/`true` to also record raw tool arguments as the `tool.args` span attribute. Off by default — arguments (file paths, net names) may be sensitive. |
 
-> **Protocol note:** Because the server ships as a standalone compiled binary, only the HTTP OTLP exporters are bundled. Use `http/protobuf` (the default) or `http/json`, both on the OTLP/HTTP port (`4318` on most collectors). If you point at a gRPC-only endpoint (`4317`), switch the backend to accept OTLP/HTTP instead.
+> **Protocol note:** Because the server ships as a standalone compiled binary, only the HTTP OTLP exporters are bundled. Use `http/protobuf` (the default) or `http/json`, both on the OTLP/HTTP port (`4318` on most collectors). Collectors typically listen on `4317` for gRPC and `4318` for HTTP; if you point at a gRPC endpoint, switch the backend to accept OTLP/HTTP instead.
 
 ## Integration guides
 

@@ -116,7 +116,7 @@ codex mcp add pcb-lens -- pcb-lens
 
 The server can emit [OpenTelemetry](https://opentelemetry.io/) **traces, metrics, and logs** for every tool call — a span, the `tool.calls`/`tool.duration`/`tool.errors` metrics, and a correlated log record — so you can see which tools are used, how long they take, and what fails. It is vendor-neutral and speaks OTLP, working with any compatible backend (OpenTelemetry Collector, Jaeger, Tempo, Prometheus, Honeycomb, Datadog, a managed cloud service, etc.).
 
-**Disabled by default**, with zero overhead. Turn it on purely with the standard `OTEL_*` environment variables — point `OTEL_EXPORTER_OTLP_ENDPOINT` at your backend and you're done; no code changes. Telemetry never affects tool results.
+**Disabled by default**, with zero overhead. Turn it on purely with the standard `OTEL_*` environment variables — point `OTEL_EXPORTER_OTLP_ENDPOINT` at your backend (and optionally set `OTEL_SERVICE_NAME`); no code changes. Telemetry never affects tool results.
 
 See **[docs/observability.md](docs/observability.md)** for the full signal reference, configuration, and integration guide.
 
