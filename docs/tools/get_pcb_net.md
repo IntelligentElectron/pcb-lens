@@ -1,6 +1,6 @@
 # get_pcb_net
 
-Query nets by name pattern. Returns grouped connected pins, per-layer routing (segment counts, plus trace widths and lengths for centerline-routed copper), a compact via rollup, and layers used. Routing requires conductor geometry in the export; see Description.
+Query nets by name pattern. Returns grouped connected pins, per-layer routing (segment counts, plus trace widths and lengths for centerline-routed copper), a compact via rollup, and layers used. Routing requires conductor/etch geometry in the export; it is empty if the export omits it.
 
 ## Description
 

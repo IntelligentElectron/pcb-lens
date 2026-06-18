@@ -181,9 +181,7 @@ describe("queryNet -- layer extraction from PhyNetPoint", () => {
   it("includes layers from PhyNetPoint only (no routing) for PWR_VCC", async () => {
     const r = expectSuccess(await queryNet(inlineXml, "^PWR_VCC$"));
     const net = r.matches[0];
-    // PWR_VCC has PhyNetPoint layer refs but no <LayerFeature>/<Set> conductor
-    // geometry -- the documented "export without conductor/etch features" case.
-    // layersUsed must still populate (from PhyNetPoint) while routing stays empty.
+    // PhyNetPoint populates layersUsed; with no conductor geometry, routing stays empty.
     expect(net.layersUsed).toContain("INNER1");
     expect(net.layersUsed).toContain("INNER2");
     expect(net.routing).toBeUndefined();
