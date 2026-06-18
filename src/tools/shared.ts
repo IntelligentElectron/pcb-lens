@@ -102,11 +102,9 @@ export const capRowsStratified = <T>(
     remaining--;
   }
 
-  const out: T[] = [];
-  buckets.forEach((bucket, i) => {
-    const take = Math.min(bucket.length, alloc[i]);
-    for (let k = 0; k < take; k++) out.push(bucket[k]);
-  });
+  // slice() naturally clamps to the bucket length, so no separate guard is
+  // needed even though by construction alloc[i] never exceeds it.
+  const out = buckets.flatMap((bucket, i) => bucket.slice(0, alloc[i]));
 
   return { rows: out, truncated: out.length < rows.length };
 };
