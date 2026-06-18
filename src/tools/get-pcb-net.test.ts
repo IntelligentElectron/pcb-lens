@@ -427,12 +427,14 @@ describe("queryNet -- poured copper (Contour/Polygon) routing", () => {
       <Set net="PADONLY">
         <Pad padstackDefRef="PS1">
           <Location x="5" y="5"/>
-          <Polygon>
-            <PolyBegin x="5" y="5"/>
-            <PolyStepSegment x="6" y="5"/>
-            <PolyStepSegment x="6" y="6"/>
-            <PolyStepSegment x="5" y="5"/>
-          </Polygon>
+          <Contour>
+            <Polygon>
+              <PolyBegin x="5" y="5"/>
+              <PolyStepSegment x="6" y="5"/>
+              <PolyStepSegment x="6" y="6"/>
+              <PolyStepSegment x="5" y="5"/>
+            </Polygon>
+          </Contour>
           <PinRef pin="1" componentRef="U3"/>
         </Pad>
       </Set>
@@ -459,10 +461,12 @@ describe("queryNet -- poured copper (Contour/Polygon) routing", () => {
     expect(net.layersUsed).toContain("TOP");
   });
 
-  it("does not count a <Polygon> inside a <Pad> as routing", async () => {
+  it("does not count a <Contour> inside a <Pad> as routing (exercises the inPad guard)", async () => {
     const r = expectSuccess(await queryNet(pourXml, "^PADONLY$"));
     const net = r.matches[0];
-    // The only polygon for this net is a pad outline, so the net has no routing.
+    // The only contour for this net is a custom pad outline inside <Pad>, so the
+    // inPad guard must keep it out of routing. Without the guard this would be
+    // miscounted as a routed segment.
     expect(net.routing).toBeUndefined();
   });
 

@@ -229,7 +229,7 @@ export const queryNet = async (
       // and missing a real pour (reporting a routed net as unrouted) is worse for this
       // tool than occasionally counting a rare outline-only contour. The inPad guard
       // additionally keeps any pad-level contour out of the routing count.
-      if (!inPad && line.includes("<Contour")) {
+      if (!inPad && (line.includes("<Contour>") || line.includes("<Contour "))) {
         currentSetHasConductor = true;
       }
 
