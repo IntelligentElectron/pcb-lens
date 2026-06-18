@@ -19,6 +19,7 @@ import { parsePackageRef } from "./lib/package-parser.js";
 import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js";
 import {
   capDetailRows,
+  MAX_COORD_ROWS,
   extractMicronFactor,
   extractMicronFactorFromLines,
   formatResult,
@@ -278,7 +279,7 @@ export const queryComponent = async (
   if (padShapes && padRows) {
     padFields = { padCount: padRows.length, padShapes };
     if (detail === "full") {
-      const capped = capDetailRows(padRows);
+      const capped = capDetailRows(padRows, MAX_COORD_ROWS);
       padFields.padColumns = ["pin", "x", "y", "shapeIndex"];
       padFields.padRows = capped.rows;
       if (capped.truncated) padFields.truncated = true;

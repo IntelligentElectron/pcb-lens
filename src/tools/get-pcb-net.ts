@@ -14,6 +14,8 @@ import {
   addPin,
   buildLineDescDict,
   capDetailRows,
+  MAX_COORD_ROWS,
+  MAX_PIN_ROWS,
   extractMicronFactor,
   formatResult,
   groupPinsByRefdes,
@@ -337,7 +339,7 @@ export const queryNet = async (
       // list before grouping so we never allocate or return more than the budget,
       // while pinCount still reports the true total.
       const pinCount = acc.pins.length;
-      const cappedPins = capDetailRows(acc.pins);
+      const cappedPins = capDetailRows(acc.pins, MAX_PIN_ROWS);
       const pins = groupPinsByRefdes(cappedPins.rows);
 
       const result: QueryNetResult = {
@@ -356,7 +358,7 @@ export const queryNet = async (
         // included only when the caller opts into detail="full" (capped).
         result.viaCounts = viaCounts;
         if (detail === "full") {
-          const capped = capDetailRows(viaRows);
+          const capped = capDetailRows(viaRows, MAX_COORD_ROWS);
           result.viaColumns = ["x", "y", "drillIndex"];
           result.viaRows = capped.rows;
           if (capped.truncated) result.truncated = true;

@@ -8,7 +8,7 @@ Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, 
 
 Finds all nets whose names match the given regex pattern, then collects connectivity and routing data for each match. Pin connectivity is grouped by component refdes to reduce response size. Empty routing/via fields and zero-value summary fields are omitted to keep payloads compact.
 
-Responses are token-bounded by design. By default (`detail="summary"`) the per-via coordinate array is replaced by `viaCounts` (a count per drill type + layer), so a query never balloons the caller's context. Callers that need every via coordinate pass `detail="full"`; even then the raw array is capped (with `truncated: true` set) to stay within a safe size.
+Responses are token-bounded by design. By default (`detail="summary"`) the per-via coordinate array is replaced by `viaCounts` (a count per drill type + layer), so a query never balloons the caller's context. Callers that need every via coordinate pass `detail="full"`; even then the raw `viaRows` array is capped to a few hundred rows (with `truncated: true` set) so a `detail="full"` response stays within a tool-response budget even on the largest nets. The connected-pin list has its own, higher cap, so connectivity on high-fanout nets is not lost to the much smaller coordinate budget.
 
 If a pattern matches all nets in a design (for example `.`, `.*`, or `.+`), the tool rejects the query and asks for a more specific pattern.
 
@@ -209,7 +209,7 @@ Response (`viaColumns`/`viaRows` now present; each `viaRows` entry's `drillIndex
 - Reference layers (`REF-route`, `REF-both`) are skipped to avoid counting template geometry
 - `traceWidths` contains unique widths found on each layer (not one entry per segment)
 - Routing is parsed from `<Polyline>` and `<Line>` centerline conductors and from poured copper shapes (`<Contour>`/`<Polygon>`). Centerline conductors contribute trace widths and lengths; poured shapes contribute only layer presence and a segment count (no centerline width or length), so a net poured as filled copper still reports as routed
-- Vias are collected from `Hole` elements with `platingStatus="VIA"`. By default they are summarized as `viaCounts` (count per unique drill type + layer). With `detail="full"`, `viaRows` carry per-via coordinates and each row's `drillIndex` references `viaCounts` by position; the raw `viaRows` array is capped (with `truncated: true`) to keep responses token-bounded
+- Vias are collected from `Hole` elements with `platingStatus="VIA"`. By default they are summarized as `viaCounts` (count per unique drill type + layer). With `detail="full"`, `viaRows` carry per-via coordinates and each row's `drillIndex` references `viaCounts` by position; the raw `viaRows` array is capped to a few hundred rows (with `truncated: true`) to keep responses token-bounded
 - On extreme-fanout nets the connected-pin list is capped (to at most a fixed number of pins) before being grouped into the `pins` map, setting `truncated: true`; `pinCount` always reports the true total connected-pin count
 - All physical values are normalized to microns
 - `layersUsed` merges layers from PhyNet points and routing geometry
