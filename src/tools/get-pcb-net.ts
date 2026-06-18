@@ -14,6 +14,7 @@ import {
   addPin,
   buildLineDescDict,
   capDetailRows,
+  capRowsStratified,
   MAX_COORD_ROWS,
   MAX_PIN_ROWS,
   extractMicronFactor,
@@ -358,7 +359,10 @@ export const queryNet = async (
         // included only when the caller opts into detail="full" (capped).
         result.viaCounts = viaCounts;
         if (detail === "full") {
-          const capped = capDetailRows(viaRows, MAX_COORD_ROWS);
+          // Stratify across drill spans (row's drillIndex) so the sample is
+          // proportionally representative rather than biased toward whichever
+          // span appears first in the file.
+          const capped = capRowsStratified(viaRows, MAX_COORD_ROWS, (row) => row[2]);
           result.viaColumns = ["x", "y", "drillIndex"];
           result.viaRows = capped.rows;
           if (capped.truncated) result.truncated = true;
