@@ -52,6 +52,10 @@ Once configured, you can ask your AI assistant questions like:
 
 See the [tools/](tools/) directory for detailed documentation on each tool's parameters and response format.
 
+## Observability
+
+The server can emit OpenTelemetry traces, metrics, and logs for every tool call to any OTLP-compatible backend. See [observability.md](observability.md) for the full signal reference, configuration, and integration guide.
+
 ## Error Handling
 
 All tools return an `ErrorResult` on failure:
