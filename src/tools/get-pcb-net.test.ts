@@ -5,6 +5,7 @@ import path from "node:path";
 import { queryNet } from "./get-pcb-net.js";
 import { isErrorResult } from "./lib/types.js";
 import type { QueryNetsResult } from "./lib/types.js";
+import { MAX_DETAIL_ROWS } from "./shared.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
 const BEAGLEBONE = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
@@ -266,8 +267,8 @@ describe("queryNet -- routing and vias", () => {
     expect(r.matches[0].totalVias).toBe(1);
     expect(r.matches[0].viaRows).toBeDefined();
     expect(r.matches[0].viaRows![0]).toEqual([500, 500, 0]);
-    expect(r.matches[0].viaDrills).toBeDefined();
-    expect(r.matches[0].viaDrills![0]).toEqual({ diameter: 300, layer: "TOP" });
+    // viaRows[].drillIndex references viaCounts by position.
+    expect(r.matches[0].viaCounts![0]).toEqual({ diameter: 300, layer: "TOP", count: 1 });
   });
 
   it("NET_B on TOP has trace width 200 microns (inline LineDesc)", async () => {
@@ -389,7 +390,7 @@ describe("queryNet -- token bounding", () => {
   });
 
   it("caps raw via rows at the budget and flags truncated (detail=full)", async () => {
-    const VIA_COUNT = 2100; // > MAX_DETAIL_ROWS (2000)
+    const VIA_COUNT = MAX_DETAIL_ROWS + 100;
     const holes = Array.from(
       { length: VIA_COUNT },
       (_, i) => `<Hole platingStatus="VIA" x="${i}" y="${i}" diameter="0.3"/>`
@@ -419,7 +420,31 @@ describe("queryNet -- token bounding", () => {
     const full = expectSuccess(await queryNet(f, "^BIGNET$", "full"));
     const net = full.matches[0];
     expect(net.totalVias).toBe(VIA_COUNT);
-    expect(net.viaRows!.length).toBe(2000);
+    expect(net.viaRows!.length).toBe(MAX_DETAIL_ROWS);
+    expect(net.truncated).toBe(true);
+  });
+
+  it("caps the pins map on extreme-fanout nets but reports the true pinCount", async () => {
+    const PIN_COUNT = MAX_DETAIL_ROWS + 100;
+    // One pin each on a distinct refdes -> > MAX_DETAIL_ROWS refdes entries.
+    const pinRefs = Array.from(
+      { length: PIN_COUNT },
+      (_, i) => `<PinRef pin="1" componentRef="U${i}"/>`
+    ).join("\n    ");
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="WIDENET">
+    ${pinRefs}
+  </LogicalNet>
+  <Step><PhyNetGroup/></Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "wide-net.xml");
+    writeFileSync(f, xml);
+
+    const net = expectSuccess(await queryNet(f, "^WIDENET$")).matches[0];
+    expect(net.pinCount).toBe(PIN_COUNT); // true total preserved
+    expect(Object.keys(net.pins).length).toBe(MAX_DETAIL_ROWS); // map capped
     expect(net.truncated).toBe(true);
   });
 });

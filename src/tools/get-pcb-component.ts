@@ -271,6 +271,20 @@ export const queryComponent = async (
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([netName, data]) => [netName, data.componentPins, data.pinCount]);
 
+  // Pad geometry: always surface the deduped shapes and a pad count. The raw
+  // per-pin coordinate array (padRows) is the heavy part, so it is included only
+  // when the caller opts into detail="full", and even then capped to the budget.
+  let padFields: Partial<ComponentResult> = {};
+  if (padShapes && padRows) {
+    padFields = { padCount: padRows.length, padShapes };
+    if (detail === "full") {
+      const capped = capDetailRows(padRows);
+      padFields.padColumns = ["pin", "x", "y", "shapeIndex"];
+      padFields.padRows = capped.rows;
+      if (capped.truncated) padFields.truncated = true;
+    }
+  }
+
   return {
     refdes: p.refdes,
     units: "MICRON",
@@ -285,25 +299,7 @@ export const queryComponent = async (
     characteristics,
     netColumns: ["netName", "pins", "pinCount"],
     netRows,
-    // Pad geometry: always surface the deduped shapes and a pad count. The raw
-    // per-pin coordinate array (padRows) is the heavy part, so it is included
-    // only when the caller opts into detail="full" (capped to the budget).
-    ...(padShapes && padRows
-      ? {
-          padCount: padRows.length,
-          padShapes,
-          ...(detail === "full"
-            ? (() => {
-                const capped = capDetailRows(padRows);
-                return {
-                  padColumns: ["pin", "x", "y", "shapeIndex"] as const,
-                  padRows: capped.rows,
-                  ...(capped.truncated ? { truncated: true } : {}),
-                };
-              })()
-            : {}),
-        }
-      : {}),
+    ...padFields,
   };
 };
 
@@ -320,14 +316,14 @@ export const register = (server: McpServer): void => {
           .describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
         detail: z
           .enum(["summary", "full"])
-          .optional()
+          .default("summary")
           .describe(
             "Response detail. 'summary' (default) returns pad count + shapes only; 'full' adds per-pin pad x/y coordinates (capped to stay within the response budget)."
           ),
       },
     },
     withTelemetry("get_pcb_component", async ({ file, refdes, detail }) => {
-      const result = await queryComponent(file, refdes, detail ?? "summary");
+      const result = await queryComponent(file, refdes, detail);
       return formatResult(result);
     })
   );

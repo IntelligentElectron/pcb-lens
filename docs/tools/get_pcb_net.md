@@ -156,7 +156,7 @@ Response:
 
 **Query a power net with raw via coordinates (`detail="full"`):**
 
-Response (note `viaDrills`/`viaColumns`/`viaRows` now present alongside `viaCounts`):
+Response (`viaColumns`/`viaRows` now present; each `viaRows` entry's `drillIndex` references `viaCounts` by position):
 ```json
 {
   "pattern": "^VCC_3V3$",
@@ -167,7 +167,6 @@ Response (note `viaDrills`/`viaColumns`/`viaRows` now present alongside `viaCoun
       "pinCount": 6,
       "pins": { "C1": ["1"], "U1": ["B2", "C7"] },
       "viaCounts": [{ "diameter": 300, "layer": "TOP", "count": 2 }],
-      "viaDrills": [{ "diameter": 300, "layer": "TOP" }],
       "viaColumns": ["x", "y", "drillIndex"],
       "viaRows": [
         [12000, 34000, 0],
@@ -210,8 +209,8 @@ Response (note `viaDrills`/`viaColumns`/`viaRows` now present alongside `viaCoun
 - Reference layers (`REF-route`, `REF-both`) are skipped to avoid counting template geometry
 - `traceWidths` contains unique widths found on each layer (not one entry per segment)
 - Routing is parsed from both `<Polyline>` and `<Line>` conductor segments
-- Vias are collected from `Hole` elements with `platingStatus="VIA"`. By default they are summarized as `viaCounts` (count per unique drill type + layer). With `detail="full"`, unique drill types are deduplicated into `viaDrills` and `viaRows` reference them by `drillIndex`; the raw `viaRows` array is capped (with `truncated: true`) to keep responses token-bounded
-- The `pins` map is capped on extreme-fanout nets (with `truncated: true`); `pinCount` always reports the true total
+- Vias are collected from `Hole` elements with `platingStatus="VIA"`. By default they are summarized as `viaCounts` (count per unique drill type + layer). With `detail="full"`, `viaRows` carry per-via coordinates and each row's `drillIndex` references `viaCounts` by position; the raw `viaRows` array is capped (with `truncated: true`) to keep responses token-bounded
+- On extreme-fanout nets the number of refdes entries in the `pins` map is capped (setting `truncated: true`); `pinCount` always reports the true total connected-pin count
 - All physical values are normalized to microns
 - `layersUsed` merges layers from PhyNet points and routing geometry
 - Routing within each match is sorted by layer name

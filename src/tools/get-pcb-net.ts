@@ -275,7 +275,6 @@ export const queryNet = async (
         });
       }
 
-      // Deduplicate drill types, build columnar via rows and per-drill counts.
       const drillList: ViaDrill[] = [];
       const drillIdx = new Map<string, number>();
       const drillCounts: number[] = [];
@@ -332,7 +331,6 @@ export const queryNet = async (
         result.viaCounts = viaCounts;
         if (detail === "full") {
           const capped = capDetailRows(viaRows);
-          result.viaDrills = drillList;
           result.viaColumns = ["x", "y", "drillIndex"];
           result.viaRows = capped.rows;
           if (capped.truncated) result.truncated = true;
@@ -367,14 +365,14 @@ export const register = (server: McpServer): void => {
           .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),
         detail: z
           .enum(["summary", "full"])
-          .optional()
+          .default("summary")
           .describe(
             "Response detail. 'summary' (default) returns via counts only; 'full' adds raw per-via x/y coordinates (capped to stay within the response budget)."
           ),
       },
     },
     withTelemetry("get_pcb_net", async ({ file, pattern, detail }) => {
-      const result = await queryNet(file, pattern, detail ?? "summary");
+      const result = await queryNet(file, pattern, detail);
       return formatResult(result);
     })
   );

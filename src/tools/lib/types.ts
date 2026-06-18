@@ -202,10 +202,11 @@ export interface QueryNetResult {
   pinCount: number;
   pins: Record<string, string[]>;
   routing?: NetRouteInfo[];
-  /** Compact via rollup (count per drill type + layer), returned by default. */
+  /**
+   * Compact via rollup (count per drill type + layer), returned by default. In
+   * detail="full" mode, viaRows[].drillIndex references this array by position.
+   */
   viaCounts?: ViaCount[];
-  /** Drill-type legend for viaRows. Only included when detail="full" is requested. */
-  viaDrills?: ViaDrill[];
   /** Per-via coordinates. Only included when detail="full" is requested. */
   viaColumns?: ["x", "y", "drillIndex"];
   viaRows?: ViaRow[];
@@ -213,7 +214,11 @@ export interface QueryNetResult {
   totalVias?: number;
   totalTraceLength?: number;
   layersUsed: string[];
-  /** True when a detail array was capped to stay within the response budget. */
+  /**
+   * True when a capped array was truncated to stay within the response budget:
+   * either the detail="full" viaRows array or the grouped pins map (its refdes
+   * entries). totalVias / pinCount still report the true totals.
+   */
   truncated?: boolean;
 }
 
