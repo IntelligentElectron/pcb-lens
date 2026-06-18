@@ -22,22 +22,37 @@ export const formatResult = (result: unknown): { content: { type: "text"; text: 
 // context. By default, heavy per-coordinate arrays (per-via, per-pad) are
 // summarized into compact rollups; callers that genuinely need every coordinate
 // pass detail="full". As a hard backstop, even "full" responses cap the raw
-// arrays at MAX_DETAIL_ROWS and flag the result as truncated.
+// arrays and flag the result as truncated.
+//
+// Two caps, because the rows differ in cost and value:
+//   - MAX_COORD_ROWS: heavy per-coordinate arrays (viaRows/padRows) requested via
+//     detail="full". Each row is a numeric tuple, so a few hundred already cost
+//     thousands of tokens; this is kept low so even a "full" response on the
+//     largest net stays within a typical tool-response budget. At 300 rows a full
+//     response is ~18 KB (~4-5k tokens) on the largest known net, a comfortable
+//     margin under common tool-response budgets.
+//   - MAX_PIN_ROWS: the connectivity pin list, which is the core payload of a net
+//     query and far more valuable per row (a short refdes.pin string). It is kept
+//     higher so a high-fanout net (e.g. a 1000+ pin GND) still returns useful
+//     connectivity rather than being truncated down to the coordinate budget.
 // =============================================================================
 
 export type Detail = "summary" | "full";
 
-export const MAX_DETAIL_ROWS = 2000;
+export const MAX_COORD_ROWS = 300;
+export const MAX_PIN_ROWS = 2000;
 
 /**
- * Cap a detail array to MAX_DETAIL_ROWS. Returns the (possibly sliced) array and
+ * Cap a detail array to `cap` rows. Returns the (possibly sliced) array and
  * whether it was truncated, so callers can surface an explicit `truncated` flag
  * alongside the true total count.
  */
-export const capDetailRows = <T>(rows: T[]): { rows: T[]; truncated: boolean } =>
-  rows.length > MAX_DETAIL_ROWS
-    ? { rows: rows.slice(0, MAX_DETAIL_ROWS), truncated: true }
+export const capDetailRows = <T>(rows: T[], cap: number): { rows: T[]; truncated: boolean } => {
+  const limit = Math.max(0, cap); // defensive: never slice with a negative bound
+  return rows.length > limit
+    ? { rows: rows.slice(0, limit), truncated: true }
     : { rows, truncated: false };
+};
 
 // =============================================================================
 // File Validation

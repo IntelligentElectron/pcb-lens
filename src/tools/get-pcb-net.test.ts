@@ -5,7 +5,7 @@ import path from "node:path";
 import { queryNet } from "./get-pcb-net.js";
 import { isErrorResult } from "./lib/types.js";
 import type { QueryNetsResult } from "./lib/types.js";
-import { MAX_DETAIL_ROWS } from "./shared.js";
+import { MAX_COORD_ROWS, MAX_PIN_ROWS } from "./shared.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
 const BEAGLEBONE = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
@@ -554,7 +554,7 @@ describe("queryNet -- token bounding", () => {
   });
 
   it("caps raw via rows at the budget and flags truncated (detail=full)", async () => {
-    const VIA_COUNT = MAX_DETAIL_ROWS + 100;
+    const VIA_COUNT = MAX_COORD_ROWS + 100;
     const holes = Array.from(
       { length: VIA_COUNT },
       (_, i) => `<Hole platingStatus="VIA" x="${i}" y="${i}" diameter="0.3"/>`
@@ -562,7 +562,11 @@ describe("queryNet -- token bounding", () => {
     const xml = `<IPC-2581>
   <Content></Content>
   <CadHeader units="MILLIMETER"/>
-  <LogicalNet name="BIGNET"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <LogicalNet name="BIGNET">
+    <PinRef pin="1" componentRef="U1"/>
+    <PinRef pin="2" componentRef="U2"/>
+    <PinRef pin="3" componentRef="U3"/>
+  </LogicalNet>
   <Step>
     <PhyNetGroup/>
     <LayerFeature layerRef="TOP">
@@ -575,22 +579,30 @@ describe("queryNet -- token bounding", () => {
     const f = path.join(tempDir, "many-vias.xml");
     writeFileSync(f, xml);
 
-    // Summary stays compact regardless of via count.
+    // Summary stays compact regardless of via count, and the coordinate-array
+    // overflow does NOT truncate connectivity: all pins are still returned and the
+    // result is not flagged truncated (the pin list has its own, higher budget).
     const summary = expectSuccess(await queryNet(f, "^BIGNET$"));
     expect(summary.matches[0].totalVias).toBe(VIA_COUNT);
     expect(summary.matches[0]).not.toHaveProperty("viaRows");
+    expect(Object.keys(summary.matches[0].pins)).toEqual(["U1", "U2", "U3"]);
+    expect(summary.matches[0].truncated).toBeFalsy();
 
     // Full mode caps the raw array but still reports the true total.
     const full = expectSuccess(await queryNet(f, "^BIGNET$", "full"));
     const net = full.matches[0];
     expect(net.totalVias).toBe(VIA_COUNT);
-    expect(net.viaRows!.length).toBe(MAX_DETAIL_ROWS);
+    expect(net.viaRows!.length).toBe(MAX_COORD_ROWS);
     expect(net.truncated).toBe(true);
+    // 300 coord rows serialize to ~18 KB (~4-5k tokens) on the largest known net;
+    // assert the whole full response stays well under a typical tool-response budget
+    // even when the net has far more vias than the cap.
+    expect(JSON.stringify(net).length).toBeLessThan(25_000);
   });
 
   it("caps the pins map on extreme-fanout nets but reports the true pinCount", async () => {
-    const PIN_COUNT = MAX_DETAIL_ROWS + 100;
-    // One pin each on a distinct refdes -> > MAX_DETAIL_ROWS refdes entries.
+    const PIN_COUNT = MAX_PIN_ROWS + 100;
+    // One pin each on a distinct refdes -> > MAX_PIN_ROWS refdes entries.
     const pinRefs = Array.from(
       { length: PIN_COUNT },
       (_, i) => `<PinRef pin="1" componentRef="U${i}"/>`
@@ -608,7 +620,7 @@ describe("queryNet -- token bounding", () => {
 
     const net = expectSuccess(await queryNet(f, "^WIDENET$")).matches[0];
     expect(net.pinCount).toBe(PIN_COUNT); // true total preserved
-    expect(Object.keys(net.pins).length).toBe(MAX_DETAIL_ROWS); // map capped
+    expect(Object.keys(net.pins).length).toBe(MAX_PIN_ROWS); // map capped
     expect(net.truncated).toBe(true);
   });
 });

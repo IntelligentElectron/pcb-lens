@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { queryComponent } from "./get-pcb-component.js";
 import { isErrorResult } from "./lib/types.js";
-import { MAX_DETAIL_ROWS } from "./shared.js";
+import { MAX_COORD_ROWS } from "./shared.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
 const BEAGLEBONE_REVB6 = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
@@ -370,7 +370,7 @@ describe("queryComponent -- pad geometry", () => {
   // Even detail="full" caps the raw padRows array and flags truncated, while
   // padCount still reports the true pad total.
   it("caps padRows at the budget and flags truncated (detail=full)", async () => {
-    const PAD_COUNT = MAX_DETAIL_ROWS + 100;
+    const PAD_COUNT = MAX_COORD_ROWS + 100;
     const pins = Array.from(
       { length: PAD_COUNT },
       (_, i) => `<Pin number="${i + 1}"><Location x="0" y="0"/><StandardPrimitiveRef id="P"/></Pin>`
@@ -394,7 +394,7 @@ describe("queryComponent -- pad geometry", () => {
     expect(isErrorResult(result)).toBe(false);
     if (!isErrorResult(result)) {
       expect(result.padCount).toBe(PAD_COUNT); // true total preserved
-      expect(result.padRows!.length).toBe(MAX_DETAIL_ROWS); // capped
+      expect(result.padRows!.length).toBe(MAX_COORD_ROWS); // capped
       expect(result.truncated).toBe(true);
     }
   });
