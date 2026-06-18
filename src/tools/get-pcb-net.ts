@@ -158,8 +158,9 @@ export const queryNet = async (
       const acc = accumulators.get(currentSetNetName)!;
 
       // Track pad context so custom pad outlines (which also use <Polygon>) are
-      // not miscounted as routing copper below.
-      if (line.includes("<Pad ")) inPad = true;
+      // not miscounted as routing copper below. Guard against self-closing
+      // `<Pad ... />`, which has no children and no `</Pad>` to reset the flag.
+      if (line.includes("<Pad ") && !line.includes("/>")) inPad = true;
       if (line.includes("</Pad>")) inPad = false;
 
       if (line.includes("<PinRef ")) {
@@ -214,18 +215,21 @@ export const queryNet = async (
         }
       }
 
-      // Poured copper: nets are frequently filled as <Contour>/<Polygon> shapes
-      // (carrying a <FillDescRef>) rather than centerline <Polyline>/<Line>
-      // conductors. Modern Cadence/Allegro pours even short signal traces and all
-      // planes this way, so such nets previously reported empty routing despite
-      // being fully routed. Count the shape as routing presence on the layer so the
-      // net is reported routed; a filled shape has no centerline width or length, so
-      // we record only the layer + a segment and leave traceWidths/traceLength empty.
-      // The inPad guard avoids counting custom pad outlines as routing copper. We do
-      // not inspect the <FillDescRef>, so an unfilled boundary contour (if present)
-      // would also be counted as routing copper; this has not been observed in
-      // practice but is worth noting if richer shape handling is added later.
-      if (!inPad && (line.includes("<Contour") || line.includes("<Polygon"))) {
+      // Poured copper: nets are frequently filled as <Contour> shapes (a polygon
+      // outline, optionally with a <FillDescRef>) rather than centerline
+      // <Polyline>/<Line> conductors. Modern Cadence/Allegro pours even short signal
+      // traces and all planes this way, so such nets previously reported empty routing
+      // despite being fully routed. Count the shape as routing presence on the layer
+      // so the net is reported routed; a filled shape has no centerline width or
+      // length, so we record only the layer + a segment and leave
+      // traceWidths/traceLength empty. We key off <Contour> specifically (the filled-
+      // region wrapper) rather than a bare <Polygon>, since polygons also appear as
+      // board outlines and custom pad shapes. We deliberately do NOT require a
+      // <FillDescRef>: real pours do not always carry one (e.g. testcase5 GNDEARTH),
+      // and missing a real pour (reporting a routed net as unrouted) is worse for this
+      // tool than occasionally counting a rare outline-only contour. The inPad guard
+      // additionally keeps any pad-level contour out of the routing count.
+      if (!inPad && line.includes("<Contour")) {
         currentSetHasConductor = true;
       }
 
