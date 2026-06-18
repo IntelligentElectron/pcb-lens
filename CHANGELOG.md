@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-06-18
+
+### Changed
+
+- `detail="full"` via-row truncation is now stratified across drill spans. When the `MAX_COORD_ROWS = 300` cap applies, the returned rows are apportioned across drill spans in proportion to each span's share of `totalVias` (largest-remainder / Hamilton method) instead of head-slicing the first span, so the truncated sample is representative of the whole net. `truncated: true` and the per-span `viaCounts` totals are unchanged; a span whose proportional share rounds below one row can still get zero sampled rows, but its true count is always preserved in `viaCounts` (#49, #41 follow-up)
+- `get_pcb_net` tool description and docs no longer advertise trace widths/lengths/segment counts unconditionally. Routing is read from conductor-layer copper geometry; an IPC-2581 export generated without conductor/etch (cline) feature output carries no conductor geometry, so routing is empty even though pins, vias, and `layersUsed` still populate. The fix on such files is to re-export with conductor features enabled. `<PhyNetPoint>` is documented as a deliberately-unused connection-point set (no edges or width reference), so it is not used to synthesize segment counts, lengths, or widths (#39)
+
+### Documentation
+
+- Added an OpenTelemetry integration guide and simplified the README (#51)
+
 ## [1.0.3] - 2026-06-17
 
 ### Fixed
