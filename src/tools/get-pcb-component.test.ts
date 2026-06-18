@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { queryComponent } from "./get-pcb-component.js";
 import { isErrorResult } from "./lib/types.js";
+import { MAX_DETAIL_ROWS } from "./shared.js";
 
 const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
 const BEAGLEBONE_REVB6 = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
@@ -363,6 +364,38 @@ describe("queryComponent -- pad geometry", () => {
     if (!isErrorResult(full)) {
       expect(full.padRows).toHaveLength(2);
       expect(full.padColumns).toEqual(["pin", "x", "y", "shapeIndex"]);
+    }
+  });
+
+  // Issue #41: even detail="full" caps the raw padRows array and flags truncated,
+  // while padCount still reports the true pad total.
+  it("caps padRows at the budget and flags truncated (detail=full)", async () => {
+    const PAD_COUNT = MAX_DETAIL_ROWS + 100;
+    const pins = Array.from(
+      { length: PAD_COUNT },
+      (_, i) => `<Pin number="${i + 1}"><Location x="0" y="0"/><StandardPrimitiveRef id="P"/></Pin>`
+    ).join("\n      ");
+    const xml = `<IPC-2581>
+  <Content><EntryStandard id="P"><Circle diameter="0.2"/></EntryStandard></Content>
+  <CadHeader units="MILLIMETER"/>
+  <Ecad><CadData>
+    <Package name="BIGPKG">
+      ${pins}
+    </Package>
+  </CadData></Ecad>
+  <Step>
+    <Component refDes="U1" packageRef="BIGPKG" layerRef="TOP"><Location x="0" y="0"/></Component>
+    <PhyNetGroup/>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "many-pads.xml");
+    writeFileSync(f, xml);
+    const result = await queryComponent(f, "U1", "full");
+    expect(isErrorResult(result)).toBe(false);
+    if (!isErrorResult(result)) {
+      expect(result.padCount).toBe(PAD_COUNT); // true total preserved
+      expect(result.padRows!.length).toBe(MAX_DETAIL_ROWS); // capped
+      expect(result.truncated).toBe(true);
     }
   });
 
