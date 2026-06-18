@@ -28,7 +28,9 @@ export const formatResult = (result: unknown): { content: { type: "text"; text: 
 //   - MAX_COORD_ROWS: heavy per-coordinate arrays (viaRows/padRows) requested via
 //     detail="full". Each row is a numeric tuple, so a few hundred already cost
 //     thousands of tokens; this is kept low so even a "full" response on the
-//     largest net stays within a typical tool-response budget.
+//     largest net stays within a typical tool-response budget. At 300 rows a full
+//     response is ~18 KB (~4-5k tokens) on the largest known net, a comfortable
+//     margin under common tool-response budgets.
 //   - MAX_PIN_ROWS: the connectivity pin list, which is the core payload of a net
 //     query and far more valuable per row (a short refdes.pin string). It is kept
 //     higher so a high-fanout net (e.g. a 1000+ pin GND) still returns useful

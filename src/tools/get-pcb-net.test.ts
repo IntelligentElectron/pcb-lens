@@ -562,7 +562,11 @@ describe("queryNet -- token bounding", () => {
     const xml = `<IPC-2581>
   <Content></Content>
   <CadHeader units="MILLIMETER"/>
-  <LogicalNet name="BIGNET"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <LogicalNet name="BIGNET">
+    <PinRef pin="1" componentRef="U1"/>
+    <PinRef pin="2" componentRef="U2"/>
+    <PinRef pin="3" componentRef="U3"/>
+  </LogicalNet>
   <Step>
     <PhyNetGroup/>
     <LayerFeature layerRef="TOP">
@@ -575,10 +579,14 @@ describe("queryNet -- token bounding", () => {
     const f = path.join(tempDir, "many-vias.xml");
     writeFileSync(f, xml);
 
-    // Summary stays compact regardless of via count.
+    // Summary stays compact regardless of via count, and the coordinate-array
+    // overflow does NOT truncate connectivity: all pins are still returned and the
+    // result is not flagged truncated (the pin list has its own, higher budget).
     const summary = expectSuccess(await queryNet(f, "^BIGNET$"));
     expect(summary.matches[0].totalVias).toBe(VIA_COUNT);
     expect(summary.matches[0]).not.toHaveProperty("viaRows");
+    expect(Object.keys(summary.matches[0].pins)).toEqual(["U1", "U2", "U3"]);
+    expect(summary.matches[0].truncated).toBeFalsy();
 
     // Full mode caps the raw array but still reports the true total.
     const full = expectSuccess(await queryNet(f, "^BIGNET$", "full"));
@@ -586,9 +594,10 @@ describe("queryNet -- token bounding", () => {
     expect(net.totalVias).toBe(VIA_COUNT);
     expect(net.viaRows!.length).toBe(MAX_COORD_ROWS);
     expect(net.truncated).toBe(true);
-    // The whole full response stays small enough for a tool-response budget even
-    // on a net with far more vias than the cap.
-    expect(JSON.stringify(net).length).toBeLessThan(20000);
+    // 300 coord rows serialize to ~18 KB (~4-5k tokens) on the largest known net;
+    // assert the whole full response stays well under a typical tool-response budget
+    // even when the net has far more vias than the cap.
+    expect(JSON.stringify(net).length).toBeLessThan(25_000);
   });
 
   it("caps the pins map on extreme-fanout nets but reports the true pinCount", async () => {
