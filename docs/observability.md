@@ -6,7 +6,7 @@ This is the full developer reference and integration guide. For a one-paragraph 
 
 ## Design guarantees
 
-- **Disabled by default, zero overhead.** If no OTLP endpoint is configured, the SDK is never imported and instrumentation is a pure pass-through. Enabling telemetry requires no code changes — only standard `OTEL_*` environment variables.
+- **Disabled by default, zero overhead.** If no OTLP endpoint is configured, the SDK is never imported and instrumentation is a pure pass-through. Enabling telemetry requires no code changes — only standard `OTEL_*` environment variables. Before enabling it against a third-party backend, note the [privacy note](#resource-attributes) on `enduser.id`.
 - **Telemetry never breaks a tool call.** Every span, metric, and log operation is wrapped so that an exporter fault, misconfiguration, or unreachable backend degrades to "no telemetry" — it never surfaces an error to the caller or changes a tool result.
 - **stdout is reserved for MCP.** The server speaks JSON-RPC over stdio, so stdout carries the MCP protocol. All telemetry diagnostics go to **stderr only**, and no console/stdout exporter is ever used.
 - **Flushed on shutdown.** Batched, asynchronous exports are flushed when the process exits (including `SIGINT`/`SIGTERM`), so short-lived invocations do not lose data.
@@ -85,6 +85,8 @@ Telemetry is configured **purely through the standard OpenTelemetry environment 
 | `OTEL_METRIC_EXPORT_INTERVAL` | Metric export interval in ms (default `60000`). |
 | `OTEL_SDK_DISABLED` | Set to `true`/`1` to force telemetry off even if an endpoint is configured. |
 
+The sampler and batch/interval knobs (`OTEL_TRACES_SAMPLER`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BLRP_SCHEDULE_DELAY`) are standard OpenTelemetry variables read directly by the SDK, so you won't find them referenced in this project's code.
+
 Application-specific option:
 
 | Variable | Purpose |
@@ -146,6 +148,6 @@ Any of the variables in the [Configuration](#configuration) table can be supplie
 
 1. With an endpoint configured, call any tool from your AI client.
 2. Confirm spans appear in your backend (e.g. the Jaeger UI at `http://localhost:16686`, service `pcb-lens`, operation `tool/<tool_name>`).
-3. Check `tool.calls` / `tool.duration` metrics and the correlated log records.
+3. Check `tool.calls` / `tool.duration` metrics and the correlated log records. (Metrics and logs need a metrics/logs-capable backend such as an OpenTelemetry Collector, Prometheus, or Grafana — Jaeger renders traces only.)
 
 If nothing arrives, the server itself keeps working — telemetry failures are silent on the hot path. Look at the server's **stderr** for `[otel]` diagnostic lines (e.g. an init failure or a gRPC fallback warning), and double-check the endpoint, protocol (`http/protobuf` vs `http/json`), and port (`4318` for OTLP/HTTP).
