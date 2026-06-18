@@ -47,8 +47,12 @@ export const MAX_PIN_ROWS = 2000;
  * whether it was truncated, so callers can surface an explicit `truncated` flag
  * alongside the true total count.
  */
-export const capDetailRows = <T>(rows: T[], cap: number): { rows: T[]; truncated: boolean } =>
-  rows.length > cap ? { rows: rows.slice(0, cap), truncated: true } : { rows, truncated: false };
+export const capDetailRows = <T>(rows: T[], cap: number): { rows: T[]; truncated: boolean } => {
+  const limit = Math.max(0, cap); // defensive: never slice with a negative bound
+  return rows.length > limit
+    ? { rows: rows.slice(0, limit), truncated: true }
+    : { rows, truncated: false };
+};
 
 // =============================================================================
 // File Validation

@@ -6,7 +6,7 @@ Look up a single component by exact refdes. Returns placement, package, BOM data
 
 Look up a single component by exact refdes in an IPC-2581 file. Returns placement (x/y/rotation/layer/mount type), package (with parsed Cadence package details when recognizable), BOM data (description and characteristics like value, tolerance, etc.), connected nets with the component's pin names, and a pad-geometry summary (pad count + deduped pad shapes). Pass `detail="full"` for per-pin pad coordinates. Useful for inspecting a specific IC, capacitor, or resistor.
 
-Responses are token-bounded by design: the per-pin pad coordinate array (`padRows`) is heavy for high-pin-count parts, so it is omitted by default in favor of `padCount` + `padShapes`. Callers that need every pad coordinate pass `detail="full"`; even then the array is capped to a few hundred rows (with `truncated: true` set) so a `detail="full"` response stays within a tool-response budget even for the highest-pin-count parts.
+Responses are token-bounded by design: the per-pin pad coordinate array (`padRows`) is heavy for high-pin-count parts, so it is omitted by default in favor of `padCount` + `padShapes`. Callers that need every pad coordinate pass `detail="full"`; even then the array is capped to 300 rows (with `truncated: true` set) so a `detail="full"` response stays within a tool-response budget even for the highest-pin-count parts.
 
 ## Input Parameters
 
@@ -190,6 +190,6 @@ Response:
 - Coordinates and dimensions are normalized to microns; rotation is in degrees counterclockwise.
 - `parsed` is present whenever a package family can be derived from `packageRef`. Its `pinCount` is the authoritative count from pad/net geometry (not the case-size digits in the footprint name); it is omitted only when no count can be determined.
 - `netRows` lists each net the component connects to, the component's pins on that net, and the net's total pin count; rows are sorted by net name.
-- `padCount` and `padShapes` are present whenever pad geometry resolves. The per-pin `padColumns`/`padRows` coordinates are returned only with `detail="full"`, sorted by pin, and capped to a few hundred rows (with `truncated: true`) to keep responses token-bounded. Pad shapes defined as a polygon/contour are reported by their bounding box (`shape: "polygon"`).
+- `padCount` and `padShapes` are present whenever pad geometry resolves. The per-pin `padColumns`/`padRows` coordinates are returned only with `detail="full"`, sorted by pin, and capped to 300 rows (with `truncated: true`) to keep responses token-bounded. Pad shapes defined as a polygon/contour are reported by their bounding box (`shape: "polygon"`).
 - The `characteristics` record contains key-value pairs from the BOM (varies by design, common keys include VALUE, TOL, VOLTAGE).
 - `mountType` and `description` may be absent if the IPC-2581 file omits them.
