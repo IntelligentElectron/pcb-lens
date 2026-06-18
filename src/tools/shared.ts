@@ -54,6 +54,66 @@ export const capDetailRows = <T>(rows: T[], cap: number): { rows: T[]; truncated
     : { rows, truncated: false };
 };
 
+/**
+ * Cap grouped coordinate rows to `cap`, apportioning the budget across groups in
+ * proportion to each group's share of the total rather than taking the first
+ * `cap` rows. A plain head-slice biases the truncated sample toward whichever
+ * group appears first in the file (e.g. all vias from one drill span); this
+ * spreads the sample across every group so a `detail="full"` response is
+ * representative of the whole net.
+ *
+ * The budget is apportioned with the largest-remainder (Hamilton) method: each
+ * group gets `floor(cap * groupSize / total)` rows, then the leftover budget
+ * goes to the groups with the largest fractional remainders. Rows keep their
+ * original order within a group, and groups are emitted in first-appearance
+ * order, so the output is deterministic. `truncated` is true whenever any row
+ * was dropped. With a single group this reduces to a head-slice.
+ */
+export const capRowsStratified = <T>(
+  rows: T[],
+  cap: number,
+  groupKey: (row: T) => number | string
+): { rows: T[]; truncated: boolean } => {
+  const limit = Math.max(0, cap); // defensive: never allocate against a negative bound
+  if (rows.length <= limit) return { rows, truncated: false };
+  if (limit === 0) return { rows: [], truncated: true };
+
+  // Group rows, preserving first-appearance order of groups and original order
+  // within each group.
+  const groups = new Map<number | string, T[]>();
+  for (const row of rows) {
+    const key = groupKey(row);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(row);
+    else groups.set(key, [row]);
+  }
+
+  const buckets = [...groups.values()];
+  const total = rows.length;
+
+  // Largest-remainder apportionment of `limit` across groups by size. Since
+  // limit < total, every quota is strictly below its group size, so a base
+  // floor plus at most one remainder row can never exceed the group's size.
+  const quotas = buckets.map((b) => (b.length * limit) / total);
+  const alloc = quotas.map((q) => Math.floor(q));
+  let remaining = limit - alloc.reduce((sum, n) => sum + n, 0);
+  const byRemainder = quotas
+    .map((q, i) => ({ i, frac: q - Math.floor(q) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (let j = 0; j < byRemainder.length && remaining > 0; j++) {
+    alloc[byRemainder[j].i]++;
+    remaining--;
+  }
+
+  const out: T[] = [];
+  buckets.forEach((bucket, i) => {
+    const take = Math.min(bucket.length, alloc[i]);
+    for (let k = 0; k < take; k++) out.push(bucket[k]);
+  });
+
+  return { rows: out, truncated: out.length < rows.length };
+};
+
 // =============================================================================
 // File Validation
 // =============================================================================

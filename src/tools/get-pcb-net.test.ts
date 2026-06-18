@@ -600,6 +600,61 @@ describe("queryNet -- token bounding", () => {
     expect(JSON.stringify(net).length).toBeLessThan(25_000);
   });
 
+  it("spreads the truncated via sample across drill spans (detail=full)", async () => {
+    // Three drill spans emitted contiguously: 600 of 0.3 (index 0), 300 of 0.5
+    // (index 1), 100 of 0.7 (index 2); 1000 vias total, well over the cap. A naive
+    // head-slice would return MAX_COORD_ROWS rows all from span 0; the stratified
+    // cap must instead spread the budget across all three spans in proportion.
+    const spans = [
+      { dia: "0.3", n: 600 },
+      { dia: "0.5", n: 300 },
+      { dia: "0.7", n: 100 },
+    ];
+    const holes = spans
+      .flatMap((s, si) =>
+        Array.from(
+          { length: s.n },
+          (_, i) => `<Hole platingStatus="VIA" x="${si * 1000 + i}" y="0" diameter="${s.dia}"/>`
+        )
+      )
+      .join("\n        ");
+    const xml = `<IPC-2581>
+  <Content></Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="MANYSPANS"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="MANYSPANS">
+        ${holes}
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "many-spans.xml");
+    writeFileSync(f, xml);
+
+    const net = expectSuccess(await queryNet(f, "^MANYSPANS$", "full")).matches[0];
+    expect(net.totalVias).toBe(1000);
+    expect(net.viaRows!.length).toBe(MAX_COORD_ROWS);
+    expect(net.truncated).toBe(true);
+    // viaCounts still carries the true per-span totals.
+    expect(net.viaCounts!.map((c) => c.count)).toEqual([600, 300, 100]);
+
+    // Every span is represented in the truncated sample. The smaller spans being
+    // non-empty is the key signal: a head-slice would leave them at zero.
+    const perIndex = [0, 0, 0];
+    for (const [, , drillIndex] of net.viaRows!) perIndex[drillIndex]++;
+    expect(perIndex[0]).toBeGreaterThan(0);
+    expect(perIndex[1]).toBeGreaterThan(0);
+    expect(perIndex[2]).toBeGreaterThan(0);
+    expect(perIndex[0] + perIndex[1] + perIndex[2]).toBe(MAX_COORD_ROWS);
+    // Roughly proportional to span size (600:300:100): larger span -> more rows.
+    expect(perIndex[0]).toBeGreaterThan(perIndex[1]);
+    expect(perIndex[1]).toBeGreaterThan(perIndex[2]);
+    expect(perIndex[0]).toBeGreaterThanOrEqual(perIndex[2] * 4);
+  });
+
   it("caps the pins map on extreme-fanout nets but reports the true pinCount", async () => {
     const PIN_COUNT = MAX_PIN_ROWS + 100;
     // One pin each on a distinct refdes -> > MAX_PIN_ROWS refdes entries.
