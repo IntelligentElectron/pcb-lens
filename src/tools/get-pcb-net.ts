@@ -389,7 +389,7 @@ export const register = (server: McpServer): void => {
     "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing reports the layers a net has copper on and a per-layer segment count; trace widths and lengths are reported for centerline-routed copper (Polyline/Line) and may be absent for shape/plane-routed (poured) copper, which has no centerline. Pass detail='full' for raw per-via coordinates (capped). Rejects patterns that match all nets.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing is read from conductor-layer copper geometry in the export (Polyline/Line centerline traces and poured Contour shapes); for it, trace widths and lengths are reported for centerline-routed copper and are absent for shape/plane-routed (poured) copper, which has no centerline. If the IPC-2581 export was generated without conductor/etch (cline) feature output, the file carries no conductor geometry and routing is empty even though pins, vias, and layersUsed still populate; re-export with conductor features enabled to recover widths/lengths/segment counts. Pass detail='full' for raw per-via coordinates (capped). Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
