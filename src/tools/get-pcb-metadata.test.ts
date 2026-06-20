@@ -18,7 +18,9 @@ describe("file validation", () => {
   });
 
   it("returns error for non-XML file", async () => {
-    const result = await getDesignOverview(path.join(FIXTURE_DIR, "../..", "package.json"));
+    // A real, non-XML file (this repo's package.json), resolved from the test
+    // location so it's independent of the fixtures dir layout.
+    const result = await getDesignOverview(path.resolve(import.meta.dirname, "../../package.json"));
     expect(isErrorResult(result)).toBe(true);
     if (isErrorResult(result)) {
       expect(result.error).toContain("not an XML file");
