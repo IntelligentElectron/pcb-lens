@@ -10,11 +10,11 @@ MCP server for querying IPC-2581 PCB layout files. Enables LLM-driven layout rev
 
 ```bash
 bun install         # Prefer bun over npm
-npm run setup       # Download IPC-2581 test fixtures
+npm run setup       # Init test-fixtures submodule + download IPC-2581 fixtures
 npm run dev
 ```
 
-**Note:** Test fixtures are large XML files downloaded via `npm run setup`. They are gitignored. The download script extracts specific IPC-2581 files from consortium zips, flattens them to `test/fixtures/*.xml` (renaming `.cvg` → `.xml`), and cleans up nested directories. When adding new fixtures, always verify the inner zip structure first — many contain nested directories, `.cvg` files, and non-IPC-2581 artifacts (ODB++, Gerbers, drill files).
+**Note:** Test fixtures come from the shared **[test-fixtures](https://github.com/IntelligentElectron/test-fixtures)** repo, consumed as a git submodule at `test/fixtures`. `npm run setup` initializes the submodule and runs `test/fixtures/ipc2581/download-fixtures.sh`, which fetches the large IPC-2581 XML into `test/fixtures/ipc2581/` (gitignored by the submodule). The download script extracts specific IPC-2581 files from consortium zips, flattens them (renaming `.cvg` → `.xml`), and cleans up nested directories. When adding new fixtures, edit the script in the test-fixtures repo and verify the inner zip structure first — many contain nested directories, `.cvg` files, and non-IPC-2581 artifacts (ODB++, Gerbers, drill files). Fixture-dependent tests `skipIf` the XML is absent, so CI passes without downloading.
 
 ### Commands
 

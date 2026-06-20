@@ -23,7 +23,7 @@
     "pcb-lens": "./dist/index.js"
   },
   "scripts": {
-    "setup": "bash scripts/download-fixtures.sh",
+    "setup": "git submodule update --init --recursive && bash test/fixtures/ipc2581/download-fixtures.sh",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",

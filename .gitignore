@@ -40,9 +40,9 @@ coverage/
 # Private files
 private/
 
-# Test fixtures (large XML/ZIP files downloaded via npm run setup)
-test/fixtures/*.xml
-test/fixtures/*.zip
+# Test fixtures live in the test-fixtures submodule (test/fixtures). The IPC-2581
+# XML/ZIP under test/fixtures/ipc2581/ are gitignored by that submodule and
+# fetched via `npm run setup`. Nothing fixture-related is tracked in this repo.
 test/integration/fixtures/
 
 # Telemetry

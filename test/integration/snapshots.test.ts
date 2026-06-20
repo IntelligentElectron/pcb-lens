@@ -21,7 +21,7 @@ import type {
 } from "../../src/tools/lib/types.js";
 import { isErrorResult } from "../../src/tools/lib/types.js";
 
-const FIXTURE_DIR = path.resolve(import.meta.dirname, "../fixtures");
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "../fixtures/ipc2581");
 
 // ---------------------------------------------------------------------------
 // Ground-truth types
