@@ -6,7 +6,7 @@ import { queryComponent } from "./get-pcb-component.js";
 import { isErrorResult } from "./lib/types.js";
 import { MAX_COORD_ROWS } from "./shared.js";
 
-const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures/ipc2581");
 const BEAGLEBONE_REVB6 = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
 const hasBeagleBoneFixture = existsSync(BEAGLEBONE_REVB6);
 const PARALLELLA_REVB = path.join(FIXTURE_DIR, "parallella-RevB.xml");

@@ -4,7 +4,7 @@ import path from "node:path";
 import { getDesignOverview } from "./get-pcb-metadata.js";
 import { isErrorResult } from "./lib/types.js";
 
-const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures/ipc2581");
 const BEAGLEBONE_REVC = path.join(FIXTURE_DIR, "BeagleBone Black_PCB_RevC_No Logo_210401.xml");
 const hasBeagleBoneFixture = existsSync(BEAGLEBONE_REVC);
 

@@ -7,7 +7,7 @@ import { isErrorResult } from "./lib/types.js";
 import type { QueryNetsResult } from "./lib/types.js";
 import { MAX_COORD_ROWS, MAX_PIN_ROWS } from "./shared.js";
 
-const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures");
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "../../test/fixtures/ipc2581");
 const BEAGLEBONE = path.join(FIXTURE_DIR, "BeagleBone_Black_RevB6.xml");
 const hasBeagleBoneFixture = existsSync(BEAGLEBONE);
 const TESTCASE1_REVC = path.join(FIXTURE_DIR, "testcase1-RevC.xml");
