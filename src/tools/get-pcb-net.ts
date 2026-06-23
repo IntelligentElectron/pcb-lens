@@ -558,7 +558,7 @@ export const register = (server: McpServer): void => {
     "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing is read from conductor-layer copper geometry in the export (Polyline/Line centerline traces and poured Contour shapes); trace widths and lengths are reported for centerline-routed copper and are absent for shape/plane-routed (poured) copper, which has no centerline. If the IPC-2581 export was generated without conductor/etch (cline) feature output, the file carries no conductor geometry and routing is empty even though pins, vias, and layersUsed still populate. Pass detail='full' for raw per-via coordinates and per-trace centerline geometry (each Polyline/Line as vertices + width + arcs), both capped. Poured shapes have no centerline and are absent from the per-trace geometry; segments[].length is per-primitive and does not equal totalSegments (Set-level). Rejects patterns that match all nets.",
+        "Look up nets in a PCB layout by name and inspect their connectivity and routing. Provide a net-name pattern (a regular expression); for each matching net you get the connected component pins (grouped by component), the layers the net uses, a per-layer routing summary (trace widths, number of routed segments, and total routed length), and a via summary (count per drill size). All distances are in microns. Copper that is filled as a pour or plane instead of drawn as a trace is reported as routed on its layer but without a width or length, so a net can be fully routed yet show no trace width. A net that returns pins but no routing was most likely exported without its routed-copper data. Use a specific pattern: one that matches every net in the design is rejected. Set detail='full' to additionally return exact geometry — every via coordinate and the full point-by-point shape of each routed trace (including arcs for curved traces); for very large nets this geometry is sampled and the response is marked truncated.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
@@ -568,7 +568,7 @@ export const register = (server: McpServer): void => {
           .enum(["summary", "full"])
           .default("summary")
           .describe(
-            "Response detail. 'summary' (default) returns via counts and the per-layer routing rollup only. 'full' (must be set explicitly) additionally returns raw per-via x/y coordinates and per-trace centerline geometry (segments[]: vertices, width, arcs), both capped to stay within the response budget."
+            "How much to return. 'summary' (default) gives the per-layer routing summary and via counts. 'full' additionally returns exact geometry: every via coordinate and the full shape of each routed trace (its vertices, width, and arc data for curved traces); large nets are sampled and the response is marked truncated. Use 'full' only when you need exact coordinates, since responses are larger."
           ),
       },
     },
