@@ -14,6 +14,8 @@ const TESTCASE1_REVC = path.join(FIXTURE_DIR, "testcase1-RevC.xml");
 const hasTestcase1Fixture = existsSync(TESTCASE1_REVC);
 const PARALLELLA_REVB = path.join(FIXTURE_DIR, "parallella-RevB.xml");
 const hasParallellaFixture = existsSync(PARALLELLA_REVB);
+const TESTCASE3_REVC = path.join(FIXTURE_DIR, "testcase3-RevC.xml");
+const hasTestcase3Fixture = existsSync(TESTCASE3_REVC);
 
 // ---------------------------------------------------------------------------
 // Inline fixture -- covers LogicalNet pins, PhyNetPoint layers, LayerFeature
@@ -369,6 +371,31 @@ describe.skipIf(!hasTestcase1Fixture)("queryNet -- <Line> routing on testcase1 R
     // TOP previously reported 3 segments (polylines only); <Line> segments add more.
     expect(top!.segmentCount).toBeGreaterThan(3);
   });
+
+  it("returns per-trace segments consistent with the routing rollup (detail=full)", async () => {
+    const summary = expectSuccess(await queryNet(TESTCASE1_REVC, "^UN21RES96PA0$")).matches[0];
+    expect(summary).not.toHaveProperty("segments"); // opt-in only
+
+    const net = expectSuccess(await queryNet(TESTCASE1_REVC, "^UN21RES96PA0$", "full")).matches[0];
+    expect(net.segments).toBeDefined();
+    expect(net.segments!.length).toBeGreaterThan(0);
+
+    const routingLayers = new Set(net.routing!.map((rt) => rt.layerName));
+    for (const seg of net.segments!) {
+      expect(routingLayers.has(seg.layer)).toBe(true); // no phantom layers
+      expect(seg.points.length).toBeGreaterThanOrEqual(2); // real geometry
+      expect(seg.width).toBeGreaterThanOrEqual(0);
+    }
+    // Every centerline width the rollup reports for a layer should be realizable
+    // by some trace on that layer (the rollup is derived from the same widths).
+    const top = net.routing!.find((rt) => rt.layerName === "TOP")!;
+    const topSegWidths = new Set(
+      net.segments!.filter((s) => s.layer === "TOP").map((s) => s.width)
+    );
+    for (const w of top.traceWidths) {
+      expect(topSegWidths.has(w)).toBe(true);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -497,6 +524,262 @@ describe.skipIf(!hasParallellaFixture)("queryNet -- poured copper on parallella 
     expect(net.routing).toBeDefined();
     expect(net.routing!.length).toBeGreaterThan(0);
     expect(net.routing!.some((rt) => rt.segmentCount > 0)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-trace centerline routing geometry (detail="full"). Each <Polyline>/<Line>
+// conductor is returned as vertices + width + arcs. Opt-in only: summary mode
+// never emits it. Poured <Contour> shapes have no centerline and are excluded.
+// ---------------------------------------------------------------------------
+describe("queryNet -- per-trace routing geometry (detail=full)", () => {
+  // POLY1: 3-vertex polyline, width via set-level <LineDescRef>.
+  // ARC1:  polyline with a <PolyStepCurve> (curved vertex).
+  // LINE1: single <Line> (3-4-5).
+  // OVERRIDE1: polyline-local <LineDesc> overrides the set-level <LineDescRef>.
+  // POURSEG: poured <Contour> (no centerline -> excluded from segments).
+  const SEG_XML = `<IPC-2581>
+  <Content>
+    <EntryLineDesc id="LDS"><LineDesc lineWidth="0.15"/></EntryLineDesc>
+    <EntryLineDesc id="LD_A"><LineDesc lineWidth="0.10"/></EntryLineDesc>
+    <EntryLineDesc id="LD_B"><LineDesc lineWidth="0.20"/></EntryLineDesc>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="POLY1"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <LogicalNet name="ARC1"><PinRef pin="1" componentRef="U2"/></LogicalNet>
+  <LogicalNet name="LINE1"><PinRef pin="1" componentRef="U3"/></LogicalNet>
+  <LogicalNet name="OVERRIDE1"><PinRef pin="1" componentRef="U4"/></LogicalNet>
+  <LogicalNet name="POURSEG"><PinRef pin="1" componentRef="U5"/></LogicalNet>
+  <LogicalNet name="MULTILINE"><PinRef pin="1" componentRef="U6"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+      <Set net="MULTILINE">
+        <Features>
+          <Line startX="0" startY="0" endX="1" endY="0"><LineDescRef id="LD_A"/></Line>
+          <Line startX="1" startY="0" endX="2" endY="0"><LineDescRef id="LD_B"/></Line>
+        </Features>
+      </Set>
+      <Set net="POLY1">
+        <Features>
+          <Polyline>
+            <PolyBegin x="0" y="0"/>
+            <PolyStepSegment x="1" y="0"/>
+            <PolyStepSegment x="1" y="2"/>
+            <LineDescRef id="LDS"/>
+          </Polyline>
+        </Features>
+      </Set>
+      <Set net="ARC1">
+        <Features>
+          <Polyline>
+            <PolyBegin x="0" y="0"/>
+            <PolyStepCurve x="2" y="2" centerX="2" centerY="0" clockwise="true"/>
+            <LineDescRef id="LDS"/>
+          </Polyline>
+        </Features>
+      </Set>
+      <Set net="LINE1">
+        <Features>
+          <Line startX="0" startY="0" endX="3" endY="4"><LineDescRef id="LDS"/></Line>
+        </Features>
+      </Set>
+      <Set net="OVERRIDE1">
+        <Features>
+          <Polyline>
+            <PolyBegin x="0" y="0"/>
+            <PolyStepSegment x="1" y="0"/>
+            <LineDesc lineWidth="0.40"/>
+            <LineDescRef id="LDS"/>
+          </Polyline>
+        </Features>
+      </Set>
+      <Set net="POURSEG">
+        <Features>
+          <Contour>
+            <Polygon>
+              <PolyBegin x="0" y="0"/>
+              <PolyStepSegment x="1" y="0"/>
+              <PolyStepSegment x="1" y="1"/>
+              <PolyStepSegment x="0" y="0"/>
+            </Polygon>
+          </Contour>
+        </Features>
+      </Set>
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+
+  let segXml: string;
+  beforeAll(() => {
+    segXml = path.join(tempDir, "segments.xml");
+    writeFileSync(segXml, SEG_XML);
+  });
+
+  it("omits segments in summary mode (and by default)", async () => {
+    const summary = expectSuccess(await queryNet(segXml, "^POLY1$")).matches[0];
+    expect(summary).not.toHaveProperty("segments");
+    // Default detail is summary: the explicit and implicit calls agree.
+    const def = expectSuccess(await queryNet(segXml, "^POLY1$", "summary")).matches[0];
+    expect(def).not.toHaveProperty("segments");
+    // The per-layer rollup is unaffected.
+    expect(summary.routing!.find((rt) => rt.layerName === "TOP")!.segmentCount).toBe(1);
+  });
+
+  it("returns a polyline trace with vertices and set-level width (detail=full)", async () => {
+    const net = expectSuccess(await queryNet(segXml, "^POLY1$", "full")).matches[0];
+    expect(net.segments).toBeDefined();
+    expect(net.segments).toHaveLength(1);
+    const seg = net.segments![0];
+    expect(seg.layer).toBe("TOP");
+    expect(seg.width).toBe(150); // 0.15mm -> 150 micron
+    expect(seg.points).toEqual([
+      [0, 0],
+      [1000, 0],
+      [1000, 2000],
+    ]);
+    expect(seg).not.toHaveProperty("arcs"); // no curved vertices
+  });
+
+  it("returns a single <Line> as a 2-point trace (detail=full)", async () => {
+    const net = expectSuccess(await queryNet(segXml, "^LINE1$", "full")).matches[0];
+    expect(net.segments).toHaveLength(1);
+    const seg = net.segments![0];
+    expect(seg.points).toEqual([
+      [0, 0],
+      [3000, 4000],
+    ]);
+    expect(seg.width).toBe(150);
+  });
+
+  it("captures full arc geometry from <PolyStepCurve> (detail=full)", async () => {
+    const net = expectSuccess(await queryNet(segXml, "^ARC1$", "full")).matches[0];
+    const seg = net.segments![0];
+    expect(seg.points).toEqual([
+      [0, 0],
+      [2000, 2000],
+    ]);
+    expect(seg.arcs).toEqual([{ index: 1, centerX: 2000, centerY: 0, clockwise: true }]);
+  });
+
+  it("reports each <Line>'s own width when one <Set> holds several (detail=full)", async () => {
+    // Two lines, one Set, distinct LineDescRefs (0.10mm and 0.20mm). The widths
+    // must reflect each line's own descriptor -- not a single set-level value
+    // applied to both.
+    const net = expectSuccess(await queryNet(segXml, "^MULTILINE$", "full")).matches[0];
+    expect(net.segments).toHaveLength(2);
+    // points preserve order, so widths line up with the source lines.
+    const byEnd = Object.fromEntries(net.segments!.map((s) => [s.points[1][0], s.width]));
+    expect(byEnd[1000]).toBe(100); // first line -> LD_A 0.10mm
+    expect(byEnd[2000]).toBe(200); // second line -> LD_B 0.20mm
+  });
+
+  it("rollup traceWidths reports every width a multi-primitive <Set> uses (summary)", async () => {
+    // Same MULTILINE net in summary mode: the per-layer rollup must list BOTH
+    // conductor widths, not just the last descriptor's. This is the aggregate
+    // counterpart to the per-trace check above and works without detail=full.
+    const net = expectSuccess(await queryNet(segXml, "^MULTILINE$")).matches[0];
+    expect(net).not.toHaveProperty("segments"); // still summary
+    const top = net.routing!.find((rt) => rt.layerName === "TOP")!;
+    expect(top.traceWidths).toEqual([100, 200]); // sorted, both present
+  });
+
+  it("lets a polyline-local <LineDesc> override the set-level width (detail=full)", async () => {
+    const net = expectSuccess(await queryNet(segXml, "^OVERRIDE1$", "full")).matches[0];
+    // Polyline-local 0.40mm wins over the set-level LDS (0.15mm).
+    expect(net.segments![0].width).toBe(400);
+  });
+
+  it("excludes poured <Contour> copper from segments but still reports the rollup", async () => {
+    const net = expectSuccess(await queryNet(segXml, "^POURSEG$", "full")).matches[0];
+    // Routed (rollup present) but no centerline geometry to export.
+    expect(net.routing!.find((rt) => rt.layerName === "TOP")!.segmentCount).toBe(1);
+    expect(net).not.toHaveProperty("segments");
+  });
+
+  it("keeps each matched net's segments independent", async () => {
+    const r = expectSuccess(await queryNet(segXml, "^(POLY1|ARC1)$", "full"));
+    // Matches are sorted alphabetically: ARC1, then POLY1.
+    expect(r.matches.map((m) => m.netName)).toEqual(["ARC1", "POLY1"]);
+    expect(r.matches[0].segments![0].arcs).toBeDefined(); // ARC1 has the curve
+    expect(r.matches[1].segments![0]).not.toHaveProperty("arcs"); // POLY1 does not
+    expect(r.matches[1].segments![0].points).toHaveLength(3);
+  });
+
+  it("caps segments at the budget, flags truncated, and keeps the rollup exact", async () => {
+    const onTop = MAX_COORD_ROWS - 50; // 250
+    const onBottom = 150; // total 400 > MAX_COORD_ROWS
+    const traceSet = (i: number) =>
+      `      <Set net="MANY">
+        <Features>
+          <Polyline>
+            <PolyBegin x="${i}" y="0"/>
+            <PolyStepSegment x="${i}" y="1"/>
+            <LineDescRef id="LDS"/>
+          </Polyline>
+        </Features>
+      </Set>`;
+    const topSets = Array.from({ length: onTop }, (_, i) => traceSet(i)).join("\n");
+    const botSets = Array.from({ length: onBottom }, (_, i) => traceSet(i)).join("\n");
+    const xml = `<IPC-2581>
+  <Content>
+    <EntryLineDesc id="LDS"><LineDesc lineWidth="0.15"/></EntryLineDesc>
+  </Content>
+  <CadHeader units="MILLIMETER"/>
+  <LogicalNet name="MANY"><PinRef pin="1" componentRef="U1"/></LogicalNet>
+  <Step>
+    <PhyNetGroup/>
+    <LayerFeature layerRef="TOP">
+${topSets}
+    </LayerFeature>
+    <LayerFeature layerRef="BOTTOM">
+${botSets}
+    </LayerFeature>
+  </Step>
+</IPC-2581>`;
+    const f = path.join(tempDir, "many-segments.xml");
+    writeFileSync(f, xml);
+
+    const net = expectSuccess(await queryNet(f, "^MANY$", "full")).matches[0];
+    expect(net.segments!.length).toBe(MAX_COORD_ROWS);
+    expect(net.truncated).toBe(true);
+    // Stratified by layer: both layers survive the cap.
+    const layers = new Set(net.segments!.map((s) => s.layer));
+    expect(layers).toEqual(new Set(["TOP", "BOTTOM"]));
+    // The Set-level rollup carries the true per-layer totals, unaffected by the cap.
+    expect(net.routing!.find((rt) => rt.layerName === "TOP")!.segmentCount).toBe(onTop);
+    expect(net.routing!.find((rt) => rt.layerName === "BOTTOM")!.segmentCount).toBe(onBottom);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real-fixture arc regression. On testcase3 RevC the net UN1DAC71PDAC3 is routed
+// on layer IS2 with a <Polyline> that contains a <PolyStepCurve> (a curved
+// vertex). It has only a handful of conductor sets, so it stays under the cap and
+// its arc survives -- proving real arc geometry is captured (not just synthetic).
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasTestcase3Fixture)("queryNet -- arc routing on testcase3 RevC", () => {
+  it("captures real <PolyStepCurve> arc geometry for UN1DAC71PDAC3 (detail=full)", async () => {
+    const summary = expectSuccess(await queryNet(TESTCASE3_REVC, "^UN1DAC71PDAC3$")).matches[0];
+    expect(summary).not.toHaveProperty("segments"); // opt-in only
+
+    const net = expectSuccess(await queryNet(TESTCASE3_REVC, "^UN1DAC71PDAC3$", "full")).matches[0];
+    expect(net.segments).toBeDefined();
+    expect(net.truncated).toBeFalsy(); // small net, nothing dropped
+
+    const arced = net.segments!.filter((s) => s.arcs && s.arcs.length > 0);
+    expect(arced.length).toBeGreaterThan(0);
+    for (const s of arced) {
+      expect(s.width).toBeGreaterThan(0);
+      for (const a of s.arcs!) {
+        // Each arc indexes a real terminal vertex and carries full curvature.
+        expect(a.index).toBeGreaterThanOrEqual(0);
+        expect(a.index).toBeLessThan(s.points.length);
+        expect(Number.isFinite(a.centerX)).toBe(true);
+        expect(Number.isFinite(a.centerY)).toBe(true);
+        expect(typeof a.clockwise).toBe("boolean");
+      }
+    }
   });
 });
 

@@ -4,6 +4,8 @@ import type {
   ErrorResult,
   QueryNetResult,
   NetRouteInfo,
+  RoutingArc,
+  RoutingSegment,
   ViaCount,
   ViaDrill,
   ViaRow,
@@ -128,6 +130,10 @@ export const queryNet = async (
   const matchedNames = new Set(accumulators.keys());
   const skipLayers = new Set(["REF-route", "REF-both"]);
 
+  // Per-trace centerline geometry is only collected when the caller opts into
+  // detail="full"; in summary mode this stays false so Pass 3 does no extra work.
+  const wantSegments = detail === "full";
+
   let currentLayerName = "";
   let insideMatchedSet = false;
   let currentSetNetName = "";
@@ -138,6 +144,60 @@ export const queryNet = async (
   let inPolyline = false;
   let polyPoints: { x: number; y: number }[] = [];
   let polyLength = 0;
+
+  // Per-trace geometry collected for detail="full". `setSegments` holds the
+  // current <Set>'s traces; `ownWidthRaw` is the trace's OWN width descriptor
+  // (raw, pre-factor) captured from a <LineDescRef>/<LineDesc> child of that
+  // primitive. Traces without one fall back to the set/feature-level width at
+  // </Set>. `primRefId`/`primInlineWidth` accumulate the current primitive's own
+  // descriptor; `pendingLine`/`inLine` carry a <Line> across physical lines.
+  let segPoints: [number, number][] = [];
+  let segArcs: RoutingArc[] = [];
+  let primRefId: string | undefined;
+  let primInlineWidth: number | undefined;
+  let inLine = false;
+  let pendingLine: { layer: string; pts: [number, number][] } | null = null;
+  // Every conductor width (microns) seen in the current <Set>, so the per-layer
+  // rollup reports ALL distinct widths a Set uses (e.g. two <Line>s of different
+  // width), not just the last descriptor. Collected in summary mode too.
+  let setConductorWidths: number[] = [];
+  let setSegments: {
+    layer: string;
+    points: [number, number][];
+    arcs: RoutingArc[];
+    ownWidthRaw?: number;
+  }[] = [];
+
+  // Capture the current primitive's OWN width descriptor. A child <LineDesc
+  // lineWidth> is the most specific; otherwise a child <LineDescRef> id is
+  // resolved against the LineDesc dictionary at finalize time.
+  const captureOwnDesc = (l: string): void => {
+    if (l.includes("<LineDescRef ")) {
+      const id = attr(l, "id");
+      if (id) primRefId = id;
+    }
+    if (l.includes("<LineDesc ") && !l.includes("<EntryLineDesc ")) {
+      const w = numAttr(l, "lineWidth");
+      if (w !== undefined) primInlineWidth = w;
+    }
+  };
+  const ownWidthRaw = (): number | undefined => {
+    if (primInlineWidth !== undefined) return primInlineWidth;
+    if (primRefId !== undefined) return lineDescDict.get(primRefId);
+    return undefined;
+  };
+  const flushPendingLine = (): void => {
+    if (pendingLine) {
+      setSegments.push({
+        layer: pendingLine.layer,
+        points: pendingLine.pts,
+        arcs: [],
+        ownWidthRaw: ownWidthRaw(),
+      });
+      pendingLine = null;
+    }
+    inLine = false;
+  };
 
   await streamAllLines(filePath, (line) => {
     if (line.includes("<LayerFeature ")) {
@@ -154,7 +214,14 @@ export const queryNet = async (
       currentSetLineDescId = undefined;
       currentSetInlineWidth = undefined;
       inPad = false;
+      inPolyline = false;
       polyLength = 0;
+      setSegments = [];
+      setConductorWidths = [];
+      pendingLine = null;
+      inLine = false;
+      primRefId = undefined;
+      primInlineWidth = undefined;
     }
 
     if (insideMatchedSet) {
@@ -178,6 +245,13 @@ export const queryNet = async (
         currentSetHasConductor = true;
         inPolyline = true;
         polyPoints = [];
+        segPoints = [];
+        segArcs = [];
+        if (wantSegments) {
+          flushPendingLine(); // finalize a preceding self-closing <Line/>
+          primRefId = undefined;
+          primInlineWidth = undefined;
+        }
       }
 
       if (inPolyline) {
@@ -193,9 +267,41 @@ export const queryNet = async (
               polyLength += Math.sqrt(dx * dx + dy * dy);
             }
             polyPoints.push(pt);
+            if (wantSegments) segPoints.push([Math.round(pt.x), Math.round(pt.y)]);
           }
         }
+
+        // Curved vertices (<PolyStepCurve>) are only captured for the detail=
+        // "full" geometry export; summary length math (polyLength) deliberately
+        // ignores them, preserving the existing summary output unchanged.
+        if (wantSegments && line.includes("<PolyStepCurve ")) {
+          const x = numAttr(line, "x");
+          const y = numAttr(line, "y");
+          const cx = numAttr(line, "centerX");
+          const cy = numAttr(line, "centerY");
+          if (x !== undefined && y !== undefined && cx !== undefined && cy !== undefined) {
+            segPoints.push([Math.round(x * factor), Math.round(y * factor)]);
+            segArcs.push({
+              index: segPoints.length - 1,
+              centerX: Math.round(cx * factor),
+              centerY: Math.round(cy * factor),
+              clockwise: attr(line, "clockwise") === "true",
+            });
+          }
+        }
+
+        // The polyline's own width descriptor (child <LineDescRef>/<LineDesc>).
+        if (wantSegments) captureOwnDesc(line);
+
         if (line.includes("</Polyline>")) {
+          if (wantSegments && segPoints.length >= 2) {
+            setSegments.push({
+              layer: currentLayerName,
+              points: segPoints,
+              arcs: segArcs,
+              ownWidthRaw: ownWidthRaw(),
+            });
+          }
           inPolyline = false;
         }
       }
@@ -215,7 +321,34 @@ export const queryNet = async (
           const dx = (ex - sx) * factor;
           const dy = (ey - sy) * factor;
           polyLength += Math.sqrt(dx * dx + dy * dy);
+          if (wantSegments) {
+            // Begin a pending <Line> trace; its OWN width comes from a child
+            // <LineDescRef>/<LineDesc> (so two <Line>s in one <Set> keep their
+            // distinct widths). flush any prior unfinished line first.
+            flushPendingLine();
+            primRefId = undefined;
+            primInlineWidth = undefined;
+            pendingLine = {
+              layer: currentLayerName,
+              pts: [
+                [Math.round(sx * factor), Math.round(sy * factor)],
+                [Math.round(ex * factor), Math.round(ey * factor)],
+              ],
+            };
+            // Capture a same-line child descriptor, then finalize if the <Line>
+            // is closed (</Line>) or self-closed (/>) on this physical line.
+            captureOwnDesc(line);
+            if (line.includes("</Line>") || line.includes("/>")) flushPendingLine();
+            else inLine = true;
+          }
         }
+      }
+
+      // Continuation for a <Line> whose descriptor / close span multiple physical
+      // lines (the opening <Line ...> line is handled above).
+      if (wantSegments && inLine && !line.includes("<Line ")) {
+        captureOwnDesc(line);
+        if (line.includes("</Line>")) flushPendingLine();
       }
 
       // Poured copper: nets are frequently filled as <Contour> shapes (a polygon
@@ -237,13 +370,22 @@ export const queryNet = async (
       }
 
       if (line.includes("<LineDescRef ")) {
-        currentSetLineDescId = attr(line, "id");
+        const id = attr(line, "id");
+        currentSetLineDescId = id;
+        // Record this conductor's width for the rollup. inPad guards against a
+        // (rare) pad-level reference; the </Set> guard discards widths from any
+        // Set that turns out to carry no conductor geometry.
+        if (!inPad && id !== undefined) {
+          const w = lineDescDict.get(id);
+          if (w !== undefined) setConductorWidths.push(Math.round(w * factor));
+        }
       }
 
       if (line.includes("<LineDesc ") && !line.includes("<EntryLineDesc ")) {
         const inlineWidth = numAttr(line, "lineWidth");
         if (inlineWidth !== undefined) {
           currentSetInlineWidth = inlineWidth;
+          if (!inPad) setConductorWidths.push(Math.round(inlineWidth * factor));
         }
       }
 
@@ -265,6 +407,8 @@ export const queryNet = async (
       }
 
       if (line.includes("</Set>")) {
+        if (wantSegments) flushPendingLine(); // finalize a trailing self-closing <Line/>
+
         if (currentSetHasConductor && currentLayerName) {
           if (!acc.routeMap.has(currentLayerName)) {
             acc.routeMap.set(currentLayerName, { widths: new Set(), segments: 0, traceLength: 0 });
@@ -273,13 +417,30 @@ export const queryNet = async (
           layerRoute.segments++;
           layerRoute.traceLength += polyLength;
 
+          // Add every distinct conductor width the Set used (a Set may carry
+          // several primitives of differing width); the widths Set dedupes.
+          for (const w of setConductorWidths) layerRoute.widths.add(w);
+        }
+
+        // Flush this Set's per-trace geometry (detail="full"). Each trace reports
+        // its OWN width when it carries one; only a trace with no descriptor of
+        // its own falls back to a set/feature-level <LineDescRef>/inline width
+        // (some tools attach one shared descriptor to a Set of bare features).
+        // 0 when nothing resolves.
+        if (wantSegments && setSegments.length > 0) {
+          let setWidth = 0;
           if (currentSetLineDescId) {
-            const width = lineDescDict.get(currentSetLineDescId);
-            if (width !== undefined) {
-              layerRoute.widths.add(Math.round(width * factor));
-            }
+            const w = lineDescDict.get(currentSetLineDescId);
+            if (w !== undefined) setWidth = Math.round(w * factor);
           } else if (currentSetInlineWidth !== undefined) {
-            layerRoute.widths.add(Math.round(currentSetInlineWidth * factor));
+            setWidth = Math.round(currentSetInlineWidth * factor);
+          }
+          for (const s of setSegments) {
+            const width =
+              s.ownWidthRaw !== undefined ? Math.round(s.ownWidthRaw * factor) : setWidth;
+            const seg: RoutingSegment = { layer: s.layer, width, points: s.points };
+            if (s.arcs.length > 0) seg.arcs = s.arcs;
+            acc.segments.push(seg);
           }
         }
 
@@ -368,6 +529,14 @@ export const queryNet = async (
           if (capped.truncated) result.truncated = true;
         }
       }
+      if (detail === "full" && acc.segments.length > 0) {
+        // Per-trace centerline geometry, stratified by layer so a truncated
+        // sample still represents every routed layer. The per-layer rollup
+        // (routing[].segmentCount) carries the true Set-level totals.
+        const cappedSegs = capRowsStratified(acc.segments, MAX_COORD_ROWS, (s) => s.layer);
+        result.segments = cappedSegs.rows;
+        if (cappedSegs.truncated) result.truncated = true;
+      }
       if (totalSegments > 0) {
         result.totalSegments = totalSegments;
       }
@@ -389,7 +558,7 @@ export const register = (server: McpServer): void => {
     "get_pcb_net",
     {
       description:
-        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing is read from conductor-layer copper geometry in the export (Polyline/Line centerline traces and poured Contour shapes); trace widths and lengths are reported for centerline-routed copper and are absent for shape/plane-routed (poured) copper, which has no centerline. If the IPC-2581 export was generated without conductor/etch (cline) feature output, the file carries no conductor geometry and routing is empty even though pins, vias, and layersUsed still populate. Pass detail='full' for raw per-via coordinates (capped). Rejects patterns that match all nets.",
+        "Query nets by name pattern in an IPC-2581 file. Returns grouped connected pins, per-layer routing, and a compact via rollup (count per drill type). Routing is read from conductor-layer copper geometry in the export (Polyline/Line centerline traces and poured Contour shapes); trace widths and lengths are reported for centerline-routed copper and are absent for shape/plane-routed (poured) copper, which has no centerline. If the IPC-2581 export was generated without conductor/etch (cline) feature output, the file carries no conductor geometry and routing is empty even though pins, vias, and layersUsed still populate. Pass detail='full' for raw per-via coordinates and per-trace centerline geometry (each Polyline/Line as vertices + width + arcs), both capped. Poured shapes have no centerline and are absent from the per-trace geometry; segments[].length is per-primitive and does not equal totalSegments (Set-level). Rejects patterns that match all nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         pattern: z
@@ -399,7 +568,7 @@ export const register = (server: McpServer): void => {
           .enum(["summary", "full"])
           .default("summary")
           .describe(
-            "Response detail. 'summary' (default) returns via counts only; 'full' adds raw per-via x/y coordinates (capped to stay within the response budget)."
+            "Response detail. 'summary' (default) returns via counts and the per-layer routing rollup only. 'full' (must be set explicitly) additionally returns raw per-via x/y coordinates and per-trace centerline geometry (segments[]: vertices, width, arcs), both capped to stay within the response budget."
           ),
       },
     },

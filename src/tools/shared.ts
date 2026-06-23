@@ -219,7 +219,7 @@ export const validatePattern = (pattern: string): { error: string } | { regex: R
 // Net Accumulator (used by get-pcb-net)
 // =============================================================================
 
-import type { NetPin } from "./lib/types.js";
+import type { NetPin, RoutingSegment } from "./lib/types.js";
 
 export interface RawVia {
   x: number;
@@ -228,12 +228,19 @@ export interface RawVia {
   layer: string;
 }
 
+/**
+ * Raw per-trace routing geometry collected during scanning. Same shape as the
+ * response `RoutingSegment`; only populated when detail="full" is requested.
+ */
+export type RawSegment = RoutingSegment;
+
 export interface NetAccumulator {
   pins: NetPin[];
   pinsSeen: Set<string>;
   phyNetLayers: Set<string>;
   routeMap: Map<string, { widths: Set<number>; segments: number; traceLength: number }>;
   vias: RawVia[];
+  segments: RawSegment[];
 }
 
 export const makeAccumulator = (): NetAccumulator => ({
@@ -242,6 +249,7 @@ export const makeAccumulator = (): NetAccumulator => ({
   phyNetLayers: new Set(),
   routeMap: new Map(),
   vias: [],
+  segments: [],
 });
 
 export const addPin = (acc: NetAccumulator, refdes: string, pin: string): void => {

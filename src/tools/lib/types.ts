@@ -157,6 +157,33 @@ export interface NetRouteInfo {
 }
 
 /**
+ * A curved vertex within a routing trace (IPC-2581 <PolyStepCurve>). `index` is
+ * the position in the trace's `points` array that this arc terminates at; the
+ * arc sweeps from the previous vertex to `points[index]` around (centerX,
+ * centerY). All coordinates are microns.
+ */
+export interface RoutingArc {
+  index: number;
+  centerX: number;
+  centerY: number;
+  clockwise: boolean;
+}
+
+/**
+ * A single centerline routing trace: one <Polyline> or <Line> conductor
+ * primitive. `width` is in microns (0 when no LineDesc resolved); `points` are
+ * the trace vertices in microns (>=2). `arcs` is present only when the trace
+ * contains curved (<PolyStepCurve>) vertices. Poured copper (<Contour>) has no
+ * centerline and is NOT represented here.
+ */
+export interface RoutingSegment {
+  layer: string;
+  width: number;
+  points: [number, number][];
+  arcs?: RoutingArc[];
+}
+
+/**
  * Unique via drill type. Internal only: used while deduplicating drill types to
  * build `viaCounts` and the `viaRows` drillIndex; it is not part of any response.
  */
@@ -213,6 +240,18 @@ export interface QueryNetResult {
   /** Per-via coordinates. Only included when detail="full" is requested. */
   viaColumns?: ["x", "y", "drillIndex"];
   viaRows?: ViaRow[];
+  /**
+   * Per-trace centerline routing geometry, one entry per <Polyline>/<Line>
+   * conductor primitive. Only included when detail="full"; capped (and the
+   * result flagged `truncated`) to stay within the response budget.
+   *
+   * NOTE: `segments.length` is per-primitive and intentionally does NOT equal
+   * `totalSegments` / `routing[].segmentCount`, which are Set-level (a <Set>
+   * with multiple shapes counts once, and poured shapes count too). Poured
+   * copper has no centerline and is absent from `segments` entirely; rely on
+   * the `routing[]` rollup for poured-net presence.
+   */
+  segments?: RoutingSegment[];
   totalSegments?: number;
   totalVias?: number;
   totalTraceLength?: number;
