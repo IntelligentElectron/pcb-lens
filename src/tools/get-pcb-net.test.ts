@@ -552,6 +552,8 @@ describe("queryNet -- per-trace routing geometry (detail=full)", () => {
   <LogicalNet name="POURSEG"><PinRef pin="1" componentRef="U5"/></LogicalNet>
   <LogicalNet name="MULTILINE"><PinRef pin="1" componentRef="U6"/></LogicalNet>
   <LogicalNet name="MIXFALLBACK"><PinRef pin="1" componentRef="U7"/></LogicalNet>
+  <LogicalNet name="PADPOLY"><PinRef pin="1" componentRef="U8"/></LogicalNet>
+  <LogicalNet name="LAYERLESS"><PinRef pin="1" componentRef="U9"/></LogicalNet>
   <Step>
     <PhyNetGroup/>
     <LayerFeature layerRef="TOP">
@@ -619,6 +621,29 @@ describe("queryNet -- per-trace routing geometry (detail=full)", () => {
               <PolyStepSegment x="0" y="0"/>
             </Polygon>
           </Contour>
+        </Features>
+      </Set>
+      <Set net="PADPOLY">
+        <Pad padstackDefRef="PS1">
+          <Location x="5" y="5"/>
+          <Polyline>
+            <PolyBegin x="5" y="5"/>
+            <PolyStepSegment x="6" y="5"/>
+            <LineDescRef id="LDS"/>
+          </Polyline>
+          <Line startX="6" startY="5" endX="7" endY="5"><LineDescRef id="LD_B"/></Line>
+          <PinRef pin="1" componentRef="U8"/>
+        </Pad>
+      </Set>
+    </LayerFeature>
+    <LayerFeature id="NO_LAYERREF">
+      <Set net="LAYERLESS">
+        <Features>
+          <Polyline>
+            <PolyBegin x="0" y="0"/>
+            <PolyStepSegment x="1" y="0"/>
+            <LineDescRef id="LDS"/>
+          </Polyline>
         </Features>
       </Set>
     </LayerFeature>
@@ -721,6 +746,26 @@ describe("queryNet -- per-trace routing geometry (detail=full)", () => {
     const net = expectSuccess(await queryNet(segXml, "^POURSEG$", "full")).matches[0];
     // Routed (rollup present) but no centerline geometry to export.
     expect(net.routing!.find((rt) => rt.layerName === "TOP")!.segmentCount).toBe(1);
+    expect(net).not.toHaveProperty("segments");
+  });
+
+  it("ignores a <Polyline>/<Line> inside a <Pad> (not routing, not a segment)", async () => {
+    // A custom pad outline drawn as a <Polyline>/<Line> inside <Pad> must not
+    // make the net look routed nor leak into segments -- same inPad guard the
+    // <Contour> path already has. No real fixture carries this (pad outlines are
+    // normally <Contour>/<Polygon>), so it is exercised with inline XML.
+    const net = expectSuccess(await queryNet(segXml, "^PADPOLY$", "full")).matches[0];
+    expect(net.pins.U8).toEqual(["1"]); // the pin still connects
+    expect(net).not.toHaveProperty("routing"); // pad geometry is not routing
+    expect(net).not.toHaveProperty("segments");
+  });
+
+  it("drops segments from a layer-less <LayerFeature> (no layerRef)", async () => {
+    // A <LayerFeature> with no layerRef would otherwise emit layer-"" segments;
+    // the flush is gated on currentLayerName for symmetry with the rollup, which
+    // already drops such a Set. No real fixture omits layerRef, so inline XML.
+    const net = expectSuccess(await queryNet(segXml, "^LAYERLESS$", "full")).matches[0];
+    expect(net).not.toHaveProperty("routing");
     expect(net).not.toHaveProperty("segments");
   });
 

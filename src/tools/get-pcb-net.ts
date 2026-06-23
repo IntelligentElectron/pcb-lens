@@ -241,7 +241,10 @@ export const queryNet = async (
         }
       }
 
-      if (line.includes("<Polyline")) {
+      // A <Polyline> inside a <Pad> is a custom pad outline, not routing (same
+      // reason the <Contour> handler is inPad-guarded); ignore it so it neither
+      // marks the net routed nor leaks into segments.
+      if (!inPad && line.includes("<Polyline")) {
         currentSetHasConductor = true;
         inPolyline = true;
         polyPoints = [];
@@ -310,8 +313,10 @@ export const queryNet = async (
       // a <Polyline>. Cadence uses these for single-segment traces; a net routed
       // entirely with <Line> elements previously returned no routing at all.
       // Only conductor layers reach here (skipLayers excludes REF-route/REF-both),
-      // and a Line is only counted when it carries start/end coordinates.
-      if (line.includes("<Line ")) {
+      // and a Line is only counted when it carries start/end coordinates. A
+      // <Line> inside a <Pad> is pad geometry, not routing, so it is inPad-guarded
+      // like <Polyline>/<Contour>.
+      if (!inPad && line.includes("<Line ")) {
         const sx = numAttr(line, "startX");
         const sy = numAttr(line, "startY");
         const ex = numAttr(line, "endX");
@@ -437,14 +442,18 @@ export const queryNet = async (
         // its OWN width when it carries one; only a trace with no descriptor of
         // its own falls back to a set/feature-level <LineDescRef>/inline width
         // (some tools attach one shared descriptor to a Set of bare features).
-        // 0 when nothing resolves.
-        if (wantSegments && setSegments.length > 0) {
+        // 0 when nothing resolves. Gated on currentLayerName for symmetry with
+        // the routeMap update above, so a layer-less <LayerFeature> never emits
+        // layer-"" segments.
+        if (wantSegments && currentLayerName && setSegments.length > 0) {
+          // Inline width wins over a reference, matching ownWidthRaw()'s
+          // primitive-level precedence so the tie-break is consistent.
           let setWidth = 0;
-          if (currentSetLineDescId) {
+          if (currentSetInlineWidth !== undefined) {
+            setWidth = Math.round(currentSetInlineWidth * factor);
+          } else if (currentSetLineDescId) {
             const w = lineDescDict.get(currentSetLineDescId);
             if (w !== undefined) setWidth = Math.round(w * factor);
-          } else if (currentSetInlineWidth !== undefined) {
-            setWidth = Math.round(currentSetInlineWidth * factor);
           }
           for (const s of setSegments) {
             const width =
