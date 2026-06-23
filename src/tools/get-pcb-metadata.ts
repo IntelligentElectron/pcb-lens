@@ -116,7 +116,7 @@ export const register = (server: McpServer): void => {
     "get_pcb_metadata",
     {
       description:
-        "Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes",
+        "Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets.",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
       },

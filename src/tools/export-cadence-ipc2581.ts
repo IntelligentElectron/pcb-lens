@@ -109,7 +109,7 @@ export const register = (server: McpServer): void => {
     "export_cadence_ipc2581",
     {
       description:
-        "Export a Cadence Allegro .brd file to IPC-2581 XML. Windows only. Requires Cadence SPB installation (auto-detected). Calls are serialized internally to avoid license conflicts.",
+        "Export a Cadence Allegro .brd file to an IPC-2581 XML file, the format the other PCB query tools (get_pcb_metadata, get_pcb_component, get_pcb_net) read. Windows only, and requires a Cadence SPB installation (detected automatically).",
       inputSchema: {
         board: z.string().describe("Path to Cadence Allegro .brd file"),
         output: z
@@ -121,7 +121,9 @@ export const register = (server: McpServer): void => {
         revision: z
           .enum(["B", "C"])
           .optional()
-          .describe('IPC-2581 revision: "B" (1.03) or "C" (1.04, default). Rev C is richest.'),
+          .describe(
+            'IPC-2581 revision to write: "B" (1.03) or "C" (1.04, the default). Rev C carries the most layout detail; prefer it unless a downstream tool needs Rev B.'
+          ),
       },
     },
     withTelemetry("export_cadence_ipc2581", async ({ board, output, revision }) => {
