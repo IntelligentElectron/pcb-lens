@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-23
+
+### Added
+
+- `get_pcb_net` with `detail="full"` now returns a `segments` array of per-trace centerline routing geometry alongside the existing per-via coordinates. Each entry is one `<Polyline>`/`<Line>` conductor primitive: `{ layer, width, points }` (vertices in microns), plus `arcs` carrying full `<PolyStepCurve>` curvature (`index`, `centerX`, `centerY`, `clockwise`) when the trace is curved. The array is stratified across layers and capped at `MAX_COORD_ROWS = 300` with `truncated: true` when sampled; the per-layer `routing` rollup still reports the true Set-level totals. `detail="full"` must be set explicitly — `summary` (the default) output is unchanged and emits no `segments`. Poured `<Contour>` copper has no centerline and is excluded from `segments`; the rollup still reports it routed. `segments.length` is per-primitive and intentionally differs from `totalSegments` / `routing[].segmentCount`, which are Set-level (#55)
+
+### Changed
+
+- `get_pcb_net` reports each trace's own width from its `<LineDescRef>`/`<LineDesc>` rather than a single set-level value, so two `<Line>` (or `<Polyline>`) conductors of differing width inside one `<Set>` keep their distinct widths instead of collapsing to the last descriptor seen; a primitive falls back to the set/feature-level width only when it carries none of its own. The summary `routing[].traceWidths` rollup is tightened the same way and now lists every distinct conductor width a `<Set>` uses. `<PolyStepCurve>` (curved) vertices, previously dropped, are now parsed for the geometry export (#55)
+
 ## [1.0.4] - 2026-06-18
 
 ### Changed
