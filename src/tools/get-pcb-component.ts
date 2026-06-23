@@ -309,7 +309,7 @@ export const register = (server: McpServer): void => {
     "get_pcb_component",
     {
       description:
-        "Look up a single component by exact refdes in an IPC-2581 file. Returns placement, package, BOM data, connected nets with pin names, and a pad-geometry summary (pad count + deduped pad shapes). Pass detail='full' for per-pin pad coordinates (capped).",
+        "Look up a single component by its exact reference designator (refdes). Returns its placement (position, rotation, layer), package and BOM details, the nets connected to each pin, and a summary of its pads (count and the distinct pad shapes). The refdes must match exactly; it is not a pattern. Set detail='full' to additionally get the exact coordinate of every pad (sampled for components with very many pads).",
       inputSchema: {
         file: z.string().describe("Path to IPC-2581 XML file"),
         refdes: z
@@ -319,7 +319,7 @@ export const register = (server: McpServer): void => {
           .enum(["summary", "full"])
           .default("summary")
           .describe(
-            "Response detail. 'summary' (default) returns pad count + shapes only; 'full' adds per-pin pad x/y coordinates (capped to stay within the response budget)."
+            "How much to return. 'summary' (default) gives the pad count and distinct pad shapes. 'full' additionally returns the exact coordinate of each pad; components with very many pads are sampled. Use 'full' only when you need exact pad positions, since responses are larger."
           ),
       },
     },

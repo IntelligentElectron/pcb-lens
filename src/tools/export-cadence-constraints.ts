@@ -95,7 +95,7 @@ export const register = (server: McpServer): void => {
     "export_cadence_constraints",
     {
       description:
-        "Export a Cadence Allegro .brd file to .tcfx constraint XML. Windows only. Requires Cadence SPB installation (auto-detected). Calls are serialized internally to avoid license conflicts.",
+        "Export the design rules and constraints from a Cadence Allegro .brd file to a .tcfx file, which you can then read with get_constraints. Windows only, and requires a Cadence SPB installation (detected automatically).",
       inputSchema: {
         board: z.string().describe("Path to Cadence Allegro .brd file"),
         output: z
