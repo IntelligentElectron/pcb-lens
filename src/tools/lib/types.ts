@@ -149,10 +149,18 @@ export interface NetPin {
  */
 export interface NetRouteInfo {
   layerName: string;
+  // Distinct conductor widths (microns) referenced by the traces on this layer.
+  // It reflects every width descriptor the layer's conductors carry; in the rare
+  // case a single trace carries both an inline width and a width reference, both
+  // appear here even though only one is the trace's effective width (see each
+  // trace's exact width in `segments[].width` with detail="full").
   traceWidths: number[];
   // Number of conductor-bearing <Set> elements on the layer (centerline traces
   // and/or poured shapes); a Set with multiple shapes counts once.
   segmentCount: number;
+  // Sum of straight-span lengths in microns. Curved (arc) spans are not added,
+  // so this undercounts traces that contain arcs; treat it as a lower bound on
+  // such nets.
   traceLength: number;
 }
 
@@ -160,7 +168,9 @@ export interface NetRouteInfo {
  * A curved vertex within a routing trace (IPC-2581 <PolyStepCurve>). `index` is
  * the position in the trace's `points` array that this arc terminates at; the
  * arc sweeps from the previous vertex to `points[index]` around (centerX,
- * centerY). All coordinates are microns.
+ * centerY). `index` is always >= 1: a trace always opens with a straight
+ * starting vertex, so a curve can never be the first point. All coordinates are
+ * microns.
  */
 export interface RoutingArc {
   index: number;

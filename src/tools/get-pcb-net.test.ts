@@ -551,6 +551,7 @@ describe("queryNet -- per-trace routing geometry (detail=full)", () => {
   <LogicalNet name="OVERRIDE1"><PinRef pin="1" componentRef="U4"/></LogicalNet>
   <LogicalNet name="POURSEG"><PinRef pin="1" componentRef="U5"/></LogicalNet>
   <LogicalNet name="MULTILINE"><PinRef pin="1" componentRef="U6"/></LogicalNet>
+  <LogicalNet name="MIXFALLBACK"><PinRef pin="1" componentRef="U7"/></LogicalNet>
   <Step>
     <PhyNetGroup/>
     <LayerFeature layerRef="TOP">
@@ -558,6 +559,20 @@ describe("queryNet -- per-trace routing geometry (detail=full)", () => {
         <Features>
           <Line startX="0" startY="0" endX="1" endY="0"><LineDescRef id="LD_A"/></Line>
           <Line startX="1" startY="0" endX="2" endY="0"><LineDescRef id="LD_B"/></Line>
+        </Features>
+      </Set>
+      <Set net="MIXFALLBACK">
+        <LineDescRef id="LDS"/>
+        <Features>
+          <Polyline>
+            <PolyBegin x="0" y="0"/>
+            <PolyStepSegment x="1" y="0"/>
+            <LineDescRef id="LD_B"/>
+          </Polyline>
+          <Polyline>
+            <PolyBegin x="2" y="0"/>
+            <PolyStepSegment x="3" y="0"/>
+          </Polyline>
         </Features>
       </Set>
       <Set net="POLY1">
@@ -672,6 +687,18 @@ describe("queryNet -- per-trace routing geometry (detail=full)", () => {
     const byEnd = Object.fromEntries(net.segments!.map((s) => [s.points[1][0], s.width]));
     expect(byEnd[1000]).toBe(100); // first line -> LD_A 0.10mm
     expect(byEnd[2000]).toBe(200); // second line -> LD_B 0.20mm
+  });
+
+  it("falls back to the true set-level width, not a sibling primitive's, for a bare trace (detail=full)", async () => {
+    // One <Set>: a set-level <LineDescRef> (LDS=0.15), then a Polyline with its
+    // own descriptor (LD_B=0.20), then a Polyline with none. The bare Polyline
+    // must fall back to the set-level 0.15mm -- NOT to 0.20mm leaked from the
+    // first Polyline's descriptor (the currentSetLineDescId overwrite bug).
+    const net = expectSuccess(await queryNet(segXml, "^MIXFALLBACK$", "full")).matches[0];
+    expect(net.segments).toHaveLength(2);
+    const byEnd = Object.fromEntries(net.segments!.map((s) => [s.points[1][0], s.width]));
+    expect(byEnd[1000]).toBe(200); // first polyline -> own LD_B 0.20mm
+    expect(byEnd[3000]).toBe(150); // bare polyline -> set-level LDS 0.15mm fallback
   });
 
   it("rollup traceWidths reports every width a multi-primitive <Set> uses (summary)", async () => {

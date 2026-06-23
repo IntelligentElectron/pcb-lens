@@ -369,9 +369,20 @@ export const queryNet = async (
         currentSetHasConductor = true;
       }
 
+      // A <LineDescRef>/<LineDesc> that is a child of a <Polyline>/<Line>
+      // describes only that primitive; the per-trace fallback width
+      // (currentSetLineDescId / currentSetInlineWidth, used at </Set> for a
+      // trace with no descriptor of its own) must come ONLY from a true
+      // set-level descriptor — a direct child of the <Set> with no primitive
+      // open. `<Line ...>` carries its descriptor on the same physical line, so
+      // a line containing `<Line ` is inside a primitive even after the line was
+      // already flushed (inLine reset). The width still feeds the rollup
+      // unconditionally (every conductor width the Set uses is reported there).
+      const insidePrimitive = inPolyline || inLine || line.includes("<Line ");
+
       if (line.includes("<LineDescRef ")) {
         const id = attr(line, "id");
-        currentSetLineDescId = id;
+        if (!insidePrimitive) currentSetLineDescId = id;
         // Record this conductor's width for the rollup. inPad guards against a
         // (rare) pad-level reference; the </Set> guard discards widths from any
         // Set that turns out to carry no conductor geometry.
@@ -384,7 +395,7 @@ export const queryNet = async (
       if (line.includes("<LineDesc ") && !line.includes("<EntryLineDesc ")) {
         const inlineWidth = numAttr(line, "lineWidth");
         if (inlineWidth !== undefined) {
-          currentSetInlineWidth = inlineWidth;
+          if (!insidePrimitive) currentSetInlineWidth = inlineWidth;
           if (!inPad) setConductorWidths.push(Math.round(inlineWidth * factor));
         }
       }
