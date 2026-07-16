@@ -8,6 +8,7 @@
  *   - per-tool-call span (tool/<name>) with outcome attributes
  *   - tool.calls / tool.duration / tool.errors metrics
  *   - structured log correlated by trace/span id
+ *   - log-record attributes mirror enduser.id and, opt-in, tool.args (issue #56)
  *   - failure path: outcome=error, tool result still returned
  *   - exporter unreachable: tool calls still succeed
  *   - flush on shutdown
@@ -25,7 +26,7 @@ import { OtlpReceiver, waitFor } from "./otlp-receiver.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SERVER_ENTRY = join(HERE, "server-entry.ts");
 const REPO_ROOT = join(HERE, "..", "..");
-const FIXTURE = join(REPO_ROOT, "test", "fixtures", "testcase3-RevC.xml");
+const FIXTURE = join(REPO_ROOT, "test", "fixtures", "ipc2581", "testcase3-RevC.xml");
 const HAS_FIXTURE = existsSync(FIXTURE);
 const TEST_TIMEOUT = 30_000;
 
@@ -141,8 +142,50 @@ describe("OpenTelemetry end-to-end", () => {
       expect(log.attributes.trace_id).toBe(span.traceId);
       expect(log.attributes.span_id).toBe(span.spanId);
 
-      // enduser.id is the host OS account, set at the resource level.
+      // enduser.id is the host OS account, set at the resource level and
+      // mirrored onto the log record itself for log-only backends.
       expect(receiver.resourceAttributes()["enduser.id"]).toBe(userInfo().username);
+      expect(log.attributes["enduser.id"]).toBe(userInfo().username);
+      // Args are opt-in and were not requested here.
+      expect(log.attributes["tool.args"]).toBeUndefined();
+      expect(span.attributes["tool.args"]).toBeUndefined();
+    },
+    TEST_TIMEOUT
+  );
+
+  test.skipIf(!HAS_FIXTURE)(
+    "args capture: OTEL_CAPTURE_TOOL_ARGS puts tool.args on the span and the log record",
+    async () => {
+      const args = { file: FIXTURE };
+      await withServer(otelEnv(receiver, { OTEL_CAPTURE_TOOL_ARGS: "1" }), async (client) => {
+        const res: any = await client.callTool({ name: "get_pcb_metadata", arguments: args });
+        expect(res.isError).toBeFalsy();
+      });
+
+      // Filter on tool.args presence: earlier tests emitted argless records.
+      const got = await waitFor(
+        () =>
+          receiver
+            .spans()
+            .some((s) => s.name === "tool/get_pcb_metadata" && "tool.args" in s.attributes) &&
+          receiver
+            .logs()
+            .some((l) => l.body === "tool/get_pcb_metadata success" && "tool.args" in l.attributes)
+      );
+      expect(got).toBe(true);
+
+      // The handler sees args with schema defaults applied, so match on the
+      // caller-supplied subset; span and log must carry the identical JSON.
+      const span = receiver
+        .spans()
+        .find((s) => s.name === "tool/get_pcb_metadata" && "tool.args" in s.attributes)!;
+      expect(JSON.parse(String(span.attributes["tool.args"]))).toMatchObject(args);
+
+      const log = receiver
+        .logs()
+        .find((l) => l.body === "tool/get_pcb_metadata success" && "tool.args" in l.attributes)!;
+      expect(log.attributes["tool.args"]).toBe(span.attributes["tool.args"]);
+      expect(log.attributes["enduser.id"]).toBe(userInfo().username);
     },
     TEST_TIMEOUT
   );
