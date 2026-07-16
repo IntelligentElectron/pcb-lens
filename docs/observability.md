@@ -47,9 +47,9 @@ A structured log record is emitted per tool call:
 |-------|-------|
 | Body | `tool/<tool_name> <outcome>`, e.g. `tool/get_pcb_net success`. |
 | Severity | `INFO` on success, `ERROR` on failure. |
-| Attributes | `tool.name`, `tool.outcome`, `tool.duration_ms`, `error.type` (on failure), plus `trace_id` and `span_id`. |
+| Attributes | `tool.name`, `tool.outcome`, `tool.duration_ms`, `error.type` (on failure), `enduser.id` (mirroring the resource attribute below), `tool.args` (only when `OTEL_CAPTURE_TOOL_ARGS` is enabled), plus `trace_id` and `span_id`. |
 
-The explicit `trace_id` / `span_id` attributes (in addition to the record's own trace context) make trace-to-log correlation straightforward in any backend.
+The explicit `trace_id` / `span_id` attributes (in addition to the record's own trace context) make trace-to-log correlation straightforward in any backend. Log/label-based backends typically index only log-record attributes (resource attributes are dropped and span attributes are never carried), so `enduser.id` and the captured arguments are set directly on each record to keep per-user and per-input analytics possible from logs alone.
 
 ### Resource attributes
 
@@ -92,7 +92,7 @@ Application-specific option:
 
 | Variable | Purpose |
 |----------|---------|
-| `OTEL_CAPTURE_TOOL_ARGS` | Set to `1`/`true` to also record raw tool arguments as the `tool.args` span attribute. Off by default — arguments (file paths, net names) may be sensitive. |
+| `OTEL_CAPTURE_TOOL_ARGS` | Set to `1`/`true` to also record raw tool arguments as `tool.args`, on both the span and the per-call log record. Off by default — arguments (file paths, net names) may be sensitive. |
 
 > **Protocol note:** Because the server ships as a standalone compiled binary, only the HTTP OTLP exporters are bundled. Use `http/protobuf` (the default) or `http/json`, both on the OTLP/HTTP port (`4318` on most collectors). Collectors typically listen on `4317` for gRPC and `4318` for HTTP; if you point at a gRPC endpoint, switch the backend to accept OTLP/HTTP instead.
 
