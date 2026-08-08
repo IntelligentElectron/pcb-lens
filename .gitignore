@@ -40,6 +40,11 @@ coverage/
 # Private files
 private/
 
+# system76/kicad-allegro ships no LICENSE and declares none in Cargo.toml, so we hold no
+# grant to redistribute it. Clone it here for local reference if you need it; it must not
+# be committed. See references/README.md.
+references/kicad-allegro/
+
 # Test fixtures live in the test-fixtures submodule (test/fixtures). The IPC-2581
 # XML/ZIP under test/fixtures/ipc2581/ are gitignored by that submodule and
 # fetched via `npm run setup`. Nothing fixture-related is tracked in this repo.
