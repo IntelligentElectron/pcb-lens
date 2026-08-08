@@ -2,3 +2,14 @@ PCB Lens MCP Server
 Copyright 2025 Valentino Zegna
 
 This product includes software developed by Valentino Zegna.
+
+An unmodified copy of OpenAllegroParser
+(https://github.com/Werni2A/OpenAllegroParser)
+Copyright (c) 2021 Dominik Wernberger
+Licensed under the MIT License
+
+is redistributed in this repository at references/OpenAllegroParser/, pinned to
+upstream commit d9d9d68aa297, for reference only. It is not compiled, linked,
+executed, or published. That copy remains under the MIT License; its licence
+text is retained in place at references/OpenAllegroParser/LICENSE. See
+references/README.md for provenance.

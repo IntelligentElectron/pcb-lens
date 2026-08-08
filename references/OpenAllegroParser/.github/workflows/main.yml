@@ -1,0 +1,26 @@
+name: CI
+
+on: [push]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up vcpkg
+      run: |
+        sudo apt update
+        sudo apt install -y cmake
+        git clone https://github.com/microsoft/vcpkg.git
+        ./vcpkg/bootstrap-vcpkg.sh
+
+    - name: Build Library, CLI Application and Tests
+      run: |
+        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+        cmake --build build
+
+    - name: Run Tests
+      run: |
+        cd test
+        ../build/test/test
