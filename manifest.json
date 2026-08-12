@@ -5,7 +5,7 @@
   "display_name": "PCB Lens",
   "version": "0.0.1",
   "description": "Query IPC-2581 PCB layout files for physical design review",
-  "long_description": "The PCB Lens MCP Server gives AI agents the power to query and analyze PCB layouts from IPC-2581 files. Get design overviews, find component placements, and trace net routing through natural conversations.\n\nSupports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool.",
+  "long_description": "The PCB Lens MCP Server gives AI agents the power to query and analyze PCB layouts from IPC-2581 files. Get design overviews, find component placements, trace net routing, and read layout constraints through natural conversations.\n\nSupports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool, and Cadence .tcfx constraint files. On Windows with Cadence SPB installed, Allegro .brd files can be exported to both formats in place.",
   "author": {
     "name": "IntelligentElectron",
     "url": "https://github.com/IntelligentElectron"
@@ -38,16 +38,28 @@
   "tools_generated": true,
   "tools": [
     {
-      "name": "get_design_overview",
-      "description": "Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes"
+      "name": "get_pcb_metadata",
+      "description": "Get an overview of an IPC-2581 PCB design file: file metadata, layer stackup, design units, and component/net counts"
     },
     {
-      "name": "query_components",
-      "description": "Find components by refdes pattern in an IPC-2581 file. Returns placement coordinates, rotation, layer, package, and BOM data."
+      "name": "get_pcb_component",
+      "description": "Look up a single component by exact refdes. Returns placement (position, rotation, layer), package and BOM details, the nets on each pin, and a pad summary."
     },
     {
-      "name": "query_net",
-      "description": "Query a net by name pattern in an IPC-2581 file. Returns connected pins, routing per layer (trace widths, segment counts), and via information."
+      "name": "get_pcb_net",
+      "description": "Look up nets by name pattern. Returns connected pins, per-layer routing (trace widths, segment counts, routed length), and via information."
+    },
+    {
+      "name": "get_constraints",
+      "description": "Query layout constraints from a Cadence .tcfx file: physical and spacing constraint sets, net classes, stackup, and regions"
+    },
+    {
+      "name": "export_cadence_ipc2581",
+      "description": "Export a Cadence Allegro .brd file to IPC-2581 XML, the format the query tools read (Windows only, requires Cadence SPB)"
+    },
+    {
+      "name": "export_cadence_constraints",
+      "description": "Export the design rules from a Cadence Allegro .brd file to a .tcfx file for get_constraints to read (Windows only, requires Cadence SPB)"
     }
   ]
 }

@@ -33,7 +33,8 @@ What actually happened.
 ## Input Format
 
 - [ ] IPC-2581 XML (.xml)
-- [ ] IPC-2581 CVG (.cvg)
+- [ ] Cadence constraints (.tcfx)
+- [ ] Cadence Allegro board (.brd)
 
 ## Additional Context
 

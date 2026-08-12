@@ -8,7 +8,9 @@ It works with any board layout in IPC-2581 format, exported from any EDA tool th
 
 | Format | Input Files | Description |
 |--------|------------|-------------|
-| IPC-2581 | `.xml` / `.cvg` | IPC-2581 XML files (RevA, RevB, RevC) from any compliant EDA tool |
+| IPC-2581 | `.xml` | IPC-2581 XML files (RevA, RevB, RevC) from any compliant EDA tool |
+| Cadence TCFX | `.tcfx` | Constraint XML exported from Cadence Allegro: physical and spacing rules, net classes, stackup, regions |
+| Cadence Allegro | `.brd` | Native board files, exported in place to the two formats above (Windows only, requires a Cadence SPB installation) |
 
 ## Native Install (Recommended)
 
