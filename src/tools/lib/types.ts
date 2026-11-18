@@ -42,6 +42,31 @@ export interface SectionInfo {
 }
 
 /**
+ * An outline contour: vertices in microns, the first repeated last when it is closed. `arcs`
+ * (same form as a routing trace's) mark the vertices reached along an arc.
+ */
+export interface OutlineContour {
+  points: [number, number][];
+  arcs?: RoutingArc[];
+  /** false when the drawing leaves a gap, e.g. where a footprint draws part of the edge */
+  closed?: false;
+}
+
+/**
+ * Board outline: the board edge's extent in microns, arcs included, and its contours: the board
+ * edge first, then any other closed shapes on the outline layer (cutouts, panel rails).
+ */
+export interface BoardOutline {
+  width: number;
+  height: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  contours: OutlineContour[];
+}
+
+/**
  * Result from get_design_overview tool.
  */
 export interface DesignOverview {
@@ -57,6 +82,8 @@ export interface DesignOverview {
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
+  /** Board outline, when the file has one */
+  outline?: BoardOutline;
   /** XML top-level sections by size; absent for an Allegro .brd */
   sections?: SectionInfo[];
 }

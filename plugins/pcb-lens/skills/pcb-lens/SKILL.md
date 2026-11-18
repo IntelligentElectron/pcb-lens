@@ -69,7 +69,7 @@ Each description is the MCP tool's own.
 
 ### get_pcb_metadata
 
-Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.
+Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, the board outline (its width, height and extent, and its edge and cutout contours), and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.
 
 - `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file.
 

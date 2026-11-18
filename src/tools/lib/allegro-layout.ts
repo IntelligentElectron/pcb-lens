@@ -8,6 +8,8 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { readBrdInfo, type BrdInfo } from "./allegro-brd.js";
+import { boardOutline } from "./geometry.js";
+import type { BoardOutline, OutlineContour, RoutingArc } from "./types.js";
 
 export interface BrdPad {
   pin: string;
@@ -37,7 +39,7 @@ export interface BrdTrack {
   layer: string;
   width: number;
   points: [number, number][];
-  arcs: Array<{ index: number; centerX: number; centerY: number; clockwise: boolean }>;
+  arcs: RoutingArc[];
   length: number; // straight spans only, like the IPC-2581 reader
 }
 
@@ -60,6 +62,7 @@ export interface BrdLayout {
   copperLayers: Array<{ name: string; plane: boolean }>;
   components: BrdComponent[];
   nets: BrdNet[];
+  outline?: BoardOutline;
 }
 
 // Layer class (byte 2 of word 0) a block of these types must carry; data words that happen to look
@@ -96,6 +99,8 @@ const V17 = {
   padNext: 6, // 0x32
   padDef: 9, // 0x0D: x at 4, y at 5, padstack at 6
   trackSeg: 14, // 0x05
+  graphicSeg: 6, // 0x14
+  shapeSeg: 10, // 0x28
   segWidth: 6, // line and arc segments: width, then start and end, then an arc's centre
   viaX: 8, // 0x33
   viaPadstack: 11,
@@ -110,6 +115,8 @@ const V16: typeof V17 = {
   padNext: 5,
   padDef: 8,
   trackSeg: 12,
+  graphicSeg: 5,
+  shapeSeg: 8,
   segWidth: 5,
   viaX: 6,
   viaPadstack: 9,
@@ -347,16 +354,47 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     }
   }
 
-  // Net geometry. Track 0x05: byte 3 of word 0 its copper layer, then its first segment.
-  // Segments 0x15/0x16/0x17 (lines) and 0x01 (arcs) chain through word 2 back to the track, with
-  // word 3 the track, then width, start and end. An arc's byte 3 bit 6 marks it clockwise and
-  // the next four words hold its centre as two doubles, high word first.
+  // Segments 0x15/0x16/0x17 (lines) and 0x01 (arcs) chain through word 2 back to their owner (a
+  // track, graphic or shape), with word 3 the owner, then width, start and end. An arc's byte 3
+  // bit 6 marks it clockwise and the next four words hold its centre as two doubles, high word
+  // first.
   const dbl = (i: number) => {
     const b = Buffer.alloc(8);
     b.writeUInt32BE(w[i], 0);
     b.writeUInt32BE(w[i + 1], 4);
     return b.readDoubleBE(0);
   };
+  type Piece = { start: [number, number]; end: [number, number]; width: number; arc?: RoutingArc };
+  const segments = (owner: number, first: number) => {
+    const out: Piece[] = [];
+    const seen = new Set<number>();
+    let k = first;
+    while (k && k !== w[owner + 1] && !seen.has(k)) {
+      seen.add(k);
+      const s = byKey.get(k)?.find((c) => SEGMENT_TYPES.has(type(c)) && w[c + 3] === w[owner + 1]);
+      if (s === undefined) break;
+      k = w[s + 2];
+      const c = s + O.segWidth;
+      out.push({
+        start: [um(i32(c + 1)), um(i32(c + 2))],
+        end: [um(i32(c + 3)), um(i32(c + 4))],
+        width: um(i32(c)),
+        ...(type(s) === 0x01
+          ? {
+              arc: {
+                index: 0,
+                centerX: um(dbl(c + 5)),
+                centerY: um(dbl(c + 7)),
+                clockwise: Boolean((w[s] >>> 24) & 0x40),
+              },
+            }
+          : {}),
+      });
+    }
+    return out;
+  };
+
+  // Net geometry. Track 0x05: byte 3 of word 0 its copper layer, then its first segment.
   nets.forEach((net, ni) => {
     net.pins = pinsByNet.get(net.name) ?? [];
     for (const i of netItems[ni]) {
@@ -376,37 +414,108 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
         });
       } else if (t === 0x05) {
         let track: BrdTrack | undefined;
-        const seen = new Set<number>();
-        let k = w[i + O.trackSeg];
-        while (k && k !== w[i + 1] && !seen.has(k)) {
-          seen.add(k);
-          const s = byKey.get(k)?.find((c) => SEGMENT_TYPES.has(type(c)) && w[c + 3] === w[i + 1]);
-          if (s === undefined) break;
-          k = w[s + 2];
-          const c = s + O.segWidth;
-          const start: [number, number] = [um(i32(c + 1)), um(i32(c + 2))];
-          const end: [number, number] = [um(i32(c + 3)), um(i32(c + 4))];
-          const width = um(i32(c));
+        for (const { start, end, width, arc } of segments(i, w[i + O.trackSeg])) {
           const last = track?.points[track.points.length - 1];
           if (!track || track.width !== width || last![0] !== start[0] || last![1] !== start[1]) {
             track = { id: w[i + 1], layer, width, points: [start], arcs: [], length: 0 };
             net.tracks.push(track);
           }
           track.points.push(end);
-          if (type(s) === 0x01) {
-            track.arcs.push({
-              index: track.points.length - 1,
-              centerX: um(dbl(c + 5)),
-              centerY: um(dbl(c + 7)),
-              clockwise: Boolean((w[s] >>> 24) & 0x40),
-            });
-          } else track.length += Math.hypot(end[0] - start[0], end[1] - start[1]);
+          if (arc) track.arcs.push({ ...arc, index: track.points.length - 1 });
+          else track.length += Math.hypot(end[0] - start[0], end[1] - start[1]);
         }
       }
     }
   });
 
-  return { copperLayers, components, nets };
+  // Board outline: 0x14 graphics, 0x28 shapes and 0x24 rectangles on BOARD_GEOMETRY (class 1)
+  // with subclass 0xEA (DESIGN_OUTLINE), else 0xFD (OUTLINE). Board-level items carry their
+  // header list's tail in word 3 (list 4 for graphics, lists 7 for shapes and rectangles); items
+  // a footprint draws carry its 0x2D instance (or 0x2B definition) there instead. On a board with
+  // no board-level outline, the pieces a mechanical symbol (no refdes) draws are read instead.
+  const tail = (index: number) => w[(info.listBase >>> 2) + 2 * index];
+  // a placed footprint without a refdes: a mechanical symbol
+  const mechanical = (key: number) => {
+    const i = find(key, 0x2d);
+    const inst = i === undefined ? undefined : find(w[i + O.instPart], 0x07);
+    return i !== undefined && !(inst !== undefined && str(w[inst + O.refdes]));
+  };
+  const outlinePieces = (subclass: number, footprint = false) => {
+    const out: Piece[] = [];
+    for (let i = info.bodyWord; i < n - 16; i++) {
+      const t = type(i);
+      if ((t !== 0x14 && t !== 0x28 && t !== 0x24) || cls(i) !== 1 || w[i] >>> 24 !== subclass)
+        continue;
+      const b1 = (w[i] >>> 8) & 0xff;
+      if (b1 !== 0 && b1 !== 2) continue;
+      const owner = footprint ? mechanical(w[i + 3]) : w[i + 3] === tail(t === 0x14 ? 4 : 7);
+      if (!owner) continue;
+      if (t === 0x24) {
+        // a rectangle holds its corners directly: words 6-9 in 17.x and 18.x, 5-8 in 16.x
+        const r = i + (v16 ? 5 : 6);
+        const [x1, y1, x2, y2] = [0, 1, 2, 3].map((j) => um(i32(r + j)));
+        const corners: [number, number][] = [
+          [x1, y1],
+          [x2, y1],
+          [x2, y2],
+          [x1, y2],
+          [x1, y1],
+        ];
+        for (let j = 0; j < 4; j++) out.push({ start: corners[j], end: corners[j + 1], width: 0 });
+      } else out.push(...segments(i, w[i + (t === 0x14 ? O.graphicSeg : O.shapeSeg)]));
+    }
+    return out;
+  };
+  const outline = boardOutline(
+    contours(
+      [
+        () => outlinePieces(0xea),
+        () => outlinePieces(0xfd),
+        () => outlinePieces(0xea, true),
+        () => outlinePieces(0xfd, true),
+      ].reduce<Piece[]>((found, next) => (found.length ? found : next()), [])
+    )
+  );
+
+  return { copperLayers, components, nets, ...(outline ? { outline } : {}) };
+};
+
+/**
+ * Join outline pieces end to end into contours, closed where the drawing closes. Pieces may be
+ * stored in any order and direction; one is reversed (and its arc's direction with it) to
+ * continue a contour. A full circle is one arc from a point back to itself.
+ */
+const contours = (
+  pieces: Array<{ start: [number, number]; end: [number, number]; arc?: RoutingArc }>
+) => {
+  const same = (a: [number, number], b: [number, number]) =>
+    Math.abs(a[0] - b[0]) <= 1 && Math.abs(a[1] - b[1]) <= 1;
+  const left = [...pieces];
+  const out: OutlineContour[] = [];
+  while (left.length) {
+    const first = left.shift()!;
+    const c: OutlineContour = { points: [first.start, first.end], arcs: [] };
+    if (first.arc) c.arcs!.push({ ...first.arc, index: 1 });
+    const circle = Boolean(first.arc) && same(first.start, first.end);
+    while (!circle) {
+      const end = c.points[c.points.length - 1];
+      if (c.points.length > 2 && same(end, c.points[0])) break;
+      const j = left.findIndex((p) => same(p.start, end) || same(p.end, end));
+      if (j < 0) break;
+      const p = left.splice(j, 1)[0];
+      const forward = same(p.start, end);
+      c.points.push(forward ? p.end : p.start);
+      if (p.arc)
+        c.arcs!.push({
+          ...p.arc,
+          index: c.points.length - 1,
+          clockwise: forward ? p.arc.clockwise : !p.arc.clockwise,
+        });
+    }
+    if (!circle && !same(c.points[c.points.length - 1], c.points[0])) c.closed = false;
+    out.push(c);
+  }
+  return out;
 };
 
 let cached: { key: string; result: { info: BrdInfo; layout: BrdLayout } } | undefined;

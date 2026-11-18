@@ -148,6 +148,47 @@ describe.skipIf(!existsSync(J201))("arcs", () => {
   });
 });
 
+const BBB_XML = path.resolve(
+  import.meta.dirname,
+  "../../../test/fixtures/ipc2581/BeagleBone Black_PCB_RevC_No Logo_210401.xml"
+);
+describe.skipIf(!existsSync(BBB) || !existsSync(BBB_XML))("board outline from a .brd", () => {
+  it("equals the outline in the board's IPC-2581 export", async () => {
+    const brd = (await getDesignOverview(BBB)) as DesignOverview;
+    const xml = (await getDesignOverview(BBB_XML)) as DesignOverview;
+    expect(brd.outline).toMatchObject({ width: 86360, height: 54610, minX: 0, minY: 0 });
+    expect(brd.outline).toEqual(xml.outline);
+  });
+});
+
+describe("board outline on other boards", () => {
+  // CC13xx: KiCad's Edge.Cuts. J401: the edge drawn twice, and six mounting-hole cutouts
+  it.skipIf(!existsSync(BOARDS[2][0]))("reads a 16.x outline shape", async () => {
+    const brd = await loadBrdLayout(BOARDS[2][0]);
+    if (typeof brd === "string") throw new Error(brd);
+    expect(brd.layout.outline).toMatchObject({
+      width: 37775,
+      height: 44850,
+      minX: 107350,
+      minY: 94500,
+    });
+  });
+  const J401 = path.join(
+    JETSON,
+    "reComputer Jetson carrier board/reComputer J401/Layout/reComputer J401_V1.0.brd"
+  );
+  it.skipIf(!existsSync(J401))("keeps cutouts and drops a repeated edge", async () => {
+    const brd = await loadBrdLayout(J401);
+    if (typeof brd === "string") throw new Error(brd);
+    const o = brd.layout.outline!;
+    expect(o).toMatchObject({ width: 100000, height: 79000 });
+    expect(o.contours).toHaveLength(7);
+    expect(o.contours.slice(1).every((c) => c.points.length === 2 && c.arcs?.length === 1)).toBe(
+      true
+    );
+  });
+});
+
 const CC13 = BOARDS[2][0];
 describe.skipIf(!existsSync(CC13))("parts on a 16.x board", () => {
   // 16.x instances reach their part through the part's other instances
