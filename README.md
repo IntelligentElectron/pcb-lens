@@ -10,7 +10,8 @@ It works with any board layout in IPC-2581 format, exported from any EDA tool th
 |--------|------------|-------------|
 | IPC-2581 | `.xml` | IPC-2581 XML files (RevA, RevB, RevC) from any compliant EDA tool |
 | Cadence TCFX | `.tcfx` | Constraint XML exported from Cadence Allegro: physical and spacing rules, net classes, stackup, regions |
-| Cadence Allegro | `.brd` | Native board files, exported in place to the two formats above (Windows only, requires a Cadence SPB installation) |
+| Cadence Allegro | `.brd` | Native board files. Constraints are read directly on any OS ([format notes](docs/allegro-brd-format.md)); IPC-2581 and `.tcfx` export needs Windows and a Cadence SPB installation |
+| Cadence Constraint Manager | `.dcf` | Constraint database of a schematic or board |
 
 ## Native Install (Recommended)
 

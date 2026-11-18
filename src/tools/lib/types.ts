@@ -332,6 +332,10 @@ export interface ConstraintObject {
   references: Array<{ kind: string; name: string }>;
   members: Array<{ kind: string; name: string }>;
   crossSection?: CrossSection;
+  /** Object kind of a nested child (Constraint Manager XML `<c K>` containers) */
+  kind?: string;
+  /** Nested objects, e.g. the match groups and pin pairs inside an ElectricalCSet */
+  children?: ConstraintObject[];
 }
 
 /**
@@ -358,7 +362,10 @@ export interface CrossSection {
 export interface ConstraintsOverviewResult {
   fileName: string;
   fileSizeBytes: number;
-  sections: Array<{ name: string; objectCount: number }>;
+  /** Allegro release that wrote a .brd file, e.g. "17.2" */
+  allegroVersion?: string;
+  /** source: where a .dcf/.brd section was read (see docs/allegro-brd-format.md); units: of its lengths */
+  sections: Array<{ name: string; objectCount: number; source?: string; units?: string }>;
 }
 
 /**
@@ -367,5 +374,7 @@ export interface ConstraintsOverviewResult {
 export interface ConstraintsSectionResult {
   fileName: string;
   section: string;
+  source?: string;
+  units?: string;
   objects: ConstraintObject[];
 }

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `get_constraints` reads Allegro `.brd` boards and Constraint Manager `.dcf` files directly, on any OS and without Cadence. A `.brd` yields the Constraint Manager XML archives it embeds (physical, spacing and electrical sets, net classes, match groups, diff pairs, regions, stackup) and `Brd*` sections decoded from its binary database (per-layer physical sets with via lists, electrical sets, net classes, match groups, diff pairs, regions, Xnets, buses and per-net set assignments). Binary decoding covers Allegro 17.x. Each section reports its `source` and `units`; objects gain `kind` and `children` for nested Constraint Manager objects. The format is documented in `docs/allegro-brd-format.md`
+
 ## [1.2.0] - 2026-07-16
 
 ### Added

@@ -5,7 +5,7 @@
   "display_name": "PCB Lens",
   "version": "0.0.1",
   "description": "Query IPC-2581 PCB layout files for physical design review",
-  "long_description": "The PCB Lens MCP Server gives AI agents the power to query and analyze PCB layouts from IPC-2581 files. Get design overviews, find component placements, trace net routing, and read layout constraints through natural conversations.\n\nSupports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool, and Cadence .tcfx constraint files. On Windows with Cadence SPB installed, Allegro .brd files can be exported to both formats in place.",
+  "long_description": "The PCB Lens MCP Server gives AI agents the power to query and analyze PCB layouts from IPC-2581 files. Get design overviews, find component placements, trace net routing, and read layout constraints through natural conversations.\n\nSupports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool, Cadence .tcfx and .dcf constraint files, and the constraints inside Allegro .brd boards on any OS. On Windows with Cadence SPB installed, Allegro .brd files can be exported to both formats in place.",
   "author": {
     "name": "IntelligentElectron",
     "url": "https://github.com/IntelligentElectron"
@@ -51,7 +51,7 @@
     },
     {
       "name": "get_constraints",
-      "description": "Query layout constraints from a Cadence .tcfx file: physical and spacing constraint sets, net classes, stackup, and regions"
+      "description": "Query layout constraints from a Cadence .tcfx or .dcf file or an Allegro .brd board (read directly on any OS): physical, spacing and electrical constraint sets, net classes, match groups, diff pairs, stackup, and regions"
     },
     {
       "name": "export_cadence_ipc2581",
