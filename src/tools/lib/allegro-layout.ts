@@ -150,7 +150,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   const chain = (first: number, end: number, t: number, nextAt = 2) => {
     const out: number[] = [];
     const seen = new Set<number>();
-    for (let k = first; k && k !== end && !seen.has(k); ) {
+    let k = first;
+    while (k && k !== end && !seen.has(k)) {
       seen.add(k);
       const i = find(k, t);
       if (i === undefined) break;
@@ -202,7 +203,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     const items: number[] = [];
     const seen = new Set<number>();
     for (const a of chain(w[ni + O.netAssign], w[ni + 1], 0x04)) {
-      for (let k = w[a + 4]; k && k !== w[a + 1] && !seen.has(k); ) {
+      let k = w[a + 4];
+      while (k && k !== w[a + 1] && !seen.has(k)) {
         seen.add(k);
         const cands = byKey.get(k)?.filter((i) => ITEM_CLASS[type(i)]?.includes(cls(i)));
         // prefer the candidate whose own next key leads somewhere
@@ -351,7 +353,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
       } else if (t === 0x05) {
         let track: BrdTrack | undefined;
         const seen = new Set<number>();
-        for (let k = w[i + O.trackSeg]; k && k !== w[i + 1] && !seen.has(k); ) {
+        let k = w[i + O.trackSeg];
+        while (k && k !== w[i + 1] && !seen.has(k)) {
           seen.add(k);
           const s = byKey.get(k)?.find((c) => SEGMENT_TYPES.has(type(c)) && w[c + 3] === w[i + 1]);
           if (s === undefined) break;
