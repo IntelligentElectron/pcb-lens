@@ -5,8 +5,8 @@
 #   scripts/tag-release.sh 1.8.0
 #   scripts/tag-release.sh v1.8.0 --yes
 #
-# The tag is the release version. The workflow runs CI, stamps that version into
-# the npm tarball and binaries, generates release notes from merged pull
+# The tag is the release version. The workflow stamps that version into the
+# binaries and the npm package, generates release notes from merged pull
 # requests, signs the binaries, creates the GitHub Release, and publishes npm.
 
 set -euo pipefail
@@ -54,8 +54,8 @@ echo "Releasing ${TAG}"
 echo "  commit  $(git log -1 --format='%h %s')"
 echo "  npm     $(node -p 'require("./package.json").name')@${VERSION}"
 echo ""
-echo "The tag runs CI, publishes the CI-built npm package, signs the binaries,"
-echo "generates release notes, and creates the GitHub Release."
+echo "The tag builds and signs the binaries, generates release notes, creates"
+echo "the GitHub Release, and publishes the npm package."
 echo ""
 
 if [ "$ASSUME_YES" -eq 0 ]; then
