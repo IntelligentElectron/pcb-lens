@@ -316,6 +316,10 @@ const syntheticBrd = (): Buffer => {
     text("5 ps", 8),
     words(0x3 | (0x7c << 16), 0x301, 0x300, 0x201, 0x66, 0, 60000),
     words(0x3 | (0x1a0 << 16), 0x302, 0x100, 0x100, 0x6a, 0, 2),
+    words(0x3 | (0x78 << 16), 0x303, 0x201, 0x201, 0x64, 0, 5), // ratsnest schedule: TEMPLATE
+    words(0x3 | (0x78 << 16), 0x304, 0x101, 0x101, 0x64, 0, 3), // a code with no known value
+    words(0x3 | (0x268 << 16), 0x305, 0x400, 0x400, 0x66, 0, 500), // MVIA_TO_MVIA_SPACING
+    words(0x3 | (0x1cf << 16), 0x306, 0x400, 0x400, 0x66, 0, 500), // unnamed spacing code
     words(0x2c | (0x15 << 16), 0x400, 0x401, LT_TABLES, 0, 0, 5, 0x500, 0, 0, 0),
     words(0x2c | (0x103 << 16), 0x401, LT_TABLES, LT_TABLES, 0, 0, 6, 0, 0, 0, 0),
     words(0x37, 0x500, 0x400, 0, 2, 2, 0x100, 0x101, 0),
@@ -424,6 +428,7 @@ describe("queryConstraints on Allegro .brd", () => {
     expect(ecs.attributes).toEqual({
       DIFFP_PHASE_TOL: { value: "5 ps" },
       DIFFP_UNCOUPLED_LENGTH: { value: "6.0000" },
+      RATSNEST_SCHEDULE: { value: "TEMPLATE" },
     });
     const nets = await section("BrdNet");
     expect(nets).toEqual([
@@ -433,7 +438,21 @@ describe("queryConstraints on Allegro .brd", () => {
         references: [],
         members: [],
       },
+      {
+        name: "NET_N",
+        attributes: { RATSNEST_SCHEDULE: { value: "3" } },
+        references: [],
+        members: [],
+      },
     ]);
+  });
+
+  it("names spacing override codes and keeps unknown codes by number", async () => {
+    const [cls] = await section("BrdNetClass");
+    expect(cls.attributes).toEqual({
+      MVIA_TO_MVIA_SPACING: { value: "0.0500" },
+      FIELD_0x1cf: { value: "0.0500" },
+    });
   });
 
   it("decodes the stackup in index order", async () => {
