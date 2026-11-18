@@ -12,8 +12,8 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-# Get current version from version.ts
-CURRENT_VERSION=$(grep 'export const VERSION' "src/version.ts" | sed 's/.*"\(.*\)".*/\1/')
+# Get current version from package.json
+CURRENT_VERSION=$(node -p 'require("./package.json").version')
 
 # Remove any suffix like -alpha
 CURRENT_VERSION=$(echo "$CURRENT_VERSION" | sed 's/-.*//')
@@ -57,17 +57,9 @@ echo "📦 Releasing pcb-lens"
 echo "   ${CURRENT_VERSION} → ${NEW_VERSION}"
 echo ""
 
-# Update version.ts
-echo "Updating version.ts..."
-sed -i '' "s/export const VERSION = \".*\"/export const VERSION = \"${NEW_VERSION}\"/" "src/version.ts"
-
 # Update package.json
 echo "Updating package.json..."
 sed -i '' "s/\"version\": \".*\"/\"version\": \"${NEW_VERSION}\"/" "package.json"
-
-# Update manifest.json (for .mcpb desktop extension)
-echo "Updating manifest.json..."
-sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${NEW_VERSION}\"/" "manifest.json"
 
 # Run tests
 echo ""
@@ -79,7 +71,7 @@ npm test
 # Stage and commit
 echo ""
 echo "Committing..."
-git add "src/version.ts" "package.json" "manifest.json"
+git add "package.json"
 git commit -m "chore: release v${NEW_VERSION}"
 
 # Push

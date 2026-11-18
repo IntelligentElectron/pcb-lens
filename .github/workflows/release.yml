@@ -65,54 +65,51 @@ jobs:
           # Allow codesign to access the key
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-      - name: Create macOS universal binary
+      # Each Mac downloads only its own architecture: darwin-arm64 or darwin-x64.
+      # darwin-universal is the legacy asset that installs up to v1.3.x request
+      # by name; their next update brings them to the per-arch binaries. Every
+      # Mac binary has its own signature, so all three are signed and then
+      # notarized together in one submission.
+      - name: Create legacy macOS universal binary
         run: |
           cd bin
           lipo -create pcb-lens-darwin-arm64 pcb-lens-darwin-x64 \
             -output pcb-lens-darwin-universal
           lipo -info pcb-lens-darwin-universal
 
-      - name: Sign macOS universal binary
+      - name: Sign macOS binaries
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd bin
-          codesign --force --options runtime --entitlements ../entitlements.plist \
-            --sign "Developer ID Application: Valentino Zegna Baruffa ($APPLE_TEAM_ID)" \
-            pcb-lens-darwin-universal
-          codesign --verify --verbose pcb-lens-darwin-universal
+          for binary in pcb-lens-darwin-arm64 pcb-lens-darwin-x64 pcb-lens-darwin-universal; do
+            codesign --force --options runtime --entitlements ../entitlements.plist \
+              --sign "Developer ID Application: Valentino Zegna Baruffa ($APPLE_TEAM_ID)" \
+              "$binary"
+            codesign --verify --verbose "$binary"
+          done
 
-      - name: Notarize macOS universal binary
+      - name: Notarize macOS binaries
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd bin
-          zip pcb-lens-darwin-universal.zip pcb-lens-darwin-universal
-          xcrun notarytool submit pcb-lens-darwin-universal.zip \
+          zip pcb-lens-darwin.zip pcb-lens-darwin-arm64 \
+            pcb-lens-darwin-x64 pcb-lens-darwin-universal
+          xcrun notarytool submit pcb-lens-darwin.zip \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait
-          rm pcb-lens-darwin-universal.zip
-
-      - name: Create arch-specific aliases for backward-compatible updates
-        run: |
-          cd bin
-          cp pcb-lens-darwin-universal pcb-lens-darwin-arm64
-          cp pcb-lens-darwin-universal pcb-lens-darwin-x64
+          rm pcb-lens-darwin.zip
 
       - name: Generate checksums
         run: |
           cd bin
           shasum -a 256 pcb-lens-* > checksums.txt
           cat checksums.txt
-
-      - name: Build .mcpb desktop extension
-        run: |
-          chmod +x scripts/build-mcpb.sh
-          RELEASE_DIR=$PWD/bin OUTPUT_DIR=$PWD/bin scripts/build-mcpb.sh ${GITHUB_REF#refs/tags/v}
 
       - name: Get version from tag
         id: version
@@ -143,7 +140,7 @@ jobs:
 
             ## Installation
 
-            See [Setup Instructions](https://github.com/IntelligentElectron/pcb-lens?tab=readme-ov-file#connect-the-mcp-with-your-favorite-ai-tool) for installation and configuration.
+            See [Setup Instructions](https://github.com/IntelligentElectron/pcb-lens?tab=readme-ov-file#install) for installation and configuration.
 
             ## Checksums
 
@@ -156,7 +153,6 @@ jobs:
             bin/pcb-lens-linux-x64
             bin/pcb-lens-windows-x64.exe
             bin/checksums.txt
-            bin/pcb-lens.mcpb
           draft: false
           prerelease: false
         env:

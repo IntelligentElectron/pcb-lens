@@ -53,9 +53,21 @@ Once configured, you can ask your AI assistant questions like:
 
 See the [tools/](tools/) directory for detailed documentation on each tool's parameters and response format.
 
+Every tool is also a shell command; see [cli.md](cli.md).
+
 ## Observability
 
 The server can emit OpenTelemetry traces, metrics, and logs for every tool call to any OTLP-compatible backend. See [observability.md](observability.md) for the full signal reference, configuration, and integration guide.
+
+## Supported Platforms
+
+| Platform | Binary |
+|----------|--------|
+| macOS (Apple Silicon) | `pcb-lens-darwin-arm64` |
+| macOS (Intel) | `pcb-lens-darwin-x64` |
+| Linux (x64) | `pcb-lens-linux-x64` |
+| Linux (ARM64) | `pcb-lens-linux-arm64` |
+| Windows (x64) | `pcb-lens-windows-x64.exe` |
 
 ## Error Handling
 

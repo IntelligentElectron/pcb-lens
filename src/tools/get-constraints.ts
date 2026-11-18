@@ -1,6 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
 import { groupCmArchives, parseCmObjects, scanZipMembers } from "./lib/cadence-cm.js";
@@ -13,8 +12,7 @@ import type {
   CrossSectionLayer,
   ErrorResult,
 } from "./lib/types.js";
-import { formatResult } from "./shared.js";
-import { withTelemetry } from "../telemetry/index.js";
+import { defineTool } from "./registry.js";
 
 // =============================================================================
 // File validation
@@ -422,25 +420,17 @@ export const queryConstraints = async (
 // MCP Registration
 // =============================================================================
 
-export const register = (server: McpServer): void => {
-  server.registerTool(
-    "get_constraints",
-    {
-      description:
-        "Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, BrdStackup, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.",
-      inputSchema: {
-        file: z.string().describe("Path to a .tcfx, .dcf or .brd file"),
-        section: z
-          .string()
-          .optional()
-          .describe(
-            "Section name to query (e.g., 'PhysicalCSet', 'SpacingCSet'). Omit for overview."
-          ),
-      },
-    },
-    withTelemetry("get_constraints", async ({ file, section }) => {
-      const result = await queryConstraints(file, section);
-      return formatResult(result);
-    })
-  );
-};
+export const tool = defineTool({
+  name: "get_constraints",
+  title: "Layout constraints",
+  description:
+    "Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, BrdStackup, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.",
+  inputSchema: {
+    file: z.string().describe("Path to a .tcfx, .dcf or .brd file"),
+    section: z
+      .string()
+      .optional()
+      .describe("Section name to query (e.g., 'PhysicalCSet', 'SpacingCSet'). Omit for overview."),
+  },
+  run: ({ file, section }) => queryConstraints(file, section),
+});

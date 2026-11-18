@@ -1,4 +1,3 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type {
   ComponentInfo,
@@ -22,11 +21,10 @@ import {
   MAX_COORD_ROWS,
   extractMicronFactor,
   extractMicronFactorFromLines,
-  formatResult,
   validateFile,
   type Detail,
 } from "./shared.js";
-import { withTelemetry } from "../telemetry/index.js";
+import { defineTool } from "./registry.js";
 
 export const queryComponent = async (
   filePath: string,
@@ -304,28 +302,20 @@ export const queryComponent = async (
   };
 };
 
-export const register = (server: McpServer): void => {
-  server.registerTool(
-    "get_pcb_component",
-    {
-      description:
-        "Look up a single component by its exact reference designator (refdes). Returns its placement (position, rotation, layer), package and BOM details, the nets connected to each pin, and a summary of its pads (count and the distinct pad shapes). The refdes must match exactly; it is not a pattern. Set detail='full' to additionally get the exact coordinate of every pad (sampled for components with very many pads).",
-      inputSchema: {
-        file: z.string().describe("Path to IPC-2581 XML file"),
-        refdes: z
-          .string()
-          .describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
-        detail: z
-          .enum(["summary", "full"])
-          .default("summary")
-          .describe(
-            "How much to return. 'summary' (default) gives the pad count and distinct pad shapes. 'full' additionally returns the exact coordinate of each pad; components with very many pads are sampled. Use 'full' only when you need exact pad positions, since responses are larger."
-          ),
-      },
-    },
-    withTelemetry("get_pcb_component", async ({ file, refdes, detail }) => {
-      const result = await queryComponent(file, refdes, detail);
-      return formatResult(result);
-    })
-  );
-};
+export const tool = defineTool({
+  name: "get_pcb_component",
+  title: "Component by refdes",
+  description:
+    "Look up a single component by its exact reference designator (refdes). Returns its placement (position, rotation, layer), package and BOM details, the nets connected to each pin, and a summary of its pads (count and the distinct pad shapes). The refdes must match exactly; it is not a pattern. Set detail='full' to additionally get the exact coordinate of every pad (sampled for components with very many pads).",
+  inputSchema: {
+    file: z.string().describe("Path to IPC-2581 XML file"),
+    refdes: z.string().describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
+    detail: z
+      .enum(["summary", "full"])
+      .default("summary")
+      .describe(
+        "How much to return. 'summary' (default) gives the pad count and distinct pad shapes. 'full' additionally returns the exact coordinate of each pad; components with very many pads are sampled. Use 'full' only when you need exact pad positions, since responses are larger."
+      ),
+  },
+  run: ({ file, refdes, detail }) => queryComponent(file, refdes, detail),
+});

@@ -2,12 +2,10 @@ import { stat } from "node:fs/promises";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { detectCadenceInstalls, requireWindows, serializeCadenceCall } from "./lib/cadence.js";
 import type { ErrorResult, ExportCadenceBoardResult } from "./lib/types.js";
-import { formatResult } from "./shared.js";
-import { withTelemetry } from "../telemetry/index.js";
+import { defineTool } from "./registry.js";
 
 const execAsync = promisify(exec);
 
@@ -104,31 +102,25 @@ export const exportCadenceBoard = async (
   });
 };
 
-export const register = (server: McpServer): void => {
-  server.registerTool(
-    "export_cadence_ipc2581",
-    {
-      description:
-        "Export a Cadence Allegro .brd file to an IPC-2581 XML file, the format the other PCB query tools (get_pcb_metadata, get_pcb_component, get_pcb_net) read. Windows only, and requires a Cadence SPB installation (detected automatically).",
-      inputSchema: {
-        board: z.string().describe("Path to Cadence Allegro .brd file"),
-        output: z
-          .string()
-          .optional()
-          .describe(
-            "Output path (without .xml extension — Cadence appends it). Defaults to <boardname>_ipc2581.xml next to the .brd"
-          ),
-        revision: z
-          .enum(["B", "C"])
-          .optional()
-          .describe(
-            'IPC-2581 revision to write: "B" (1.03) or "C" (1.04, the default). Rev C carries the most layout detail; prefer it unless a downstream tool needs Rev B.'
-          ),
-      },
-    },
-    withTelemetry("export_cadence_ipc2581", async ({ board, output, revision }) => {
-      const result = await exportCadenceBoard(board, { output, revision });
-      return formatResult(result);
-    })
-  );
-};
+export const tool = defineTool({
+  name: "export_cadence_ipc2581",
+  title: "Export .brd to IPC-2581",
+  description:
+    "Export a Cadence Allegro .brd file to an IPC-2581 XML file, the format the other PCB query tools (get_pcb_metadata, get_pcb_component, get_pcb_net) read. Windows only, and requires a Cadence SPB installation (detected automatically).",
+  inputSchema: {
+    board: z.string().describe("Path to Cadence Allegro .brd file"),
+    output: z
+      .string()
+      .optional()
+      .describe(
+        "Output path (without .xml extension — Cadence appends it). Defaults to <boardname>_ipc2581.xml next to the .brd"
+      ),
+    revision: z
+      .enum(["B", "C"])
+      .optional()
+      .describe(
+        'IPC-2581 revision to write: "B" (1.03) or "C" (1.04, the default). Rev C carries the most layout detail; prefer it unless a downstream tool needs Rev B.'
+      ),
+  },
+  run: ({ board, output, revision }) => exportCadenceBoard(board, { output, revision }),
+});

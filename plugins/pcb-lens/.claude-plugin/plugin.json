@@ -1,0 +1,20 @@
+{
+  "name": "pcb-lens",
+  "description": "Query IPC-2581 PCB layouts and Cadence Allegro .brd constraints through the pcb-lens MCP server, which the plugin connects, with a skill for its command line where MCP is unavailable. Needs the pcb-lens binary on PATH.",
+  "author": {
+    "name": "Valentino Zegna",
+    "url": "https://github.com/IntelligentElectron"
+  },
+  "homepage": "https://github.com/IntelligentElectron/pcb-lens",
+  "repository": "https://github.com/IntelligentElectron/pcb-lens",
+  "license": "Apache-2.0",
+  "keywords": [
+    "eda",
+    "pcb",
+    "layout",
+    "ipc-2581",
+    "allegro",
+    "cadence",
+    "constraints"
+  ]
+}
