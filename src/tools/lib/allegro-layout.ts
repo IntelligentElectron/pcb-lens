@@ -129,8 +129,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   const v18 = info.version.startsWith("18");
   const O = v16 ? V16 : V17;
   const pre165 = v16 && Number(info.version) < 16.5;
-  // 17.4 inserts a word in some blocks
-  const v174 = Number(info.version) >= 17.4;
+  // 17.4 inserts a word in some blocks, and 18.x keeps it
+  const v174 = v18 || Number(info.version) >= 17.4;
 
   // Candidate block starts by key: word 0 a type byte, byte 1 0 or 2, word 1 the key. Keys are
   // unique, but a data word can mimic a header, so every lookup below names the type it expects.
