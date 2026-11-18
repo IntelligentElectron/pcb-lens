@@ -71,13 +71,13 @@ Each description is the MCP tool's own.
 
 Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.
 
-- `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file.
+- `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file.
 
 ### get_pcb_component
 
 Look up a single component by its exact reference designator (refdes). Returns its placement (position, rotation, layer), package and BOM details, the nets connected to each pin, and a summary of its pads (count and the distinct pad shapes). The refdes must match exactly; it is not a pattern. Set detail='full' to additionally get the exact coordinate of every pad (sampled for components with very many pads).
 
-- `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file.
+- `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file.
 - `--refdes` (required; string). Exact component reference designator (e.g., 'U5', 'C10', 'R22').
 - `--detail` (string; default "summary"). How much to return. 'summary' (default) gives the pad count and distinct pad shapes. 'full' additionally returns the exact coordinate of each pad; components with very many pads are sampled. Use 'full' only when you need exact pad positions, since responses are larger.
 
@@ -85,7 +85,7 @@ Look up a single component by its exact reference designator (refdes). Returns i
 
 Look up nets in a PCB layout by name and inspect their connectivity and routing. Provide a net-name pattern (a regular expression); for each matching net you get the connected component pins (grouped by component), the layers the net uses, a per-layer routing summary (trace widths, number of routed segments, and total routed length), and a via summary (count per drill size). All distances are in microns. Copper that is filled as a pour or plane instead of drawn as a trace is reported as routed on its layer but without a width or length, so a net can be fully routed yet show no trace width. A net that returns pins but no routing was most likely exported without its routed-copper data. Use a specific pattern: one that matches every net in the design is rejected. Set detail='full' to additionally return exact geometry — every via coordinate and the full point-by-point shape of each routed trace (including arcs for curved traces); for very large nets this geometry is sampled and the response is marked truncated.
 
-- `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file.
+- `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file.
 - `--pattern` (required; string). Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$').
 - `--detail` (string; default "summary"). How much to return. 'summary' (default) gives the per-layer routing summary and via counts. 'full' additionally returns exact geometry: every via coordinate and the full shape of each routed trace (its vertices, width, and arc data for curved traces); large nets are sampled and the response is marked truncated. Use 'full' only when you need exact coordinates, since responses are larger.
 

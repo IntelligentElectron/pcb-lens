@@ -1,6 +1,6 @@
 # Native Allegro `.brd` Support in pcb-lens — Investigation & IR Proposal
 
-**Status:** Layout reading implemented for 16.x and 17.x (2026-11-18) without the `PcbDesign` IR: the three geometry tools take a `.brd` and fill their own result types from `src/tools/lib/allegro-layout.ts`; see `docs/allegro-brd-format.md` section 10
+**Status:** Layout reading implemented for 16.x, 17.x and 18.x (2026-11-18) without the `PcbDesign` IR: the three geometry tools take a `.brd` and fill their own result types from `src/tools/lib/allegro-layout.ts`; see `docs/allegro-brd-format.md` section 10
 **Date:** 2026-08-07
 **Supersedes:** parts of [`allegro-brd-direct-read.md`](./allegro-brd-direct-read.md) (2026-06-17) —
 see [What changed since June](#what-changed-since-june)

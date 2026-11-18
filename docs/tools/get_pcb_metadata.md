@@ -10,7 +10,7 @@ Performs a single streaming pass over the IPC-2581 XML file to extract high-leve
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x or 17.x `.brd` file |
+| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x `.brd` file |
 
 ## Response Schema
 
