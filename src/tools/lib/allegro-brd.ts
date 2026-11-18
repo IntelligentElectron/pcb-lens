@@ -304,29 +304,34 @@ export const readBrdConstraints = (
     b.writeUInt32BE(buf.readUInt32LE(p + 4), 4);
     return b.readDoubleBE(0);
   };
-  for (const i of crossSections) {
+  const readLayers = (i: number, header: number) => {
     const count = w[i + 5];
     const slots = w[i + 6] + 1;
-    if (count < 3 || slots < count || slots > 256 || i + 8 + 27 * slots > n) continue;
-    const used = Array.from({ length: slots }, (_, j) => (i + 8 + 27 * j) * 4).filter(
-      (r) => str(buf.readUInt32LE(r + 40)) !== undefined
-    );
-    const layers = used.map((r) => {
-      const t = buf.readUInt32LE(r + 24);
-      return {
-        index: buf.readUInt32LE(r + 8),
-        type: LAYER_TYPES[t] ?? String(t),
-        attributes: {
-          CDS_LAYER_MATERIAL: str(buf.readUInt32LE(r + 40)) ?? "",
-          CDS_LAYER_THICKNESS: String(Number((dbl(r + 60) * 1000).toFixed(5))),
-          CDS_LAYER_DIELECTRIC_CONSTANT: String(Number(dbl(r + 84).toFixed(4))),
-          CDS_LAYER_LOSS_TANGENT: String(Number(dbl(r + 92).toFixed(5))),
-          CDS_LAYER_ELECTRICAL_CONDUCTIVITY: String(Number(dbl(r + 100).toPrecision(6))),
-        },
-      };
-    });
-    if (layers.length !== count || layers.some((_, j) => !layers.some((m) => m.index === j)))
-      continue;
+    if (count < 3 || slots < count || slots > 256 || i + header + 27 * slots > n) return undefined;
+    const layers = Array.from({ length: slots }, (_, j) => (i + header + 27 * j) * 4)
+      .filter((r) => str(buf.readUInt32LE(r + 40)) !== undefined)
+      .map((r) => {
+        const t = buf.readUInt32LE(r + 24);
+        return {
+          index: buf.readUInt32LE(r + 8),
+          type: LAYER_TYPES[t] ?? String(t),
+          attributes: {
+            CDS_LAYER_MATERIAL: str(buf.readUInt32LE(r + 40)) ?? "",
+            CDS_LAYER_THICKNESS: String(Number((dbl(r + 60) * 1000).toFixed(5))),
+            CDS_LAYER_DIELECTRIC_CONSTANT: String(Number(dbl(r + 84).toFixed(4))),
+            CDS_LAYER_LOSS_TANGENT: String(Number(dbl(r + 92).toFixed(5))),
+            CDS_LAYER_ELECTRICAL_CONDUCTIVITY: String(Number(dbl(r + 100).toPrecision(6))),
+          },
+        };
+      });
+    const valid =
+      layers.length === count && layers.every((_, j) => layers.some((m) => m.index === j));
+    return valid ? layers : undefined;
+  };
+  for (const i of crossSections) {
+    // the header is 8 words in 17.2 files and 9 in 17.4
+    const layers = readLayers(i, 8) ?? readLayers(i, 9);
+    if (!layers) continue;
     const obj = newObject("PRIMARY");
     obj.crossSection = {
       layers: layers

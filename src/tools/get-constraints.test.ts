@@ -496,4 +496,17 @@ describe.skipIf(!existsSync(PUBLIC_BRD))("queryConstraints on a public Allegro 1
     expect(def.attributes.MIN_LINE_WIDTH.value).toBe("0.1270");
     expect(def.attributes.MIN_BVIA_STAGGER.value).toBe("0.1270");
   });
+
+  it("decodes the 17.4 cross-section", async () => {
+    const [stackup] = (
+      (await queryConstraints(PUBLIC_BRD, "BrdStackup")) as ConstraintsSectionResult
+    ).objects;
+    const layers = stackup.crossSection!.layers;
+    expect(layers).toHaveLength(13);
+    expect(layers.filter((l) => l.type === "CONDUCTOR" || l.type === "PLANE")).toHaveLength(6);
+    expect(layers[1].attributes).toMatchObject({
+      CDS_LAYER_MATERIAL: "COPPER",
+      CDS_LAYER_THICKNESS: "0.03048",
+    });
+  });
 });

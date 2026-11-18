@@ -298,7 +298,7 @@ Diff pairs and match groups get their members through these links rather than me
 
 ### 0x36 Cross-section (substruct 0x10)
 
-**Confidence: VERIFIED** (thickness of every layer on three boards; Dk on two)
+**Confidence: VERIFIED** (thickness of every layer against the embedded XML on twelve 17.2 boards; 17.4 header OBSERVED on six boards)
 
 The stackup is a 0x36 definition table whose substruct byte (bits 16 to 23 of word 0) is 0x10:
 
@@ -310,7 +310,8 @@ word 4   (0x96 on every board read)
 word 5   layer count, surfaces and masks included
 word 6   last slot: word 6 + 1 records follow
 word 7   0
-+32      records of 108 bytes; unused slots are all zero (no material)
+word 8   0 (17.4 files only)
++32      records of 108 bytes (+36 in 17.4 files); unused slots are all zero (no material)
 ```
 
 | Offset | Content |
@@ -388,7 +389,6 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 |-----|--------|
 | 16.x and 18.x binary layouts | Only embedded archives are read |
 | Spacing constraint sets in the binary | Not located; read from the archives (every board read has them in one of its archives) |
-| Stackup on 17.4 (`0x00140902`) | The 0x36 cross-section was not found on the one 17.4 board read; its stackup comes from an archive's `Design` object when one has it |
 | Layer names in `BrdStackup` | Not decoded; conductors are listed top to bottom |
 | Pin pairs, match groups of pin pairs | Not decoded |
 | 0x1D slots 0 and 13, `TS_ALLOWED`, pad-to-pad codes other than 0 and 5 | Not reported, or reported as a number |
