@@ -282,8 +282,9 @@ export const readBrdConstraints = (
     push(`Brd${kind}`, obj);
   }
 
-  // Stackup: 0x36 substruct 0x10 [type][key][next][0][?][count][count - 1][0], then count records of
-  // 108 bytes; doubles are two 32-bit words, high word first, thickness in metres
+  // Stackup: 0x36 substruct 0x10 [type][key][next][0][?][layers][last slot][0], then last slot + 1
+  // records of 108 bytes, empty ones all zero; doubles are two 32-bit words, high word first,
+  // thickness in metres
   const dbl = (p: number) => {
     const b = Buffer.alloc(8);
     b.writeUInt32BE(buf.readUInt32LE(p), 0);
@@ -292,9 +293,12 @@ export const readBrdConstraints = (
   };
   for (const i of crossSections) {
     const count = w[i + 5];
-    if (w[i + 6] !== count - 1 || count < 3 || count > 200 || i + 8 + 27 * count > n) continue;
-    const layers = Array.from({ length: count }, (_, j) => {
-      const r = (i + 8 + 27 * j) * 4;
+    const slots = w[i + 6] + 1;
+    if (count < 3 || slots < count || slots > 256 || i + 8 + 27 * slots > n) continue;
+    const used = Array.from({ length: slots }, (_, j) => (i + 8 + 27 * j) * 4).filter(
+      (r) => str(buf.readUInt32LE(r + 40)) !== undefined
+    );
+    const layers = used.map((r) => {
       const t = buf.readUInt32LE(r + 24);
       return {
         index: buf.readUInt32LE(r + 8),
@@ -308,7 +312,8 @@ export const readBrdConstraints = (
         },
       };
     });
-    if (layers.some((_, j) => !layers.some((m) => m.index === j))) continue;
+    if (layers.length !== count || layers.some((_, j) => !layers.some((m) => m.index === j)))
+      continue;
     const obj = newObject("PRIMARY");
     obj.crossSection = {
       layers: layers

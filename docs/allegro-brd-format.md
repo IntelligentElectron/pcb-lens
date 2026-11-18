@@ -306,9 +306,9 @@ word 1   key
 word 2   next
 word 4   (0x96 on every board read)
 word 5   layer count, surfaces and masks included
-word 6   layer count - 1
+word 6   last slot: word 6 + 1 records follow
 word 7   0
-+32      layer count records of 108 bytes
++32      records of 108 bytes; unused slots are all zero (no material)
 ```
 
 | Offset | Content |

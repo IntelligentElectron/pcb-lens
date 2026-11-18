@@ -233,7 +233,19 @@ const dcfArchive = (): Buffer =>
 
 /** A minimal Allegro 17.2 board: header, string table, object blocks, then an embedded archive. */
 const syntheticBrd = (): Buffer => {
-  const strings = ["DEFAULT", "DIFF90", "NET_P", "NET_N", "CLS_A", "DP_A", "ECS_A", "VIA_A"];
+  const strings = [
+    "DEFAULT",
+    "DIFF90",
+    "NET_P",
+    "NET_N",
+    "CLS_A",
+    "DP_A",
+    "ECS_A",
+    "VIA_A",
+    "AIR",
+    "COPPER",
+    "FR-4",
+  ];
   const header = Buffer.alloc(0x1200);
   header.writeUInt32LE(0x00140400, 0);
   for (let list = 0; list < 23; list++) header.writeUInt32LE(0x65 + list, 0x3c + 8 * list); // tails
@@ -273,6 +285,7 @@ const syntheticBrd = (): Buffer => {
     const r = Buffer.alloc(108);
     r.writeUInt32LE(index, 8);
     r.writeUInt32LE(type, 24);
+    r.writeUInt32LE([9, 10, 11][type], 40); // material: AIR, COPPER, FR-4
     const dbl = (off: number, v: number) => {
       const d = Buffer.alloc(8);
       d.writeDoubleBE(v, 0);
@@ -306,12 +319,13 @@ const syntheticBrd = (): Buffer => {
     words(0x37, 0x500, 0x400, 0, 2, 2, 0x100, 0x101, 0),
     words(0x26, 0x600, 0, 0x100, 0x401, 0),
     words(0x26, 0x601, 0, 0x101, 0x401, 0),
-    words(0x00100036, 0x700, 0, 0, 0x96, 3, 2, 0),
+    words(0x00100036, 0x700, 0, 0, 0x96, 3, 3, 0), // 3 layers in 4 slots
     ...[
       [1, 1, 0, 1, 0],
       [2, 2, 50e-6, 3.5, 0.02],
       [0, 0, 0, 1, 0],
     ].map(([index, type, thickness, dk, df]) => layerRecord(index, type, thickness, dk, df)),
+    Buffer.alloc(108), // empty slot
   ];
   const archive = zipEntries([
     ["FileType.txt", "Attach"],
@@ -427,6 +441,7 @@ describe("queryConstraints on Allegro .brd", () => {
       "DIELECTRIC",
     ]);
     expect(stackup.crossSection?.layers[2].attributes).toMatchObject({
+      CDS_LAYER_MATERIAL: "FR-4",
       CDS_LAYER_THICKNESS: "0.05",
       CDS_LAYER_DIELECTRIC_CONSTANT: "3.5",
       CDS_LAYER_LOSS_TANGENT: "0.02",
