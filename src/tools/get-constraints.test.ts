@@ -274,9 +274,10 @@ const syntheticBrd = (): Buffer => {
     b.write(s, 0, "latin1");
     return b;
   };
-  const record = (width: number, gap: number) => {
+  const record = (width: number, gap: number, allowed: number) => {
     const r = new Array(14).fill(0);
     r[1] = width;
+    r[6] = allowed;
     r[7] = gap;
     return words(...r);
   };
@@ -304,8 +305,8 @@ const syntheticBrd = (): Buffer => {
     words(0x1b, 0x100, 0x101, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     words(0x1b, 0x101, LT_NETS, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     words(0x1d, 0x200, 0x201, 2, 0, 1 | (2 << 16)), // 1 via slot, 2 layers
-    record(1000, 1270),
-    record(600, 1000),
+    record(1000, 1270, 1),
+    record(600, 1000, 0),
     words(0),
     text("VIA_A", 252),
     words(0),
@@ -414,6 +415,7 @@ describe("queryConstraints on Allegro .brd", () => {
     expect(cset.attributes.DIFFP_PRIMARY_GAP.value).toBe("0.1270:0.1000");
     expect(cset.attributes.MAX_LINE_WIDTH.value).toBe("0.0000");
     expect(cset.attributes.VIA_LIST.value).toBe("VIA_A");
+    expect(cset.attributes.ALLOW_ON_ETCH_SUBCLASS.value).toBe("TRUE:FALSE");
   });
 
   it("decodes fields of electrical sets and nets", async () => {

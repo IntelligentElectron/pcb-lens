@@ -87,6 +87,12 @@ const TABLE_KINDS: Record<number, string> = {
   0x104: "Bus",
 };
 
+// Upper half of 0x1D slot 6; other codes are reported as numbers
+const PAD_PAD_MODES: Record<number, string> = {
+  0: "ALL_ALLOWED",
+  5: "MICROVIAS_MICROVIAS_COINCIDENT_ONLY",
+};
+
 // Cross-section layer type codes; names as CDS_LAYER_FUNCTION in Constraint Manager XML
 const LAYER_TYPES: Record<number, string> = {
   0: "SURFACE",
@@ -232,14 +238,21 @@ export const readBrdConstraints = (
     const nB = buf.readUInt16LE(i * 4 + 22);
     const base = i * 4 + 24;
     if (nB > 256 || base + 56 * nB + 256 * nA > buf.length) continue;
+    const perLayer = (f: (l: number) => string) => {
+      const v = Array.from({ length: nB }, (_, l) => f(base + 56 * l));
+      return { value: v.every((x) => x === v[0]) ? v[0] : v.join(":") };
+    };
     for (const [slot, attr] of PHYSICAL_SLOTS) {
-      const perLayer = Array.from({ length: nB }, (_, l) =>
-        mm(buf.readInt32LE(base + 56 * l + 4 * slot))
-      );
-      obj.attributes[attr] = {
-        value: perLayer.every((v) => v === perLayer[0]) ? perLayer[0] : perLayer.join(":"),
-      };
+      obj.attributes[attr] = perLayer((r) => mm(buf.readInt32LE(r + 4 * slot)));
     }
+    // slot 6: bit 0 allows routing on the layer, bits 16+ the pad-to-pad connect mode
+    obj.attributes.ALLOW_ON_ETCH_SUBCLASS = perLayer((r) =>
+      buf.readUInt32LE(r + 24) & 1 ? "TRUE" : "FALSE"
+    );
+    obj.attributes.PAD_PAD_DIRECT_CONNECT = perLayer((r) => {
+      const code = buf.readUInt32LE(r + 24) >>> 16;
+      return PAD_PAD_MODES[code] ?? String(code);
+    });
     const vias: string[] = [];
     for (let s = 0; s < nA; s++) {
       const p = base + 56 * nB + 256 * s + 4;

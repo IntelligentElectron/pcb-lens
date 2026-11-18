@@ -193,7 +193,7 @@ Constraints are attached to a net as 0x03 fields (section 7).
 
 ### 0x1D Physical constraint set
 
-**Confidence: VERIFIED** (all eleven named slots, every layer, on three boards)
+**Confidence: VERIFIED** (all eleven length slots, every layer, on three boards)
 
 ```
 word 0    0x0000001D
@@ -217,7 +217,7 @@ The 56-byte record is 14 int32 in internal units:
 | 3 | `MAXIMUM_NECK_LENGTH` | KiCad notes call it max length |
 | 4 | `MIN_BVIA_STAGGER` | KiCad notes call it clearance |
 | 5 | `MAX_BVIA_STAGGER` | |
-| 6 | flags (`ALLOW_ON_ETCH_SUBCLASS`, `TS_ALLOWED`, `PAD_PAD_DIRECT_CONNECT`) | UNKNOWN bit layout |
+| 6 | bit 0 `ALLOW_ON_ETCH_SUBCLASS`; bits 16 and up `PAD_PAD_DIRECT_CONNECT` (0 `ALL_ALLOWED`, 5 `MICROVIAS_MICROVIAS_COINCIDENT_ONLY`, other codes seen) | VERIFIED on 744 layer records; `TS_ALLOWED` was `ANYWHERE` on all of them and its bits are not identified |
 | 7 | `DIFFP_PRIMARY_GAP` | |
 | 8 | `DIFFP_NECK_GAP` | KiCad notes call it neck width |
 | 9 | `MAX_LINE_WIDTH` | KiCad notes call it neck gap |
@@ -389,6 +389,6 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 | Stackup on 17.4 (`0x00140902`) | The 0x36 cross-section was not found on the one 17.4 board read; its stackup comes from an archive's `Design` object when one has it |
 | Layer names in `BrdStackup` | Not decoded; conductors are listed top to bottom |
 | Pin pairs, match groups of pin pairs | Not decoded |
-| 0x1D slots 0, 6 and 13 | Flags and unknown words not reported |
+| 0x1D slots 0 and 13, `TS_ALLOWED`, pad-to-pad codes other than 0 and 5 | Not reported, or reported as a number |
 | Region override codes 0x1CE to 0x27B | Reported as `FIELD_0x...` |
 | Zip entries with a trailing data descriptor | Skipped; none seen |
