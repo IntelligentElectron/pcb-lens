@@ -42,6 +42,7 @@ export const readBrdInfo = (buf: Buffer): BrdInfo | string => {
   if (!UNITS[unitCode]) return `Unknown Allegro board units code ${unitCode}`;
   const [units, mmPer] = UNITS[unitCode];
   const divisor = buf.readUInt32LE(0x26c); // internal units per board unit
+  if (!divisor) return "Allegro board header has a zero units divisor";
   const count = buf.readUInt32LE(0x194);
   const strings = new Map<number, string>();
   let p = 0x1200;

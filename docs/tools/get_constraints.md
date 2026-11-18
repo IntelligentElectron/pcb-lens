@@ -33,6 +33,7 @@ interface ConstraintsOverviewResult {
   fileName: string;
   fileSizeBytes: number;
   allegroVersion?: string;                 // .brd: release that wrote the file, e.g. "17.2"
+  note?: string;                           // .brd: why the Brd* sections are missing, if they are
   sections: Array<{
     name: string;
     objectCount: number;

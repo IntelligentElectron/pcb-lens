@@ -25,12 +25,16 @@ export interface CmArchive {
 }
 
 const LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+// Inflate limits: the largest Constraint Manager member seen is tens of MB
+const MAX_ENTRY_BYTES = 256 * 2 ** 20;
+const MAX_TOTAL_BYTES = 1024 * 2 ** 20;
 
 /** Every zip local-file entry in a buffer, in file order. */
 export const scanZipMembers = (buf: Buffer): ZipMember[] => {
   const out: ZipMember[] = [];
+  let budget = MAX_TOTAL_BYTES;
   let p = buf.indexOf(LOCAL_HEADER);
-  while (p >= 0 && p + 30 <= buf.length) {
+  while (p >= 0 && p + 30 <= buf.length && budget > 0) {
     const flags = buf.readUInt16LE(p + 6);
     const method = buf.readUInt16LE(p + 8);
     const size = buf.readUInt32LE(p + 18);
@@ -43,9 +47,10 @@ export const scanZipMembers = (buf: Buffer): ZipMember[] => {
     if (!(flags & 8) && (method === 0 || method === 8) && start + size <= buf.length) {
       const raw = buf.subarray(start, start + size);
       try {
-        // capped at the header's size, so a corrupt or crafted entry cannot exhaust memory
-        const data =
-          method === 8 ? inflateRawSync(raw, { maxOutputLength: Math.max(unpacked, 1) }) : raw;
+        // capped at the header's size, an absolute limit and a budget for the whole file
+        const limit = Math.max(1, Math.min(unpacked, MAX_ENTRY_BYTES, budget));
+        const data = method === 8 ? inflateRawSync(raw, { maxOutputLength: limit }) : raw;
+        budget -= method === 8 ? data.length : 0;
         out.push({ name: buf.toString("latin1", p + 30, p + 30 + nameLen), data });
         // skip a member only once inflating proved it real; a stored one is unverified
         if (method === 8) next = start + size;

@@ -394,3 +394,4 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 | 0x1D slots 0 and 13, `TS_ALLOWED`, pad-to-pad codes other than 0 and 5 | Not reported, or reported as a number |
 | Region override codes 0x1CE to 0x27B | Reported as `FIELD_0x...` |
 | Zip entries with a trailing data descriptor | Skipped; none seen |
+| Embedded archive size | Each entry inflates to at most its header size and 256 MiB, and a file to 1 GiB in all; larger entries are skipped |

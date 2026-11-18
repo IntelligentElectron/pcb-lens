@@ -321,9 +321,12 @@ interface CadenceSection {
 
 const loadCadenceSections = async (
   filePath: string
-): Promise<{ sections: Map<string, CadenceSection>; allegroVersion?: string } | ErrorResult> => {
+): Promise<
+  { sections: Map<string, CadenceSection>; allegroVersion?: string; note?: string } | ErrorResult
+> => {
   const buf = await readFile(filePath);
-  const info = path.extname(filePath).toLowerCase() === ".brd" ? readBrdInfo(buf) : undefined;
+  const ext = path.extname(filePath).toLowerCase();
+  const info = ext === ".brd" ? readBrdInfo(buf) : undefined;
   const board = typeof info === "object" ? info : undefined;
 
   // The board's own physical archive first, then the technology Attach, then views (prefixed)
@@ -341,7 +344,7 @@ const loadCadenceSections = async (
     const source = `embedded archive ${a.index}: ${a.prefix}${a.fileType}${a.key ? `/${a.key}` : ""}${design ? `, design "${design}"` : ""}`;
     for (const [name, xml] of a.objects) {
       sections.set(sections.has(name) ? `${name}#${a.index}` : name, {
-        source: path.extname(filePath).toLowerCase() === ".dcf" ? "dcf" : source,
+        source: ext === ".dcf" ? "dcf" : source,
         units: a.units ?? board?.units,
         objects: parseCmObjects(xml),
       });
@@ -357,7 +360,11 @@ const loadCadenceSections = async (
       error: `No constraint data found in '${path.basename(filePath)}'${typeof info === "string" ? `: ${info}` : ""}`,
     };
   }
-  return { sections, ...(board ? { allegroVersion: board.version } : {}) };
+  return {
+    sections,
+    ...(board ? { allegroVersion: board.version } : {}),
+    ...(typeof info === "string" ? { note: `Binary sections not read: ${info}` } : {}),
+  };
 };
 
 const queryCadence = async (
@@ -382,6 +389,7 @@ const queryCadence = async (
     fileName,
     fileSizeBytes: (await stat(filePath)).size,
     ...(loaded.allegroVersion ? { allegroVersion: loaded.allegroVersion } : {}),
+    ...(loaded.note ? { note: loaded.note } : {}),
     sections: [...loaded.sections].map(([name, s]) => ({
       name,
       objectCount: s.objects.length,

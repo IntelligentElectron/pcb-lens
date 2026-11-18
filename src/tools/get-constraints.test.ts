@@ -451,6 +451,22 @@ describe("queryConstraints on Allegro .brd", () => {
     });
   });
 
+  it("keeps the embedded archives and says why binary sections are missing", async () => {
+    for (const [patch, reason] of [
+      [(b: Buffer) => b.writeUInt32LE(0x00131500, 0), "16.x"],
+      [(b: Buffer) => b.writeUInt8(9, 0x180), "units code 9"],
+      [(b: Buffer) => b.writeUInt32LE(0, 0x26c), "zero units divisor"],
+    ] as const) {
+      const buf = syntheticBrd();
+      patch(buf);
+      const file = path.join(tmpDir, "patched.brd");
+      await writeFile(file, buf);
+      const result = (await queryConstraints(file)) as ConstraintsOverviewResult;
+      expect(result.note).toContain(reason);
+      expect(result.sections.map((s) => s.name)).toEqual(["SpacingCSet"]);
+    }
+  });
+
   it("resolves members from member arrays and per-net links", async () => {
     const members = [
       { kind: "Net", name: "NET_P" },
