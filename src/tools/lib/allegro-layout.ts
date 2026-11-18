@@ -188,8 +188,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     break;
   }
   const layerName = (index: number) => copperLayers[index]?.name ?? `ETCH_${index + 1}`;
-  const topLayer = layerName(0);
-  const bottomLayer = layerName(Math.max(copperLayers.length - 1, 0));
+  const topLayer = copperLayers[0]?.name ?? "TOP";
+  const bottomLayer = copperLayers.at(-1)?.name ?? "BOTTOM";
 
   // Item key -> net name, from each 0x1B net (list 5): word 3 its name, then its first 0x04
   // assignment [04][key][next assignment, or the net at the end][net][first item]. A net has one
@@ -288,7 +288,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
       for (const p of chain(w[i + O.instPad], 0, 0x32, O.padNext)) {
         const pd = find(w[p + O.padDef], 0x0d);
         if (pd === undefined) continue;
-        const o = pd + (v174 ? 1 : 0);
+        const o = pd + extra;
         const lx = bottom ? -i32(o + 4) : i32(o + 4); // pads are in the footprint's local frame
         const ly = i32(o + 5);
         const ps = padstack(w[o + 6]);
