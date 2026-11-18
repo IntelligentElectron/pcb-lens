@@ -27,16 +27,27 @@ const UNITS: Record<number, [string, number]> = {
 };
 
 const VERSIONS: Record<number, string> = { 0x13: "16", 0x14: "17", 0x15: "18" };
-const RELEASES: Record<number, string> = { 0x1404: "17.2", 0x1409: "17.4", 0x1415: "17.5" };
+const RELEASES: Record<number, string> = {
+  0x1300: "16.0",
+  0x1304: "16.2",
+  0x1305: "16.2",
+  0x130c: "16.4",
+  0x1310: "16.5",
+  0x1315: "16.6",
+  0x1404: "17.2",
+  0x1409: "17.4",
+  0x1415: "17.5",
+};
 
-/** Header and string table, or an error string. */
-export const readBrdInfo = (buf: Buffer): BrdInfo | string => {
+/** Header and string table, or an error string; `majors` are the releases whose layout is read. */
+export const readBrdInfo = (buf: Buffer, majors = ["17"]): BrdInfo | string => {
   if (buf.length < 0x1200 + 4) return "File too small for an Allegro board";
   const magic = buf.readUInt32LE(0);
   const major = VERSIONS[magic >>> 16];
   if (!major) return `Unrecognised Allegro magic 0x${magic.toString(16)}`;
   const version = RELEASES[(magic >>> 8) & 0xffff] ?? `${major}.x`;
-  if (major !== "17") return `Allegro ${version} binary layout is not decoded (17.x only)`;
+  if (!majors.includes(major))
+    return `Allegro ${version} binary layout is not decoded (${majors.map((m) => `${m}.x`).join(", ")} only)`;
 
   const unitCode = buf.readUInt8(0x180);
   if (!UNITS[unitCode]) return `Unknown Allegro board units code ${unitCode}`;

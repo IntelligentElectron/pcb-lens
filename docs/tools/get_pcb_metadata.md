@@ -1,6 +1,6 @@
 # get_pcb_metadata
 
-Get an overview of an IPC-2581 PCB design file: metadata, layer stackup, component/net counts, and section sizes.
+Get an overview of a PCB design file (IPC-2581 XML or Allegro `.brd`): metadata, layer stackup, component/net counts, and section sizes.
 
 ## Description
 
@@ -10,7 +10,7 @@ Performs a single streaming pass over the IPC-2581 XML file to extract high-leve
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | Yes | - | Path to IPC-2581 XML file |
+| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x or 17.x `.brd` file |
 
 ## Response Schema
 
@@ -18,14 +18,15 @@ Performs a single streaming pass over the IPC-2581 XML file to extract high-leve
 interface DesignOverview {
   fileName: string;
   fileSizeBytes: number;
-  totalLines: number;
+  totalLines?: number;        // XML only
   units: string;              // Always "MICRON"
   ipc2581Revision?: string;   // e.g. "B", "C"
+  allegroVersion?: string;    // .brd only, e.g. "17.2"
   stepName?: string;          // e.g. "board"
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
-  sections: SectionInfo[];    // Sorted by lineCount descending
+  sections?: SectionInfo[];   // XML only; sorted by lineCount descending
 }
 
 interface LayerInfo {
@@ -97,3 +98,4 @@ interface SectionInfo {
 - `componentCount` is derived from placement entries in the Component section (not BOM line items)
 - `netCount` is the number of `PhyNet` entries
 - `ipc2581Revision` and `stepName` may be absent if the file omits them
+- For an Allegro `.brd`, `layers` lists the copper layers top to bottom (`layerFunction` is `PLANE` for a non-routable layer, else `CONDUCTOR`), `componentCount` counts components with a refdes, and `netCount` counts named nets; `totalLines`, `sections` and `ipc2581Revision` are absent

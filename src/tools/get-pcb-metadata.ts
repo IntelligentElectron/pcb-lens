@@ -3,12 +3,34 @@ import path from "node:path";
 import { z } from "zod";
 import type { DesignOverview, ErrorResult, LayerInfo, SectionInfo } from "./lib/types.js";
 import { attr, streamAllLines } from "./lib/xml-utils.js";
+import { isBrdFile, loadBrdLayout } from "./lib/allegro-layout.js";
 import { validateFile } from "./shared.js";
 import { defineTool } from "./registry.js";
+
+const getBrdOverview = async (filePath: string): Promise<DesignOverview | ErrorResult> => {
+  const brd = await loadBrdLayout(filePath);
+  if (typeof brd === "string") return { error: brd };
+  const { copperLayers, components, nets } = brd.layout;
+  const last = copperLayers.length - 1;
+  return {
+    fileName: path.basename(filePath),
+    fileSizeBytes: (await stat(filePath)).size,
+    units: "MICRON",
+    allegroVersion: brd.info.version,
+    layers: copperLayers.map((l, i) => ({
+      name: l.name,
+      side: i === 0 ? "TOP" : i === last ? "BOTTOM" : "INTERNAL",
+      layerFunction: l.plane ? "PLANE" : "CONDUCTOR",
+    })),
+    componentCount: components.length,
+    netCount: nets.filter((n) => n.name).length,
+  };
+};
 
 export const getDesignOverview = async (
   filePath: string
 ): Promise<DesignOverview | ErrorResult> => {
+  if (isBrdFile(filePath)) return getBrdOverview(filePath);
   const err = await validateFile(filePath);
   if (err) return err;
 
@@ -114,9 +136,9 @@ export const tool = defineTool({
   name: "get_pcb_metadata",
   title: "Design overview",
   description:
-    "Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets.",
+    "Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.",
   inputSchema: {
-    file: z.string().describe("Path to IPC-2581 XML file"),
+    file: z.string().describe("Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file"),
   },
   run: ({ file }) => getDesignOverview(file),
 });
