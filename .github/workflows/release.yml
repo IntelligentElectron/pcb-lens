@@ -16,15 +16,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate CHANGELOG has release notes
+      - name: Validate release tag
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
-            echo "::error::No release notes found in CHANGELOG.md for version $VERSION"
-            echo "Add a section like '## [$VERSION] - $(date +%Y-%m-%d)' to CHANGELOG.md"
+          VERSION=${GITHUB_REF_NAME#v}
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::$GITHUB_REF_NAME is not a semantic version tag such as v1.8.0."
             exit 1
           fi
-          echo "Found release notes for version $VERSION"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -111,33 +109,12 @@ jobs:
           shasum -a 256 pcb-lens-* > checksums.txt
           cat checksums.txt
 
-      - name: Get version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Extract release notes from CHANGELOG
-        id: changelog
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          # Extract section between current version header and next version header (or EOF)
-          NOTES=$(awk -v ver="$VERSION" '
-            /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") found=1; next }
-            /^\[.*\]:/ { exit }
-            found { print }
-          ' CHANGELOG.md)
-
-          # Use delimiter for multiline output
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.version.outputs.version }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
           body: |
-            ${{ steps.changelog.outputs.notes }}
-
             ## Installation
 
             See [Setup Instructions](https://github.com/IntelligentElectron/pcb-lens?tab=readme-ov-file#install) for installation and configuration.
@@ -154,7 +131,7 @@ jobs:
             bin/pcb-lens-windows-x64.exe
             bin/checksums.txt
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -184,6 +161,10 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      # The tag is the release version; package.json holds the development version.
+      - name: Stamp the version from the tag
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
 
       - name: Build
         run: npm run build

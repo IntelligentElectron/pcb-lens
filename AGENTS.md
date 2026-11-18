@@ -50,29 +50,29 @@ npm run type-check && npm run lint && npm test
 
 ### Releasing
 
-Branch protection requires releases to go through a PR:
+There is no release PR. Feature PRs contain the code, tests, and documentation users
+need. Give each PR a user-facing title and description; GitHub uses the merged PRs to
+generate release notes. Do not edit `CHANGELOG.md` or bump the development version.
 
-1. `git checkout -b release/vX.Y.Z`
-2. Update `CHANGELOG.md` with new version section
-3. `git commit -am "Add vX.Y.Z changelog"`
-4. `npm version patch --no-git-tag-version` (bumps `package.json` only, no tag)
-5. `git commit -am "vX.Y.Z"`
-6. Push branch and open PR: `git push -u origin release/vX.Y.Z && gh pr create`
-7. Merge the PR
-8. Tag the merge commit and push:
+After the intended changes have merged, choose the semantic version bump explicitly,
+then tag the current `main` commit:
 
-   ```bash
-   git checkout main && git pull
-   git tag vX.Y.Z
-   git push origin vX.Y.Z
-   ```
+```bash
+git checkout main && git pull
+scripts/tag-release.sh 1.8.0
+```
 
-   **Note:** Do NOT use `npm version` without `--no-git-tag-version` — it creates a local git tag that points to the release branch commit, not the merge commit on main. The tag must be created manually on the merge commit.
+The script refuses to run off `main`, with a dirty or stale tree, for a malformed
+semantic version, or for an existing tag. Pass `--yes` to skip the prompt. The tag is the
+release version; CI stamps it into the binaries and the npm package.
 
-The tag push triggers the release workflow, which automatically:
-- Builds signed binaries for all platforms
-- Creates GitHub Release with binaries
+The tag triggers the release workflow, which automatically:
+
+- Builds, signs, and notarizes the standalone binaries
+- Generates release notes from merged PRs and creates the GitHub Release
 - Publishes to npm via OIDC (no tokens)
+
+`CHANGELOG.md` is the historical changelog through v1.4.0.
 
 ## Project Structure
 

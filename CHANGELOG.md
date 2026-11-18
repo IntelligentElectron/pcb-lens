@@ -1,15 +1,10 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+This file records releases through v1.4.0. Later changelogs are generated from merged
+pull requests and published with each [GitHub Release](https://github.com/IntelligentElectron/pcb-lens/releases).
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.4.1] - 2026-11-17
-
-### Fixed
-
-- The first start after a self-update no longer fails. The binary used to start the updated version and then exit 1 with `Server error: Process should have been replaced`, so an MCP client lost its server until the next start; it now waits for the updated version and exits with its code
 
 ## [1.4.0] - 2026-11-17
 
