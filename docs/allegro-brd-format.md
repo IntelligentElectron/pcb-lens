@@ -36,7 +36,7 @@ A board carries its constraints in two places:
 | Store | Holds | Section names in `get_constraints` |
 |-------|-------|-------------------------------------|
 | Embedded Constraint Manager archives: zip archives of XML inside the `.brd` | Whatever Constraint Manager saved: from a full database (every object kind and the stackup) down to a few object kinds | Constraint Manager names: `PhysicalCSet`, `SpacingCSet`, `ElectricalCSet`, `NetClass`, `MatchGroup`, `DiffPair`, `Region`, `Design`, ... |
-| Binary object database | The board's live rules: physical and electrical constraint sets, net classes, match groups, diff pairs, regions, per-net assignments | `Brd*`: `BrdPhysicalCSet`, `BrdElectricalCSet`, `BrdNetClass`, `BrdMatchGroup`, `BrdDiffPair`, `BrdRegion`, `BrdXnet`, `BrdBus`, `BrdNet` |
+| Binary object database | The board's live rules: physical and electrical constraint sets, net classes, match groups, diff pairs, regions, per-net assignments, and the stackup | `Brd*`: `BrdPhysicalCSet`, `BrdElectricalCSet`, `BrdNetClass`, `BrdMatchGroup`, `BrdDiffPair`, `BrdRegion`, `BrdXnet`, `BrdBus`, `BrdNet`, `BrdStackup` |
 
 The two can disagree. An archive is a snapshot: on boards read so far it matched the binary value for value in most cases, a few values were older, and in one case the archive held the database of a different design (other layer count, other names, its Design object named after a temporary file). Treat the `Brd*` sections as the board's rules and the archives as the richer but possibly stale description (spacing sets, regions, topology, stackup). Compare names and layer counts before mixing them.
 
@@ -171,6 +171,8 @@ Lists used:
 | 12 | 0x1D physical constraint sets, 0x1E electrical constraint sets, 0x1F padstack dimensions (interleaved) |
 | 15 | 0x2C tables |
 
+The 0x36 cross-section is found by its first word (section 6) rather than through list 19.
+
 ## 6. Constraint Blocks
 
 ### 0x1B Net (60 bytes)
@@ -292,6 +294,36 @@ word 4  group: 0x2C table key
 
 Diff pairs and match groups get their members through these links rather than member arrays. A match group whose members are pin pairs has none of either; pin pairs are not decoded.
 
+### 0x36 Cross-section (substruct 0x10)
+
+**Confidence: VERIFIED** (thickness of every layer on three boards; Dk on two)
+
+The stackup is a 0x36 definition table whose substruct byte (bits 16 to 23 of word 0) is 0x10:
+
+```
+word 0   0x00100036
+word 1   key
+word 2   next
+word 4   (0x96 on every board read)
+word 5   layer count, surfaces and masks included
+word 6   layer count - 1
+word 7   0
++32      layer count records of 108 bytes
+```
+
+| Offset | Content |
+|--------|---------|
+| +8 | u32 position of the layer in the stack, 0 at the top surface. Records are not always stored in order |
+| +24 | u32 layer type: 0 surface, 1 conductor, 2 dielectric, 3 plane, 21 prepreg (other codes seen on masks) |
+| +40 | material (string id: `AIR`, `SOLDERMASK`, `COPPER`, `FR-4`, ...) |
+| +60 | thickness, metres |
+| +68, +76 | two more doubles, probably the thickness tolerances |
+| +84 | dielectric constant |
+| +92 | loss tangent |
+| +100 | electrical conductivity, S/m |
+
+Doubles are IEEE 754 stored as two little-endian 32-bit words, the high word first. Layer names are not in the record; conductors run top to bottom in position order.
+
 ## 7. Field Codes
 
 **Confidence: per row**
@@ -354,7 +386,8 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 |-----|--------|
 | 16.x and 18.x binary layouts | Only embedded archives are read |
 | Spacing constraint sets in the binary | Not located; read from the archives (every board read has them in one of its archives) |
-| Stackup in the binary | Not located; read from an archive's `Design` object. Some boards embed none (their archives hold the generic layer types only), and their stackup must come from fabrication data |
+| Stackup on 17.4 (`0x00140902`) | The 0x36 cross-section was not found on the one 17.4 board read; its stackup comes from an archive's `Design` object when one has it |
+| Layer names in `BrdStackup` | Not decoded; conductors are listed top to bottom |
 | Pin pairs, match groups of pin pairs | Not decoded |
 | 0x1D slots 0, 6 and 13 | Flags and unknown words not reported |
 | Region override codes 0x1CE to 0x27B | Reported as `FIELD_0x...` |

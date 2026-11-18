@@ -419,7 +419,7 @@ export const register = (server: McpServer): void => {
     "get_constraints",
     {
       description:
-        "Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.",
+        "Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, BrdStackup, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.",
       inputSchema: {
         file: z.string().describe("Path to a .tcfx, .dcf or .brd file"),
         section: z

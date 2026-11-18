@@ -15,7 +15,7 @@ Common sections include `PhysicalCSet` (trace width/spacing rules), `SpacingCSet
 
 A `.dcf` file and the archives embedded in a `.brd` hold Constraint Manager XML; their sections keep Constraint Manager names (`PhysicalCSet`, `SpacingCSet`, `ElectricalCSet`, `NetClass`, `MatchGroup`, `DiffPair`, `Region`, `Design`, ...). A board can embed several archives: the second copy of a section is named `<Section>#<archive>`.
 
-A `.brd` (Allegro 17.x) also yields `Brd*` sections decoded from its binary database: `BrdPhysicalCSet`, `BrdElectricalCSet`, `BrdNetClass`, `BrdMatchGroup`, `BrdDiffPair`, `BrdRegion`, `BrdXnet`, `BrdBus` and `BrdNet` (nets with a set assignment or a direct rule). These are the board's live rules; the embedded archives are snapshots that can be older or, rarely, come from another design. Each section's `source` says which it is. Binary lengths are in mm; a per-layer value is a `:` list from top to bottom. See [allegro-brd-format.md](../allegro-brd-format.md) for the layouts and confidence of each field.
+A `.brd` (Allegro 17.x) also yields `Brd*` sections decoded from its binary database: `BrdPhysicalCSet`, `BrdElectricalCSet`, `BrdNetClass`, `BrdMatchGroup`, `BrdDiffPair`, `BrdRegion`, `BrdXnet`, `BrdBus`, `BrdNet` (nets with a set assignment or a direct rule) and `BrdStackup` (the cross-section: material, thickness in mm, Dk, loss tangent and conductivity per layer). These are the board's live rules; the embedded archives are snapshots that can be older or, rarely, come from another design. Each section's `source` says which it is. Binary lengths are in mm; a per-layer value is a `:` list from top to bottom. See [allegro-brd-format.md](../allegro-brd-format.md) for the layouts and confidence of each field.
 
 ## Input Parameters
 

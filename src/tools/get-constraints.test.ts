@@ -268,6 +268,22 @@ const syntheticBrd = (): Buffer => {
     r[7] = gap;
     return words(...r);
   };
+  // 108-byte cross-section record; doubles as two words, high word first
+  const layerRecord = (index: number, type: number, thickness: number, dk: number, df: number) => {
+    const r = Buffer.alloc(108);
+    r.writeUInt32LE(index, 8);
+    r.writeUInt32LE(type, 24);
+    const dbl = (off: number, v: number) => {
+      const d = Buffer.alloc(8);
+      d.writeDoubleBE(v, 0);
+      r.writeUInt32LE(d.readUInt32BE(0), off);
+      r.writeUInt32LE(d.readUInt32BE(4), off + 4);
+    };
+    dbl(60, thickness);
+    dbl(84, dk);
+    dbl(92, df);
+    return r;
+  };
   const LT_NETS = 0x6a,
     LT_SETS = 0x71,
     LT_TABLES = 0x74;
@@ -290,6 +306,12 @@ const syntheticBrd = (): Buffer => {
     words(0x37, 0x500, 0x400, 0, 2, 2, 0x100, 0x101, 0),
     words(0x26, 0x600, 0, 0x100, 0x401, 0),
     words(0x26, 0x601, 0, 0x101, 0x401, 0),
+    words(0x00100036, 0x700, 0, 0, 0x96, 3, 2, 0),
+    ...[
+      [1, 1, 0, 1, 0],
+      [2, 2, 50e-6, 3.5, 0.02],
+      [0, 0, 0, 1, 0],
+    ].map(([index, type, thickness, dk, df]) => layerRecord(index, type, thickness, dk, df)),
   ];
   const archive = zipEntries([
     ["FileType.txt", "Attach"],
@@ -395,6 +417,20 @@ describe("queryConstraints on Allegro .brd", () => {
         members: [],
       },
     ]);
+  });
+
+  it("decodes the stackup in index order", async () => {
+    const [stackup] = await section("BrdStackup");
+    expect(stackup.crossSection?.layers.map((l) => l.type)).toEqual([
+      "SURFACE",
+      "CONDUCTOR",
+      "DIELECTRIC",
+    ]);
+    expect(stackup.crossSection?.layers[2].attributes).toMatchObject({
+      CDS_LAYER_THICKNESS: "0.05",
+      CDS_LAYER_DIELECTRIC_CONSTANT: "3.5",
+      CDS_LAYER_LOSS_TANGENT: "0.02",
+    });
   });
 
   it("resolves members from member arrays and per-net links", async () => {

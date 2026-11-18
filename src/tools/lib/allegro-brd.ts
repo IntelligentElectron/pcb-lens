@@ -1,10 +1,10 @@
 /**
  * Constraint data from the binary object database of an Allegro `.brd` file.
  *
- * Reads the header, the string table and five block types: 0x1B nets,
- * 0x03 fields, 0x1D physical constraint sets, 0x1E electrical constraint
- * sets, 0x2C tables (net classes, match groups, diff pairs, regions) with
- * their 0x37 member arrays. Layouts and confidence levels are in
+ * Reads the header, the string table, 0x1B nets, 0x03 fields, 0x1D physical
+ * and 0x1E electrical constraint sets, 0x2C tables (net classes, match groups,
+ * diff pairs, regions) with their 0x37 member arrays and 0x26 links, and the
+ * 0x36 cross-section. Layouts and confidence levels are in
  * docs/allegro-brd-format.md. Allegro 17.x files only.
  */
 
@@ -87,6 +87,15 @@ const TABLE_KINDS: Record<number, string> = {
   0x104: "Bus",
 };
 
+// Cross-section layer type codes; names as CDS_LAYER_FUNCTION in Constraint Manager XML
+const LAYER_TYPES: Record<number, string> = {
+  0: "SURFACE",
+  1: "CONDUCTOR",
+  2: "DIELECTRIC",
+  3: "PLANE",
+  21: "DIELECTRIC_PREPREG",
+};
+
 // 56-byte per-layer record of a 0x1D block: int32 slot -> Constraint Manager name
 const PHYSICAL_SLOTS: Array<[number, string]> = [
   [1, "MIN_LINE_WIDTH"],
@@ -112,7 +121,7 @@ const newObject = (name: string): ConstraintObject => ({
 /**
  * Binary constraint sections of a 17.x board, keyed by section name
  * (BrdPhysicalCSet, BrdElectricalCSet, BrdNetClass, BrdMatchGroup, BrdDiffPair,
- * BrdRegion, BrdXnet, BrdBus, BrdNet). Lengths are in mm.
+ * BrdRegion, BrdXnet, BrdBus, BrdNet, BrdStackup). Lengths are in mm.
  */
 export const readBrdConstraints = (
   buf: Buffer,
@@ -131,6 +140,7 @@ export const readBrdConstraints = (
   const tables = new Map<number, number[]>();
   const arrays = new Map<number, number[]>();
   const links: number[] = []; // 0x26 [26][key][?][net key][table key]: diff pair and match group membership
+  const crossSections: number[] = []; // 0x36 blocks of substruct 0x10
   const add = (m: Map<number, number[]>, i: number) => {
     const list = m.get(w[i + 1]);
     if (list) list.push(i);
@@ -143,6 +153,7 @@ export const readBrdConstraints = (
       add(sets, i); // 0x1F carries flags in byte 2
     else if (t === 0x37) add(arrays, i);
     else if (t === 0x26) links.push(i);
+    else if (t === 0x00100036) crossSections.push(i);
     else if ((t & 0xff) === 0x2c) add(tables, i);
   }
 
@@ -269,6 +280,42 @@ export const readBrdConstraints = (
     for (const key of keys)
       obj.members.push({ kind: nameOf.get(key)!.kind, name: nameOf.get(key)!.name });
     push(`Brd${kind}`, obj);
+  }
+
+  // Stackup: 0x36 substruct 0x10 [type][key][next][0][?][count][count - 1][0], then count records of
+  // 108 bytes; doubles are two 32-bit words, high word first, thickness in metres
+  const dbl = (p: number) => {
+    const b = Buffer.alloc(8);
+    b.writeUInt32BE(buf.readUInt32LE(p), 0);
+    b.writeUInt32BE(buf.readUInt32LE(p + 4), 4);
+    return b.readDoubleBE(0);
+  };
+  for (const i of crossSections) {
+    const count = w[i + 5];
+    if (w[i + 6] !== count - 1 || count < 3 || count > 200 || i + 8 + 27 * count > n) continue;
+    const layers = Array.from({ length: count }, (_, j) => {
+      const r = (i + 8 + 27 * j) * 4;
+      const t = buf.readUInt32LE(r + 24);
+      return {
+        index: buf.readUInt32LE(r + 8),
+        type: LAYER_TYPES[t] ?? String(t),
+        attributes: {
+          CDS_LAYER_MATERIAL: str(buf.readUInt32LE(r + 40)) ?? "",
+          CDS_LAYER_THICKNESS: String(Number((dbl(r + 60) * 1000).toFixed(5))),
+          CDS_LAYER_DIELECTRIC_CONSTANT: String(Number(dbl(r + 84).toFixed(4))),
+          CDS_LAYER_LOSS_TANGENT: String(Number(dbl(r + 92).toFixed(5))),
+          CDS_LAYER_ELECTRICAL_CONDUCTIVITY: String(Number(dbl(r + 100).toPrecision(6))),
+        },
+      };
+    });
+    if (layers.some((_, j) => !layers.some((m) => m.index === j))) continue;
+    const obj = newObject("PRIMARY");
+    obj.crossSection = {
+      layers: layers
+        .sort((a, b) => a.index - b.index)
+        .map(({ type, attributes }) => ({ type, attributes })),
+    };
+    push("BrdStackup", obj);
   }
 
   // nets keep the named constraint fields only; most nets carry unnamed bookkeeping codes
