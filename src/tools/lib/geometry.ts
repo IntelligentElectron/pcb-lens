@@ -5,6 +5,7 @@
  * and component placements. Used by render-net and get-via-in-pad.
  */
 
+import type { BoardOutline, OutlineContour } from "./types.js";
 import { attr, numAttr, scanLines } from "./xml-utils.js";
 
 // =============================================================================
@@ -371,5 +372,68 @@ export const transformPin = (comp: ComponentPlacement, pinDef: PinDef, f: number
   return {
     x: comp.x + dx * cos - dy * sin,
     y: comp.y + dx * sin + dy * cos,
+  };
+};
+
+// =============================================================================
+// Board outline
+// =============================================================================
+
+/**
+ * Extent and order of outline contours: the largest is the board edge, closed or not; the
+ * other open fragments are dropped. An arc's extent includes the axis-crossings its sweep
+ * passes, so a rounded or circular edge is measured to its true limit.
+ */
+export const boardOutline = (contours: OutlineContour[]): BoardOutline | undefined => {
+  const extent = (c: OutlineContour) => {
+    const xs = c.points.map((p) => p[0]);
+    const ys = c.points.map((p) => p[1]);
+    for (const a of c.arcs ?? []) {
+      const [sx, sy] = c.points[a.index - 1];
+      const [ex, ey] = c.points[a.index];
+      const r = Math.hypot(sx - a.centerX, sy - a.centerY);
+      const from = Math.atan2(sy - a.centerY, sx - a.centerX);
+      const to = Math.atan2(ey - a.centerY, ex - a.centerX);
+      const full = sx === ex && sy === ey;
+      // counterclockwise sweep from `from` to `to`; a clockwise arc is the same sweep reversed
+      const [lo, hi] = a.clockwise ? [to, from] : [from, to];
+      const span = full ? 2 * Math.PI : (((hi - lo) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      for (let q = 0; q < 4; q++) {
+        const ang = (q * Math.PI) / 2;
+        const d = (((ang - lo) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        if (d > span) continue;
+        xs.push(Math.round(a.centerX + r * Math.cos(ang)));
+        ys.push(Math.round(a.centerY + r * Math.sin(ang)));
+      }
+    }
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  };
+  const area = (e: number[]) => (e[2] - e[0]) * (e[3] - e[1]);
+  const seen = new Set<string>();
+  const sized = contours
+    .filter((c) => c.points.length >= 3 || c.arcs?.length)
+    .map((c) => ({ c, e: extent(c) }))
+    .sort((a, b) => area(b.e) - area(a.e))
+    // the board edge is the largest contour; other open fragments are stray lines
+    .filter(({ c }, i) => i === 0 || c.closed !== false)
+    // some boards draw a contour twice, from another vertex or in the other direction
+    .filter(({ c }) => {
+      const pts = c.closed === false ? c.points : c.points.slice(1); // closing point repeats
+      const key = JSON.stringify([...pts].sort((p, q) => p[0] - q[0] || p[1] - q[1]));
+      return !seen.has(key) && seen.add(key);
+    });
+  if (!sized.length) return undefined;
+  const [minX, minY, maxX, maxY] = sized[0].e;
+  return {
+    width: maxX - minX,
+    height: maxY - minY,
+    minX,
+    minY,
+    maxX,
+    maxY,
+    contours: sized.map(({ c }) => {
+      const { arcs, ...rest } = c;
+      return arcs?.length ? c : rest;
+    }),
   };
 };

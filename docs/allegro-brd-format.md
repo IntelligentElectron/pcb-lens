@@ -614,8 +614,25 @@ From word 4, the island's items chain through their word 2 back to the assignmen
 
 Arc centres and directions were checked on 16.5, 17.4 and 18.0 boards. Shapes are counted per layer; their outlines are not read.
 
+### Board outline
+
+**Confidence: VERIFIED** on BeagleBone Black RevC (equal, point for point with arc centres and directions, to its IPC-2581 `<Profile>`) and on CC13xxEM (equal to KiCad's Edge.Cuts); on 63 of the 68 fixture and corpus boards with parts an outline is found and holds every part but the odd overhanging connector, and the other five draw none.
+
+The outline is drawn on BOARD_GEOMETRY (class 1) by 0x14 graphics, 0x28 shapes and 0x24 rectangles. Subclass 0xEA (DESIGN_OUTLINE) is read when present, else 0xFD (OUTLINE); BOARD_GEOMETRY 0xEF holds regions that split the board, not its edge.
+
+| Block | Word (17.x, 18.x) | Word (16.x) | Field |
+|-------|-------------------|-------------|-------|
+| 0x14 graphic, 0x28 shape, 0x24 rectangle | 3 | 3 | owner: the header list's tail (list 4 for graphics, list 7 for shapes and rectangles) when board-level, else the 0x2D or 0x2B footprint that draws it |
+| 0x14 graphic | 6 | 5 | first segment |
+| 0x28 shape | 10 | 8 | first segment |
+| 0x24 rectangle | 6-9 | 5-8 | corners x1, y1, x2, y2 |
+
+Board-level pieces are read first. A board without any has its outline drawn by a mechanical symbol: the pieces of a placed footprint without a refdes are read instead. Footprints with a refdes (connectors) also draw outline pieces, which are not the board edge, and are left out.
+
+Pieces are joined end to end into contours, reversing a piece (and its arc's direction) where needed. The largest is the board edge, kept even when open: some boards leave a gap where a connector footprint draws a notch. Other closed contours (cutouts, mounting holes, panel rails) follow; other open fragments and contours drawn twice are dropped.
+
 ### Not read
 
-- Board outline, keepouts, text and silkscreen
+- Keepouts, text and silkscreen
 - Shape outlines, thermal spokes and custom pad outlines (reported by their bounding box)
 - Components without a refdes (fiducials and other mechanical symbols)
