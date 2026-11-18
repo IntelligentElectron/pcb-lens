@@ -34,6 +34,7 @@ export const scanZipMembers = (buf: Buffer): ZipMember[] => {
     const flags = buf.readUInt16LE(p + 6);
     const method = buf.readUInt16LE(p + 8);
     const size = buf.readUInt32LE(p + 18);
+    const unpacked = buf.readUInt32LE(p + 22);
     const nameLen = buf.readUInt16LE(p + 26);
     const start = p + 30 + nameLen + buf.readUInt16LE(p + 28);
     let next = p + 4;
@@ -42,11 +43,12 @@ export const scanZipMembers = (buf: Buffer): ZipMember[] => {
     if (!(flags & 8) && (method === 0 || method === 8) && start + size <= buf.length) {
       const raw = buf.subarray(start, start + size);
       try {
-        out.push({
-          name: buf.toString("latin1", p + 30, p + 30 + nameLen),
-          data: method === 8 ? inflateRawSync(raw) : raw,
-        });
-        next = start + size;
+        // capped at the header's size, so a corrupt or crafted entry cannot exhaust memory
+        const data =
+          method === 8 ? inflateRawSync(raw, { maxOutputLength: Math.max(unpacked, 1) }) : raw;
+        out.push({ name: buf.toString("latin1", p + 30, p + 30 + nameLen), data });
+        // skip a member only once inflating proved it real; a stored one is unverified
+        if (method === 8) next = start + size;
       } catch {
         // not a real entry: the signature bytes occurred inside binary data
       }

@@ -11,11 +11,9 @@
 import type { ConstraintObject } from "./types.js";
 
 export interface BrdInfo {
-  magic: number;
   version: string; // "17.2"
   units: string; // board units: "mm", "mils", ...
-  divisor: number; // internal units per board unit
-  mmPerUnit: number;
+  mmPerUnit: number; // mm per internal unit
   strings: Map<number, string>;
   bodyWord: number; // word index of the first object block
 }
@@ -40,8 +38,10 @@ export const readBrdInfo = (buf: Buffer): BrdInfo | string => {
   const version = RELEASES[(magic >>> 8) & 0xffff] ?? `${major}.x`;
   if (major !== "17") return `Allegro ${version} binary layout is not decoded (17.x only)`;
 
-  const [units, mmPer] = UNITS[buf.readUInt8(0x180)] ?? ["unknown", NaN];
-  const divisor = buf.readUInt32LE(0x26c);
+  const unitCode = buf.readUInt8(0x180);
+  if (!UNITS[unitCode]) return `Unknown Allegro board units code ${unitCode}`;
+  const [units, mmPer] = UNITS[unitCode];
+  const divisor = buf.readUInt32LE(0x26c); // internal units per board unit
   const count = buf.readUInt32LE(0x194);
   const strings = new Map<number, string>();
   let p = 0x1200;
@@ -52,7 +52,7 @@ export const readBrdInfo = (buf: Buffer): BrdInfo | string => {
     strings.set(id, buf.toString("latin1", p + 4, end));
     p += 4 + ((end - p - 4 + 1 + 3) & ~3); // NUL-terminated, padded to 4 bytes
   }
-  return { magic, version, units, divisor, mmPerUnit: mmPer / divisor, strings, bodyWord: p >>> 2 };
+  return { version, units, mmPerUnit: mmPer / divisor, strings, bodyWord: p >>> 2 };
 };
 
 // 0x03 field codes, verified by matching values against Constraint Manager XML of the same boards
