@@ -93,7 +93,7 @@ const main = async (): Promise<void> => {
   // Auto-update on startup
   const updated = await autoUpdate();
   if (updated) {
-    reexec();
+    await reexec();
   }
 
   await runServer();
