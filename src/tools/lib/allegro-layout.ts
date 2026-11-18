@@ -434,7 +434,6 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   // a footprint draws carry its 0x2D instance (or 0x2B definition) there instead. On a board with
   // no board-level outline, the pieces a mechanical symbol (no refdes) draws are read instead.
   const tail = (index: number) => w[(info.listBase >>> 2) + 2 * index];
-  // A 0x24 rectangle holds its corners directly: words 6-9 in 17.x and 18.x, 5-8 in 16.x.
   // a placed footprint without a refdes: a mechanical symbol
   const mechanical = (key: number) => {
     const i = find(key, 0x2d);
@@ -452,6 +451,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
       const owner = footprint ? mechanical(w[i + 3]) : w[i + 3] === tail(t === 0x14 ? 4 : 7);
       if (!owner) continue;
       if (t === 0x24) {
+        // a rectangle holds its corners directly: words 6-9 in 17.x and 18.x, 5-8 in 16.x
         const r = i + (v16 ? 5 : 6);
         const [x1, y1, x2, y2] = [0, 1, 2, 3].map((j) => um(i32(r + j)));
         const corners: [number, number][] = [
@@ -481,8 +481,9 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
 };
 
 /**
- * Join outline pieces end to end into closed contours. Pieces may be stored in any order and
- * direction; one is reversed (and its arc's direction with it) to continue a contour.
+ * Join outline pieces end to end into contours, closed where the drawing closes. Pieces may be
+ * stored in any order and direction; one is reversed (and its arc's direction with it) to
+ * continue a contour. A full circle is one arc from a point back to itself.
  */
 const contours = (
   pieces: Array<{ start: [number, number]; end: [number, number]; arc?: RoutingArc }>
@@ -495,7 +496,8 @@ const contours = (
     const first = left.shift()!;
     const c: OutlineContour = { points: [first.start, first.end], arcs: [] };
     if (first.arc) c.arcs!.push({ ...first.arc, index: 1 });
-    for (;;) {
+    const circle = Boolean(first.arc) && same(first.start, first.end);
+    while (!circle) {
       const end = c.points[c.points.length - 1];
       if (c.points.length > 2 && same(end, c.points[0])) break;
       const j = left.findIndex((p) => same(p.start, end) || same(p.end, end));
@@ -510,8 +512,6 @@ const contours = (
           clockwise: forward ? p.arc.clockwise : !p.arc.clockwise,
         });
     }
-    // a full circle is one arc from a point back to itself
-    const circle = c.points.length === 2 && first.arc && same(first.start, first.end);
     if (!circle && !same(c.points[c.points.length - 1], c.points[0])) c.closed = false;
     out.push(c);
   }
