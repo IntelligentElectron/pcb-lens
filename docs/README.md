@@ -10,7 +10,8 @@ The PCB Lens MCP Server provides tools for querying IPC-2581 PCB layout files th
 |--------|------------|-------------|
 | IPC-2581 XML | `.xml` | Industry-standard PCB layout format (RevA, RevB, RevC) from any compliant EDA tool |
 | Cadence TCFX | `.tcfx` | Constraint XML exported from Cadence Allegro `.brd` files |
-| Cadence Allegro | `.brd` | Native board files (Windows only, requires Cadence SPB installation) |
+| Cadence Allegro | `.brd` | Native board files. Constraints are read directly on any OS ([format notes](allegro-brd-format.md)); IPC-2581 and `.tcfx` export needs Windows and a Cadence SPB installation |
+| Cadence Constraint Manager | `.dcf` | Constraint database of a schematic or board |
 
 ## Design Philosophy
 
@@ -33,7 +34,7 @@ All physical values (coordinates, trace widths) are normalized to **microns**, r
 | [`get_pcb_metadata`](tools/get_pcb_metadata.md) | Get an overview of an IPC-2581 file: metadata, layer stackup, component/net counts, and section sizes |
 | [`get_pcb_component`](tools/get_pcb_component.md) | Look up a single component by exact refdes with placement, BOM, net, and pad data |
 | [`get_pcb_net`](tools/get_pcb_net.md) | Query a net by name pattern for pin connections, routing per layer, and via info |
-| [`get_constraints`](tools/get_constraints.md) | Read layout constraints from a Cadence `.tcfx` file |
+| [`get_constraints`](tools/get_constraints.md) | Read layout constraints from a Cadence `.tcfx`, `.dcf` or Allegro `.brd` file |
 | [`export_cadence_ipc2581`](tools/export_cadence_ipc2581.md) | Export a Cadence Allegro `.brd` file to IPC-2581 XML (Windows only) |
 | [`export_cadence_constraints`](tools/export_cadence_constraints.md) | Export a Cadence Allegro `.brd` file to `.tcfx` constraint XML (Windows only) |
 

@@ -1,8 +1,10 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { attr, numAttr, streamAllLines } from "./lib/xml-utils.js";
+import { groupCmArchives, parseCmObjects, scanZipMembers } from "./lib/cadence-cm.js";
+import { readBrdConstraints, readBrdInfo } from "./lib/allegro-brd.js";
 import type {
   ConstraintObject,
   ConstraintsOverviewResult,
@@ -18,7 +20,9 @@ import { withTelemetry } from "../telemetry/index.js";
 // File validation
 // =============================================================================
 
-const validateTcfxFile = async (filePath: string): Promise<ErrorResult | null> => {
+const EXTENSIONS = [".tcfx", ".dcf", ".brd"];
+
+const validateConstraintFile = async (filePath: string): Promise<ErrorResult | null> => {
   try {
     const s = await stat(filePath);
     if (!s.isFile()) {
@@ -27,8 +31,8 @@ const validateTcfxFile = async (filePath: string): Promise<ErrorResult | null> =
   } catch {
     return { error: `File not found: '${filePath}'` };
   }
-  if (!filePath.toLowerCase().endsWith(".tcfx")) {
-    return { error: `Expected a .tcfx file, got: '${path.basename(filePath)}'` };
+  if (!EXTENSIONS.includes(path.extname(filePath).toLowerCase())) {
+    return { error: `Expected a .tcfx, .dcf or .brd file, got: '${path.basename(filePath)}'` };
   }
   return null;
 };
@@ -306,6 +310,96 @@ const querySection = async (
 };
 
 // =============================================================================
+// Cadence .dcf and Allegro .brd: Constraint Manager XML archives + binary blocks
+// =============================================================================
+
+interface CadenceSection {
+  source: string;
+  units?: string;
+  objects: ConstraintObject[];
+}
+
+const loadCadenceSections = async (
+  filePath: string
+): Promise<
+  { sections: Map<string, CadenceSection>; allegroVersion?: string; note?: string } | ErrorResult
+> => {
+  const buf = await readFile(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const info = ext === ".brd" ? readBrdInfo(buf) : undefined;
+  const board = typeof info === "object" ? info : undefined;
+
+  // The board's own physical archive first, then the technology Attach, then views (prefixed)
+  const rank = (a: { fileType: string; prefix: string }) =>
+    a.prefix ? 2 : a.fileType === "Design" ? 0 : 1;
+  const archives = groupCmArchives(scanZipMembers(buf))
+    .map((a, i) => ({ ...a, index: i + 1 }))
+    .sort((a, b) => rank(a) - rank(b) || b.objects.size - a.objects.size);
+
+  const sections = new Map<string, CadenceSection>();
+  for (const a of archives) {
+    const design = a.objects.has("Design")
+      ? parseCmObjects(a.objects.get("Design")!)[0]?.name
+      : undefined;
+    const source = `embedded archive ${a.index}: ${a.prefix}${a.fileType}${a.key ? `/${a.key}` : ""}${design ? `, design "${design}"` : ""}`;
+    for (const [name, xml] of a.objects) {
+      sections.set(sections.has(name) ? `${name}#${a.index}` : name, {
+        source: ext === ".dcf" ? "dcf" : source,
+        units: a.units ?? board?.units,
+        objects: parseCmObjects(xml),
+      });
+    }
+  }
+  if (board) {
+    for (const [name, objects] of Object.entries(readBrdConstraints(buf, board))) {
+      sections.set(name, { source: "binary", units: "mm", objects });
+    }
+  }
+  if (!sections.size) {
+    return {
+      error: `No constraint data found in '${path.basename(filePath)}'${typeof info === "string" ? `: ${info}` : ""}`,
+    };
+  }
+  return {
+    sections,
+    ...(board ? { allegroVersion: board.version } : {}),
+    ...(typeof info === "string" ? { note: `Binary sections not read: ${info}` } : {}),
+  };
+};
+
+const queryCadence = async (
+  filePath: string,
+  section?: string
+): Promise<ConstraintsOverviewResult | ConstraintsSectionResult | ErrorResult> => {
+  const loaded = await loadCadenceSections(filePath);
+  if ("error" in loaded) return loaded;
+  const fileName = path.basename(filePath);
+  if (section) {
+    const s = loaded.sections.get(section);
+    if (!s) return { error: `Section '${section}' not found in file` };
+    return {
+      fileName,
+      section,
+      source: s.source,
+      ...(s.units ? { units: s.units } : {}),
+      objects: s.objects,
+    };
+  }
+  return {
+    fileName,
+    fileSizeBytes: (await stat(filePath)).size,
+    ...(loaded.allegroVersion ? { allegroVersion: loaded.allegroVersion } : {}),
+    ...(loaded.note ? { note: loaded.note } : {}),
+    sections: [...loaded.sections].map(([name, s]) => ({
+      name,
+      objectCount: s.objects.length,
+      source: s.source,
+      ...(s.units ? { units: s.units } : {}),
+    })),
+  };
+};
+
+// =============================================================================
 // Main entry point
 // =============================================================================
 
@@ -314,8 +408,9 @@ export const queryConstraints = async (
   section?: string
 ): Promise<ConstraintsOverviewResult | ConstraintsSectionResult | ErrorResult> => {
   const resolvedPath = path.resolve(filePath);
-  const validationError = await validateTcfxFile(resolvedPath);
+  const validationError = await validateConstraintFile(resolvedPath);
   if (validationError) return validationError;
+  if (!resolvedPath.toLowerCase().endsWith(".tcfx")) return queryCadence(resolvedPath, section);
 
   if (section) {
     return querySection(resolvedPath, section);
@@ -332,9 +427,9 @@ export const register = (server: McpServer): void => {
     "get_constraints",
     {
       description:
-        "Query layout constraints from a Cadence .tcfx file. Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, and members. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, Design (stackup), Region.",
+        "Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, BrdStackup, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.",
       inputSchema: {
-        file: z.string().describe("Path to .tcfx constraint file"),
+        file: z.string().describe("Path to a .tcfx, .dcf or .brd file"),
         section: z
           .string()
           .optional()

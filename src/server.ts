@@ -30,7 +30,7 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 ## Workflow Guidance
 
 1. If starting from a Cadence Allegro .brd file, use \`export_cadence_ipc2581\` to generate the IPC-2581 XML first (Windows only)
-2. To access design constraints (trace width rules, spacing rules, net classes, stackup), use \`export_cadence_constraints\` to generate a .tcfx file, then \`get_constraints\` to read it
+2. To access design constraints (trace width rules, spacing rules, net classes, stackup), call \`get_constraints\` on the .brd or .dcf file directly; \`export_cadence_constraints\` (Windows) produces a .tcfx file it also reads
 3. Use \`get_pcb_metadata\` first to understand the design structure, layer stackup, and size
 4. Use \`get_pcb_component\` to look up a single component by exact refdes
 5. Use \`get_pcb_net\` to trace a net's routing, trace widths, vias, and connected pins
