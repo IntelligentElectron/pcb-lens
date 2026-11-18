@@ -11,6 +11,8 @@ Each section marks its confidence level:
 - **HEURISTIC**: works on the boards read; the reasoning is inferred
 - **UNKNOWN**: bytes skipped
 
+Public boards in the [test-fixtures](https://github.com/IntelligentElectron/test-fixtures) repo (`cadence/`) exercise the reader: one 17.2 board and five 17.4 boards read; the 16.x boards there are outside the binary coverage below.
+
 Coverage: Allegro 17.x files (magic `0x0014xxxx`). Files written by 17.2 (`0x00140400`), by a 17.2 build with magic `0x00140500`, and by 17.4 (`0x00140902`) were decoded. 16.x and 18.x files differ in header and block layouts; for them only the embedded archives are read.
 
 ## Table of Contents

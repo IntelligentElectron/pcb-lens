@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFile, mkdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { queryConstraints } from "./get-constraints.js";
@@ -457,5 +458,42 @@ describe("queryConstraints on Allegro .brd", () => {
     ];
     expect((await section("BrdNetClass"))[0]).toMatchObject({ name: "CLS_A", members });
     expect((await section("BrdDiffPair"))[0]).toMatchObject({ name: "DP_A", members });
+  });
+});
+
+// Public Allegro 17.4 board from the test-fixtures repo (Apache-2.0); skipped when absent
+const PUBLIC_BRD = path.resolve(
+  import.meta.dirname,
+  "../../test/fixtures/cadence/OSHW-Jetson-Series/reComputer Jetson carrier board/reComputer J401/Layout/reComputer J401_V1.0.brd"
+);
+
+describe.skipIf(!existsSync(PUBLIC_BRD))("queryConstraints on a public Allegro 17.4 board", () => {
+  it("reads binary and embedded sections", async () => {
+    const result = (await queryConstraints(PUBLIC_BRD)) as ConstraintsOverviewResult;
+    expect(result.allegroVersion).toBe("17.4");
+    const byName = Object.fromEntries(result.sections.map((s) => [s.name, s]));
+    expect(byName.BrdPhysicalCSet).toMatchObject({ objectCount: 4, units: "mm" });
+    expect(byName.PhysicalCSet).toMatchObject({ objectCount: 4, units: "mils" });
+    expect(byName.BrdDiffPair.objectCount).toBe(101);
+  });
+
+  it("decodes physical sets per layer, matching the embedded XML", async () => {
+    const binary = (
+      (await queryConstraints(PUBLIC_BRD, "BrdPhysicalCSet")) as ConstraintsSectionResult
+    ).objects;
+    const xml = ((await queryConstraints(PUBLIC_BRD, "PhysicalCSet")) as ConstraintsSectionResult)
+      .objects;
+    expect(binary.map((o) => o.name).sort()).toEqual(xml.map((o) => o.name).sort());
+    const set85 = binary.find((o) => o.name === "85")!;
+    expect(set85.attributes.MIN_LINE_WIDTH.value).toBe("0.1041:0.1041:0.0787:0.0787:0.1041:0.1041");
+    expect(set85.attributes.DIFFP_PRIMARY_GAP.value).toBe(
+      "0.1016:0.1016:0.1067:0.1067:0.1016:0.1016"
+    );
+    // DEFAULT is 5 mil in the XML: width and min blind-via stagger
+    const def = binary.find((o) => o.name === "DEFAULT")!;
+    const defXml = xml.find((o) => o.name === "DEFAULT")!;
+    expect(defXml.attributes.MIN_LINE_WIDTH.value).toBe("5.00");
+    expect(def.attributes.MIN_LINE_WIDTH.value).toBe("0.1270");
+    expect(def.attributes.MIN_BVIA_STAGGER.value).toBe("0.1270");
   });
 });

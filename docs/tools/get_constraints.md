@@ -206,31 +206,32 @@ Response:
 }
 ```
 
-**Allegro board, binary physical constraint set:**
+**Allegro board, binary physical constraint set** (a public board from the test-fixtures repo, first set shown):
 
 Call:
 ```json
 {
   "tool": "get_constraints",
-  "arguments": { "file": "/designs/board.brd", "section": "BrdPhysicalCSet" }
+  "arguments": { "file": "/designs/reComputer J401_V1.0.brd", "section": "BrdPhysicalCSet" }
 }
 ```
 
 Response:
 ```json
 {
-  "fileName": "board.brd",
+  "fileName": "reComputer J401_V1.0.brd",
   "section": "BrdPhysicalCSet",
   "source": "binary",
   "units": "mm",
   "objects": [
     {
-      "name": "DIFF_90",
+      "name": "85",
       "attributes": {
-        "MIN_LINE_WIDTH": { "value": "0.0750:0.0500:0.0500:0.0500:0.0500:0.0750" },
-        "DIFFP_PRIMARY_GAP": { "value": "0.0750:0.0600:0.0600:0.0600:0.0600:0.0750" },
-        "MAX_LINE_WIDTH": { "value": "0.0000" },
-        "VIA_LIST": { "value": "VIA_T_L2:VIA_L2_L3:VIA_L5_B" }
+        "MIN_LINE_WIDTH": { "value": "0.1041:0.1041:0.0787:0.0787:0.1041:0.1041" },
+        "DIFFP_PRIMARY_GAP": { "value": "0.1016:0.1016:0.1067:0.1067:0.1016:0.1016" },
+        "MIN_BVIA_STAGGER": { "value": "0.1270" },
+        "ALLOW_ON_ETCH_SUBCLASS": { "value": "TRUE" },
+        "VIA_LIST": { "value": "VIA16D8" }
       },
       "references": [],
       "members": []
