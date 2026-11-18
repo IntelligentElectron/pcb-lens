@@ -675,7 +675,9 @@ export const tool = defineTool({
   description:
     "Look up nets in a PCB layout by name and inspect their connectivity and routing. Provide a net-name pattern (a regular expression); for each matching net you get the connected component pins (grouped by component), the layers the net uses, a per-layer routing summary (trace widths, number of routed segments, and total routed length), and a via summary (count per drill size). All distances are in microns. Copper that is filled as a pour or plane instead of drawn as a trace is reported as routed on its layer but without a width or length, so a net can be fully routed yet show no trace width. A net that returns pins but no routing was most likely exported without its routed-copper data. Use a specific pattern: one that matches every net in the design is rejected. Set detail='full' to additionally return exact geometry — every via coordinate and the full point-by-point shape of each routed trace (including arcs for curved traces); for very large nets this geometry is sampled and the response is marked truncated.",
   inputSchema: {
-    file: z.string().describe("Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file"),
+    file: z
+      .string()
+      .describe("Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file"),
     pattern: z
       .string()
       .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),

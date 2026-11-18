@@ -16,7 +16,7 @@ If a pattern matches all nets in a design (for example `.`, `.*`, or `.+`), the 
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x or 17.x `.brd` file |
+| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x `.brd` file |
 | `pattern` | string | Yes | - | Regex pattern for net name (e.g., `^DDR_D0$`, `CLK`, `^VCC_3V3$`) |
 | `detail` | `"summary"` \| `"full"` | No | `"summary"` | `summary` returns via counts only; `full` adds raw per-via x/y coordinates (capped) |
 

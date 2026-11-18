@@ -148,17 +148,49 @@ describe.skipIf(!existsSync(J201))("arcs", () => {
   });
 });
 
-describe("loadBrdLayout errors", () => {
-  it("names a missing file and an unsupported version", async () => {
-    expect(await loadBrdLayout("/no/such/board.brd")).toMatch(/not found/);
-    const dir = await mkdtemp(path.join(tmpdir(), "brd-"));
-    const file = path.join(dir, "v18.brd");
+const CC13 = BOARDS[2][0];
+describe.skipIf(!existsSync(CC13))("parts on a 16.x board", () => {
+  // 16.x instances reach their part through the part's other instances
+  it("reads the device type and value of every part", async () => {
+    const brd = await loadBrdLayout(CC13);
+    if (typeof brd === "string") throw new Error(brd);
+    expect(brd.layout.components.every((c) => c.deviceType)).toBe(true);
+    const c5 = brd.layout.components.find((c) => c.refdes === "C5")!;
+    expect(c5).toMatchObject({ value: "22uF" });
+    expect(c5.deviceType).toMatch(/^CAPACITOR_CAPC1608X100A2L_22UF/);
+  });
+});
+
+describe("loadBrdLayout headers", () => {
+  const dir = mkdtemp(path.join(tmpdir(), "brd-"));
+  const board = async (name: string, fill: (b: Buffer) => void) => {
+    const file = path.join(await dir, name);
     const buf = Buffer.alloc(0x1400);
-    buf.writeUInt32LE(0x00150000, 0);
+    fill(buf);
     await writeFile(file, buf);
-    expect(await loadBrdLayout(file)).toMatch(
-      /18\.x binary layout is not decoded \(16\.x, 17\.x only\)/
-    );
+    return file;
+  };
+
+  it("names a missing file and an unknown format", async () => {
+    expect(await loadBrdLayout("/no/such/board.brd")).toMatch(/not found/);
+    const file = await board("v19.brd", (b) => b.writeUInt32LE(0x00160000, 0));
+    expect(await loadBrdLayout(file)).toMatch(/Unrecognised Allegro magic/);
     expect(await queryNet(file, "X")).toHaveProperty("error");
+  });
+
+  it("reads an 18.x header: units at 0x18C, string count at 0x34, lists from 0x60", async () => {
+    const file = await board("v18.brd", (b) => {
+      b.writeUInt32LE(0x00150000, 0);
+      b.writeUInt32LE(1, 0x34);
+      b.writeUInt8(3, 0x18c);
+      b.writeUInt32LE(10000, 0x26c);
+      b.writeUInt32LE(0x7d, 0x1200);
+      b.write("TOP\0", 0x1204, "latin1");
+    });
+    const brd = await loadBrdLayout(file);
+    if (typeof brd === "string") throw new Error(brd);
+    expect(brd.info).toMatchObject({ version: "18.0", units: "mm", listBase: 0x60 });
+    expect(brd.info.strings.get(0x7d)).toBe("TOP");
+    expect(brd.layout.components).toEqual([]);
   });
 });

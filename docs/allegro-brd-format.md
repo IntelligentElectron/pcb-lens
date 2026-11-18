@@ -505,7 +505,7 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 
 | Gap | Effect |
 |-----|--------|
-| 16.x and 18.x binary constraint layouts | Only embedded archives are read |
+| 16.x and 18.x binary constraint layouts | Only embedded archives are read (layout geometry is read, section 10) |
 | Spacing constraint sets in the binary | Not located; read from the archives (every board read has them in one of its archives) |
 | Layer names in `BrdStackup` | Not decoded; conductors are listed top to bottom |
 | Pin pairs, match groups of pin pairs | Not decoded |
@@ -516,15 +516,15 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 
 ## 10. Layout Geometry
 
-**Confidence: VERIFIED** against KiCad 10's Allegro importer, run as a separate program on all ten public boards (one 16.4, three 16.6, one 17.2, five 17.4): every named component's position, side and rotation, every pad's position, size and net, every track segment and every via (position, drill, net) agreed. On BeagleBone Black RevC the components and the TOP and BOTTOM routing of the nets checked also agree with the board's IPC-2581 export.
+**Confidence: VERIFIED** against KiCad 10's Allegro importer, run as a separate program, on the ten public boards (one 16.4, three 16.6, one 17.2, five 17.4) and on 61 more boards from a local corpus (five 16.4, seven 16.5, thirty 16.6, twelve 17.2, six 17.4, one 18.0). On every board, every named component's position and side, every pad's position, size and net, every track segment, every arc (centre and direction) and every via (position, drill, net) agree, apart from KiCad's own departures: it names nets and parts it cannot resolve (`Net_<n>`, `UNK…`), lists mounting-hole pads under other pin names, and drops the routing of one net on the 18.0 board. On BeagleBone Black RevC the components, their values and device types, and the TOP and BOTTOM routing of the nets checked also agree with the board's IPC-2581 export.
 
-The reader in `src/tools/lib/allegro-layout.ts` reads 16.x and 17.x boards. It uses the header, string table and lists of sections 4 and 5, with three additions:
+The reader in `src/tools/lib/allegro-layout.ts` reads 16.x, 17.x and 18.x boards. It uses the header, string table and lists of sections 4 and 5, with these additions:
 
-- 16.x files keep the string count at 0x194 too, so the string table walk of section 4 bounds both families.
-- Byte 1 of word 0 is 0 on almost every block; some 16.x segments, shapes, placed pads and vias carry 2 there. Candidates are indexed with byte 1 equal to 0, or 2 for those types.
-- A placed pad, track, shape and via must also carry the layer class of its type in byte 2 (PIN 0x0C, ETCH 0x06, ETCH 0x06, VIA_CLASS 0x12). This rejects data words that mimic a header.
+- 16.x files keep the string count at 0x194 too. 18.x files keep it at 0x34, the units byte at 0x18C (the divisor stays at 0x26C) and the list descriptors from 0x60; the string table still starts at 0x1200.
+- Byte 1 of word 0 is 0 on most blocks and 2 on some (nets, segments, shapes, pads, vias seen). Candidates are indexed with byte 1 equal to 0 or 2, and a lookup tries the byte-1-clear candidates first, in file order.
+- Net assignments, placed pads, tracks, copper rectangles, shapes and vias must also carry the layer class of their type in byte 2 (0x00, PIN 0x0C, ETCH 0x06, ETCH 0x06, ETCH 0x06, VIA_CLASS 0x12). This rejects data words that mimic a header.
 
-Coordinates are signed internal units (section 4) with Y up; rotations are millidegrees counterclockwise.
+Coordinates are signed internal units (section 4) with Y up; rotations are millidegrees counterclockwise. 18.x blocks are read with the 17.4 layouts; only the padstack header grows (see Padstacks).
 
 ### Copper layers
 
@@ -553,10 +553,11 @@ Flag bit 0x8000 is set on routable layers; layers without it are the planes (the
 | | 8, 9 | 7, 8 | x, y |
 | | 12 | 10 | first 0x32 placed pad |
 | 0x07 instance data | 7 | 5 | refdes (string id) |
-| | 3 | 2 | 0x06 part |
+| | 2 | 2 | next instance of the same part; the chain ends at the 0x06 part |
 | 0x06 part | 3 | 3 | device type (string id) |
+| | 8 | 8 | first 0x03 field; fields chain through word 2 back to the part |
 
-On 17.x boards the part's value is the 0x03 string field (subtype 0x68) of code 2 that it owns; device type and value matched the IPC-2581 BOM on all 413 parts of BeagleBone Black RevC. 16.x boards keep the value only as displayed text, which is not read. The component's rotation is reported as stored for a top-side part and as `360 - rotation` for a bottom-side one, matching the IPC-2581 export.
+A field is `[0x03 | code << 16][key][next]`, then in 17.x and 18.x two more words, then `[subtype | length << 16]` and the value; subtype 0x68 is a string. The part's value is its field of code 2. A part without one has no value; KiCad then shows the value text printed on the board instead. The component's rotation is reported as stored for a top-side part and as `360 - rotation` for a bottom-side one, matching the IPC-2581 export.
 
 ### Pads
 
@@ -573,11 +574,11 @@ A pad's board position is the footprint position plus its local offset rotated b
 
 ### Padstacks (0x1C)
 
-| | 17.x | 16.5, 16.6 | 16.4 |
+| | 17.x, 18.x | 16.5, 16.6 | 16.4 |
 |---|------|------------|------|
 | Copper layer count | word 11 | upper half of word 12 | upper half of word 12 |
 | Drill | word 16 | word 4 | word 4 |
-| Header words | 48 | 21 | 20 |
+| Header words | 48 (56 in 18.x) | 21 | 20 |
 | Fixed components | 21 | 11 | 10 |
 | Components per copper layer | 4 | 3 | 3 |
 | Words per component | 9 | 7 | 7 |
@@ -593,7 +594,7 @@ Each 0x1B net (list 5) points to its first 0x04 assignment (word 7 in 17.x, word
 0x04   word 1 key, word 2 next assignment (the net itself after the last), word 3 net, word 4 first item
 ```
 
-From word 4, the island's items chain through their word 2 back to the assignment's key. Items are 0x32 placed pads, 0x05 tracks, 0x33 vias, 0x28 shapes and 0x2E connections. A pad's net is the net whose chain holds its key.
+From word 4, the island's items chain through their word 2 back to the assignment's key, and each item's word 3 is that key, which picks the right block when a key has several candidates. Items are 0x32 placed pads, 0x05 tracks, 0x33 vias, 0x28 shapes, 0x0E copper rectangles and 0x2E connections. A pad's net is the net whose chain holds its key; shapes and rectangles are counted per copper layer.
 
 ### Tracks, segments and vias
 
@@ -611,12 +612,10 @@ From word 4, the island's items chain through their word 2 back to the assignmen
 | | 11 | 9 | 0x1C padstack, for the drill and span |
 | 0x28 shape | 0 | 0 | byte 3: copper layer index |
 
-No 16.x fixture has an arc, so the 16.x arc words follow the line layout and are not verified. Shapes are counted per layer; their outlines are not read.
+Arc centres and directions were checked on 16.5, 17.4 and 18.0 boards. Shapes are counted per layer; their outlines are not read.
 
 ### Not read
 
 - Board outline, keepouts, text and silkscreen
 - Shape outlines, thermal spokes and custom pad outlines (reported by their bounding box)
 - Components without a refdes (fiducials and other mechanical symbols)
-- Component values on 16.x boards
-- 18.x boards

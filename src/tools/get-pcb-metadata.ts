@@ -138,7 +138,9 @@ export const tool = defineTool({
   description:
     "Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.",
   inputSchema: {
-    file: z.string().describe("Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file"),
+    file: z
+      .string()
+      .describe("Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file"),
   },
   run: ({ file }) => getDesignOverview(file),
 });

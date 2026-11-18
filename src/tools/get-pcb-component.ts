@@ -377,7 +377,9 @@ export const tool = defineTool({
   description:
     "Look up a single component by its exact reference designator (refdes). Returns its placement (position, rotation, layer), package and BOM details, the nets connected to each pin, and a summary of its pads (count and the distinct pad shapes). The refdes must match exactly; it is not a pattern. Set detail='full' to additionally get the exact coordinate of every pad (sampled for components with very many pads).",
   inputSchema: {
-    file: z.string().describe("Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file"),
+    file: z
+      .string()
+      .describe("Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file"),
     refdes: z.string().describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
     detail: z
       .enum(["summary", "full"])

@@ -1,5 +1,5 @@
 /**
- * Layout geometry from the binary object database of an Allegro 16.x or 17.x `.brd` file: copper
+ * Layout geometry from the binary object database of an Allegro 16.x, 17.x or 18.x `.brd` file: copper
  * layers, placed components with their pads, and every net's pads, tracks, vias and shapes.
  * Block layouts and how each field was confirmed are in docs/allegro-brd-format.md
  * (section 10). Lengths are returned in microns, rounded.
@@ -62,17 +62,19 @@ export interface BrdLayout {
   nets: BrdNet[];
 }
 
-// Layer class (byte 2 of word 0) each net item must carry; data words that happen to look like a
-// block header are rejected by it
-const ITEM_CLASS: Record<number, number[]> = {
+// Layer class (byte 2 of word 0) a block of these types must carry; data words that happen to look
+// like a block header are rejected by it
+const BLOCK_CLASS: Record<number, number[]> = {
+  0x04: [0x00], // net assignment
   0x05: [0x06], // track, ETCH
+  0x0e: [0x06], // copper rectangle, ETCH
   0x28: [0x06], // shape, ETCH
   0x32: [0x0c], // placed pad, PIN
   0x33: [0x12], // via, VIA_CLASS
   0x2e: [0x00, 0x06], // connection
 };
+const NET_ITEMS = new Set([0x05, 0x0e, 0x28, 0x32, 0x33, 0x2e]);
 const SEGMENT_TYPES = new Set([0x01, 0x15, 0x16, 0x17]);
-const FLAGGED = new Set([0x01, 0x15, 0x16, 0x17, 0x28, 0x32, 0x33]);
 const PAD_SHAPES: Record<number, BrdPad["shape"]> = {
   0x02: "circle",
   0x05: "rect",
@@ -91,7 +93,6 @@ const V17 = {
   instRot: 7,
   instPad: 12,
   refdes: 7, // 0x07
-  part: 3,
   padNext: 6, // 0x32
   padDef: 9, // 0x0D: x at 4, y at 5, padstack at 6
   trackSeg: 14, // 0x05
@@ -106,7 +107,6 @@ const V16: typeof V17 = {
   instRot: 6,
   instPad: 10,
   refdes: 5,
-  part: 2,
   padNext: 5,
   padDef: 8,
   trackSeg: 12,
@@ -126,24 +126,29 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   const type = (i: number) => w[i] & 0xff;
   const cls = (i: number) => (w[i] >>> 16) & 0xff;
   const v16 = info.version.startsWith("16");
+  const v18 = info.version.startsWith("18");
   const O = v16 ? V16 : V17;
   const pre165 = v16 && Number(info.version) < 16.5;
   // 17.4 inserts a word in some blocks
   const v174 = Number(info.version) >= 17.4;
 
-  // Candidate block starts by key: word 0 a type byte, byte 1 clear, word 1 the key. Keys are
+  // Candidate block starts by key: word 0 a type byte, byte 1 0 or 2, word 1 the key. Keys are
   // unique, but a data word can mimic a header, so every lookup below names the type it expects.
   const byKey = new Map<number, number[]>();
   for (let i = info.bodyWord; i < n - 2; i++) {
     const t = w[i] & 0xff;
-    const b1 = (w[i] >>> 8) & 0xff; // 0, or 2 on some 16.x segments, shapes, pads and vias
-    if (t === 0 || t > 0x3c || !w[i + 1] || (b1 && !(b1 === 2 && FLAGGED.has(t)))) continue;
+    const b1 = (w[i] >>> 8) & 0xff; // 0, or 2 on some blocks
+    if (t === 0 || t > 0x3c || !w[i + 1] || (b1 !== 0 && b1 !== 2)) continue;
     const list = byKey.get(w[i + 1]);
     if (list) list.push(i);
     else byKey.set(w[i + 1], [i]);
   }
+  // a clear byte 1 is the likelier header, so lookups try those first, in file order
+  const flagged = (i: number) => (w[i] >>> 8) & 0xff;
+  for (const list of byKey.values())
+    if (list.length > 1) list.sort((a, b) => flagged(a) - flagged(b));
   const valid = (i: number, t: number) =>
-    type(i) === t && (!ITEM_CLASS[t] || ITEM_CLASS[t].includes(cls(i)));
+    type(i) === t && (!BLOCK_CLASS[t] || BLOCK_CLASS[t].includes(cls(i)));
   const find = (key: number, t: number) => byKey.get(key)?.find((i) => valid(i, t));
 
   // Follow a chain of `t` blocks through the next word `nextAt` until `end`
@@ -160,9 +165,14 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     }
     return out;
   };
-  // Header list descriptors from 0x3C: [tail][head], the list ends at its tail
+  // Header list descriptors (from 0x3C, 0x60 in 18.x): [tail][head], a list ends at its tail
   const list = (index: number, t: number, nextAt = 2) =>
-    chain(w[(0x3c >>> 2) + 2 * index + 1], w[(0x3c >>> 2) + 2 * index], t, nextAt);
+    chain(
+      w[(info.listBase >>> 2) + 2 * index + 1],
+      w[(info.listBase >>> 2) + 2 * index],
+      t,
+      nextAt
+    );
 
   // Copper layers: the header layer map holds a 0x2A layer list key per class at 0x42C + 8 *
   // class; ETCH is class 6. A list is [0x2A | count << 16], one more word in 17.4, then count
@@ -206,9 +216,11 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
       let k = w[a + 4];
       while (k && k !== w[a + 1] && !seen.has(k)) {
         seen.add(k);
-        const cands = byKey.get(k)?.filter((i) => ITEM_CLASS[type(i)]?.includes(cls(i)));
-        // prefer the candidate whose own next key leads somewhere
-        const i = cands?.find((c) => w[c + 2] === w[a + 1] || byKey.has(w[c + 2])) ?? cands?.[0];
+        const cands = byKey.get(k)?.filter((i) => NET_ITEMS.has(type(i)) && valid(i, type(i)));
+        // an item's word 3 is its island's assignment; fall back to one whose next key exists
+        const i =
+          cands?.find((c) => w[c + 3] === w[a + 1]) ??
+          cands?.find((c) => w[c + 2] === w[a + 1] || byKey.has(w[c + 2]));
         if (i === undefined) break;
         items.push(i);
         netOf.set(k, name);
@@ -229,7 +241,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     ? pre165
       ? [20, 10, 3, 7]
       : [21, 11, 3, 7]
-    : [48, 21, 4, 9];
+    : [v18 ? 56 : 48, 21, 4, 9];
   const shapeAt = v16 ? 1 : 0;
   const padstack = (key: number) => {
     const p = find(key, 0x1c);
@@ -248,18 +260,30 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     };
   };
 
-  // 0x03 field value owned by `owner`, for the string-valued (0x68) fields read here
-  const fieldsByOwner = new Map<number, number[]>();
-  for (let i = info.bodyWord; i < n - 8; i++) {
-    if ((w[i] & 0xffff) !== 3 || (w[i + 4] & 0xff) !== 0x68) continue;
-    const owner = w[i + 3];
-    (fieldsByOwner.get(owner) ?? fieldsByOwner.set(owner, []).get(owner)!).push(i);
-  }
-  const textField = (owner: number, code: number) => {
-    const i = fieldsByOwner.get(owner)?.find((f) => w[f] >>> 16 === code);
-    if (i === undefined) return undefined;
-    const start = (i + 6) * 4;
-    const len = w[i + 4] >>> 16;
+  // An instance's (0x07) word 2 leads to its 0x06 part, through the part's other instances
+  const partOf = (inst: number) => {
+    const seen = new Set<number>();
+    let k = w[inst + 2];
+    while (k && !seen.has(k)) {
+      seen.add(k);
+      const part = find(k, 0x06);
+      if (part !== undefined) return part;
+      const next = find(k, 0x07);
+      if (next === undefined) return undefined;
+      k = w[next + 2];
+    }
+    return undefined;
+  };
+  // A part's word 8 heads its 0x03 fields: [03 | code << 16][key][next, the part after the last],
+  // in 17.x then [owner][?], then [subtype | length << 16][value]; subtype 0x68 is a string
+  const lengthAt = v16 ? 3 : 4;
+  const textField = (part: number, code: number) => {
+    const f = chain(w[part + 8], w[part + 1], 0x03).find(
+      (i) => w[i] >>> 16 === code && (w[i + lengthAt] & 0xff) === 0x68
+    );
+    if (f === undefined) return undefined;
+    const start = (f + lengthAt + (v16 ? 1 : 2)) * 4;
+    const len = w[f + lengthAt] >>> 16;
     const end = buf.indexOf(0, start);
     return buf.toString("latin1", start, end >= 0 && end < start + len ? end : start + len);
   };
@@ -277,7 +301,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
       const inst = find(w[i + O.instPart], 0x07);
       const refdes = inst === undefined ? undefined : str(w[inst + O.refdes]);
       if (!refdes) continue; // unnamed mechanical symbols
-      const part = inst === undefined ? undefined : find(w[inst + O.part], 0x06);
+      const part = inst === undefined ? undefined : partOf(inst);
       const bottom = cls(i) === 1;
       const raw = w[i + O.instRot] / 1000;
       const rot = (raw * Math.PI) / 180;
@@ -313,7 +337,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
         refdes,
         packageRef,
         deviceType: part === undefined ? undefined : str(w[part + 3]),
-        value: part === undefined ? undefined : textField(w[part + 1], VALUE_FIELD),
+        value: part === undefined ? undefined : textField(part, VALUE_FIELD),
         x: um(X),
         y: um(Y),
         rotation: bottom ? (360 - raw) % 360 : raw,
@@ -338,7 +362,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     for (const i of netItems[ni]) {
       const t = type(i);
       const layer = layerName(w[i] >>> 24);
-      if (t === 0x28) net.shapeLayers.push(layer);
+      if (t === 0x28 || t === 0x0e) net.shapeLayers.push(layer);
       else if (t === 0x33) {
         // via: x, y, then its padstack
         const ps = padstack(w[i + O.viaPadstack]);
@@ -401,7 +425,7 @@ export const loadBrdLayout = async (
   const key = `${path.resolve(filePath)}:${s.size}:${s.mtimeMs}`;
   if (cached?.key === key) return cached.result;
   const buf = await readFile(filePath);
-  const info = readBrdInfo(buf, ["16", "17"]);
+  const info = readBrdInfo(buf, ["16", "17", "18"]);
   if (typeof info === "string") return info;
   cached = { key, result: { info, layout: readBrdLayout(buf, info) } };
   return cached.result;

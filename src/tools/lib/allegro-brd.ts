@@ -16,6 +16,7 @@ export interface BrdInfo {
   mmPerUnit: number; // mm per internal unit
   strings: Map<number, string>;
   bodyWord: number; // word index of the first object block
+  listBase: number; // byte offset of the header list descriptors
 }
 
 const UNITS: Record<number, [string, number]> = {
@@ -37,6 +38,7 @@ const RELEASES: Record<number, string> = {
   0x1404: "17.2",
   0x1409: "17.4",
   0x1415: "17.5",
+  0x1500: "18.0",
 };
 
 /** Header and string table, or an error string; `majors` are the releases whose layout is read. */
@@ -49,12 +51,14 @@ export const readBrdInfo = (buf: Buffer, majors = ["17"]): BrdInfo | string => {
   if (!majors.includes(major))
     return `Allegro ${version} binary layout is not decoded (${majors.map((m) => `${m}.x`).join(", ")} only)`;
 
-  const unitCode = buf.readUInt8(0x180);
+  // 18.x moves the list descriptors, units and string count; the divisor stays
+  const v18 = major === "18";
+  const unitCode = buf.readUInt8(v18 ? 0x18c : 0x180);
   if (!UNITS[unitCode]) return `Unknown Allegro board units code ${unitCode}`;
   const [units, mmPer] = UNITS[unitCode];
   const divisor = buf.readUInt32LE(0x26c); // internal units per board unit
   if (!divisor) return "Allegro board header has a zero units divisor";
-  const count = buf.readUInt32LE(0x194);
+  const count = buf.readUInt32LE(v18 ? 0x34 : 0x194);
   const strings = new Map<number, string>();
   let p = 0x1200;
   for (let i = 0; i < count && p + 4 < buf.length; i++) {
@@ -64,7 +68,14 @@ export const readBrdInfo = (buf: Buffer, majors = ["17"]): BrdInfo | string => {
     strings.set(id, buf.toString("latin1", p + 4, end));
     p += 4 + ((end - p - 4 + 1 + 3) & ~3); // NUL-terminated, padded to 4 bytes
   }
-  return { version, units, mmPerUnit: mmPer / divisor, strings, bodyWord: p >>> 2 };
+  return {
+    version,
+    units,
+    mmPerUnit: mmPer / divisor,
+    strings,
+    bodyWord: p >>> 2,
+    listBase: v18 ? 0x60 : 0x3c,
+  };
 };
 
 // 0x03 field codes, verified by matching values and field order against Constraint Manager XML
