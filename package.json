@@ -27,6 +27,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "gen:skill": "tsx scripts/gen-skill.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
@@ -42,7 +43,7 @@
     "compile:linux-x64": "bun build --compile --minify --target=bun-linux-x64 --define BUILD_VERSION=\"\\\"$(node -p 'require(\"./package.json\").version')\\\"\" src/index.ts --outfile bin/pcb-lens-linux-x64",
     "compile:windows-x64": "bun build --compile --minify --target=bun-windows-x64 --define BUILD_VERSION=\"\\\"$(node -p 'require(\"./package.json\").version')\\\"\" src/index.ts --outfile bin/pcb-lens-windows-x64.exe",
     "compile:darwin-universal": "npm run compile:darwin-arm64 && npm run compile:darwin-x64 && lipo -create bin/pcb-lens-darwin-arm64 bin/pcb-lens-darwin-x64 -output bin/pcb-lens-darwin-universal",
-    "compile:all": "npm run compile:darwin-arm64 && npm run compile:darwin-x64 && npm run compile:linux-arm64 && npm run compile:linux-x64 && npm run compile:windows-x64 && lipo -create bin/pcb-lens-darwin-arm64 bin/pcb-lens-darwin-x64 -output bin/pcb-lens-darwin-universal",
+    "compile:all": "npm run compile:darwin-arm64 && npm run compile:darwin-x64 && npm run compile:linux-arm64 && npm run compile:linux-x64 && npm run compile:windows-x64",
     "prepublishOnly": "npm run type-check && npm run lint && npm test && npm run build"
   },
   "keywords": [

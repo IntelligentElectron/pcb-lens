@@ -9,13 +9,9 @@ import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { VERSION } from "./cli/version.js";
-import { initTelemetry, initOtel } from "./telemetry/index.js";
-import { register as registerGetPcbMetadata } from "./tools/get-pcb-metadata.js";
-import { register as registerGetPcbComponent } from "./tools/get-pcb-component.js";
-import { register as registerGetPcbNet } from "./tools/get-pcb-net.js";
-import { register as registerExportCadenceIpc2581 } from "./tools/export-cadence-ipc2581.js";
-import { register as registerExportCadenceConstraints } from "./tools/export-cadence-constraints.js";
-import { register as registerGetConstraints } from "./tools/get-constraints.js";
+import { initTelemetry, initOtel, withTelemetry } from "./telemetry/index.js";
+import { TOOLS } from "./tools/index.js";
+import { formatResult } from "./tools/shared.js";
 
 // =============================================================================
 // Server Instructions
@@ -72,12 +68,15 @@ export const createServer = (): McpServer => {
     }
   );
 
-  registerGetPcbMetadata(server);
-  registerGetPcbComponent(server);
-  registerGetPcbNet(server);
-  registerExportCadenceIpc2581(server);
-  registerExportCadenceConstraints(server);
-  registerGetConstraints(server);
+  for (const tool of TOOLS) {
+    server.registerTool(
+      tool.name,
+      { title: tool.title, description: tool.description, inputSchema: tool.inputSchema },
+      withTelemetry(tool.name, async (args: Record<string, unknown>) =>
+        formatResult(await tool.run(args))
+      )
+    );
+  }
   // TODO: register render-net once PNG output via resvg-wasm is stable in compiled binaries
 
   return server;

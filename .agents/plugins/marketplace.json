@@ -1,0 +1,20 @@
+{
+  "name": "pcb-lens",
+  "interface": {
+    "displayName": "PCB Lens"
+  },
+  "plugins": [
+    {
+      "name": "pcb-lens",
+      "source": {
+        "source": "local",
+        "path": "./plugins/pcb-lens"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

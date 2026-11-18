@@ -14,7 +14,6 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $Repo = "IntelligentElectron/pcb-lens"
 $BinaryName = "pcb-lens"
-$McpbName = "pcb-lens.mcpb"
 $DefaultInstallDir = Join-Path $env:LOCALAPPDATA "pcb-lens"
 
 # Logging functions
@@ -119,7 +118,7 @@ function Install-PcbLensMcp {
 
     Write-Host ""
     Write-Host "=====================================================" -ForegroundColor Cyan
-    Write-Host "         PCB Lens MCP Server Installer" -ForegroundColor Cyan
+    Write-Host "    PCB Lens MCP Server Installer" -ForegroundColor Cyan
     Write-Host "=====================================================" -ForegroundColor Cyan
     Write-Host ""
 
@@ -136,7 +135,6 @@ function Install-PcbLensMcp {
 
     # Construct URLs
     $downloadUrl = "https://github.com/$Repo/releases/download/$version/$platform"
-    $mcpbUrl = "https://github.com/$Repo/releases/download/$version/$McpbName"
     $checksumUrl = "https://github.com/$Repo/releases/download/$version/checksums.txt"
 
     # Create installation directory
@@ -200,26 +198,6 @@ function Install-PcbLensMcp {
     Move-Item $tempFile $binaryPath -Force
     Write-Success "Installed binary to $binaryPath"
 
-    # Download .mcpb package for Claude Desktop
-    $mcpbPath = Join-Path $installDir $McpbName
-    $mcpbDownloaded = $false
-
-    try {
-        $mcpbTemp = Join-Path $env:TEMP $McpbName
-        Invoke-WebRequest -Uri $mcpbUrl -OutFile $mcpbTemp -UseBasicParsing
-
-        if (Test-Path $mcpbPath) {
-            Remove-Item $mcpbPath -Force
-        }
-
-        Move-Item $mcpbTemp $mcpbPath -Force
-        Write-Success "Installed Claude Desktop extension to $mcpbPath"
-        $mcpbDownloaded = $true
-    }
-    catch {
-        Write-Warn "Could not download .mcpb package (Claude Desktop extension)"
-    }
-
     # Add to PATH
     Add-ToUserPath -BinDir $binDir
 
@@ -227,26 +205,20 @@ function Install-PcbLensMcp {
     Write-Host ""
     Write-Success "Installation complete!"
     Write-Host ""
-    Write-Host "Installed files:"
-    Write-Host "  Binary: $binaryPath"
-    if ($mcpbDownloaded) {
-        Write-Host "  Claude Desktop extension: $mcpbPath"
-    }
-    Write-Host ""
     Write-Host "To start using pcb-lens CLI, either:"
     Write-Host "  1. Open a new PowerShell window, or"
     Write-Host "  2. Run: `$env:Path = [System.Environment]::GetEnvironmentVariable('Path','User') + ';' + `$env:Path"
     Write-Host ""
     Write-Host "Then verify with:"
-    Write-Host "  pcb-lens --version"
+    Write-Host "  pcb-lens version"
     Write-Host ""
     Write-Host "To update, run:"
-    Write-Host "  pcb-lens --update"
+    Write-Host "  pcb-lens update"
     Write-Host ""
-    Write-Host "For Claude Desktop:"
-    Write-Host "  1. Open Claude Desktop -> Settings -> Extensions -> Advanced settings"
-    Write-Host "  2. Click 'Install Extension...' and select:"
-    Write-Host "     $mcpbPath"
+    Write-Host "To connect your agent, install the pcb-lens plugin. In Claude Code:"
+    Write-Host "  /plugin marketplace add IntelligentElectron/pcb-lens"
+    Write-Host "  /plugin install pcb-lens@pcb-lens"
+    Write-Host "Codex, Cursor and other agents: https://github.com/IntelligentElectron/pcb-lens#install"
     Write-Host ""
 }
 

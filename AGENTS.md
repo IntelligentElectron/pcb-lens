@@ -89,9 +89,10 @@ find src/ scripts/ test/ -type f -not -name '*.js' -not -name '*.map' | sort
 ### Adding a New Tool
 
 1. Add types in `src/tools/lib/types.ts`
-2. Create a new tool file in `src/tools/<tool-name>.ts` (imports from `./lib/` and `./shared.js` only)
-3. Register the tool via a `register(server)` export, called from `src/server.ts`
-4. Add tests in `src/tools/<tool-name>.test.ts`
+2. Create a new tool file in `src/tools/<tool-name>.ts` (imports from `./lib/`, `./shared.js` and `./registry.js` only) that exports `tool = defineTool({ name, title, description, inputSchema, run })`
+3. Add it to `TOOLS` in `src/tools/index.ts`: the MCP server registers it and the command line runs it as `pcb-lens <tool>`
+4. Run `npm run gen:skill` to regenerate the plugin's skill
+5. Add tests in `src/tools/<tool-name>.test.ts`
 
 ## Testing
 

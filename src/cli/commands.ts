@@ -1,5 +1,6 @@
 /**
- * CLI command handlers for --version, --help, --update, and --uninstall.
+ * CLI command handlers: --version, --help, --update, --uninstall, and every
+ * tool as a command (see query.ts).
  */
 
 import { existsSync, rmSync } from "node:fs";
@@ -10,6 +11,8 @@ import { checkForUpdate, performUpdate, isNpmInstall } from "./updater.js";
 import { getCurrentExecutablePath } from "./executable.js";
 import { confirm } from "./prompts.js";
 import { removeFromPath } from "./shell.js";
+import { runQuery, toolList } from "./query.js";
+import type { AnyToolDefinition } from "../tools/index.js";
 
 /**
  * Print version information.
@@ -26,20 +29,31 @@ export const printHelp = (): void => {
     `
 ${BINARY_NAME} v${VERSION}
 
-MCP server for IPC-2581 PCB layout analysis.
+Usage: ${BINARY_NAME} [options] [command]
 
-USAGE:
-  ${BINARY_NAME} [OPTIONS]
+MCP server for PCB layout review: IPC-2581 layouts, Allegro .brd boards and Cadence
+constraint files. An MCP client runs the binary with no command and speaks to it over
+stdio. Every MCP tool is also a command, for a shell or an agent without MCP:
 
-OPTIONS:
-  --version, -v    Print version and exit
-  --help, -h       Show this help message
-  --update         Check for and install updates
-  --uninstall          Remove binary and PATH entries
-  --export-telemetry   Export telemetry data as a zip file
-  --no-update          Disable auto-update check on startup
+  ${BINARY_NAME} <tool> [file] --flag value ...
+  ${BINARY_NAME} <tool> --help        that tool's description and flags
 
-MORE INFO:
+Tools:
+${toolList()}
+
+Options:
+  -v, --version        Output the version number
+  -h, --help           Display help for command
+
+Commands:
+  update|upgrade       Check for updates and install if available
+  uninstall            Remove the binary and its PATH entries
+  export-telemetry     Export telemetry data as a zip file
+
+A tool prints its result as JSON on stdout and exits 1 when the result has an error
+field, 2 on a usage error.
+
+More info:
   https://github.com/${GITHUB_REPO}
 `.trim()
   );
@@ -141,4 +155,30 @@ export const handleExportTelemetryCommand = async (): Promise<void> => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
+};
+
+/** Run a tool from the command line, printing its JSON result. */
+export const handleQueryCommand = async (
+  tool: AnyToolDefinition,
+  tokens: readonly string[]
+): Promise<void> => {
+  const outcome = await runQuery(tool, tokens, { isTTY: Boolean(process.stdout.isTTY) });
+  // A reader that has seen enough closes the pipe (`| head`); the rest of the
+  // output has nowhere to go, which is not a failure of the query.
+  process.stdout.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+  if (outcome.stdout !== undefined) process.stdout.write(`${outcome.stdout}\n`);
+  if (outcome.stderr !== undefined) process.stderr.write(`${outcome.stderr}\n`);
+  process.exitCode = outcome.exitCode;
+};
+
+/** A first word that is neither a command nor a tool: say what is, and exit 2. */
+export const handleUnknownCommand = (word: string): void => {
+  process.stderr.write(
+    `error: '${word}' is not a command or a tool.\n` +
+      `Tools (run '${BINARY_NAME} <tool> --help' for one's flags):\n${toolList()}\n` +
+      `Run '${BINARY_NAME} help' for the other commands.\n`
+  );
+  process.exitCode = 2;
 };

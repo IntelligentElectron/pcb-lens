@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "pcb-lens",
+  "description": "Query IPC-2581 PCB layouts and Cadence Allegro .brd constraints through the pcb-lens MCP server, which the plugin connects, with a skill for its command line where MCP is unavailable. Needs the pcb-lens binary on PATH.",
+  "owner": {
+    "name": "Valentino Zegna",
+    "url": "https://github.com/IntelligentElectron"
+  },
+  "plugins": [
+    {
+      "name": "pcb-lens",
+      "description": "Query IPC-2581 PCB layouts and Cadence Allegro .brd constraints through the pcb-lens MCP server, which the plugin connects, with a skill for its command line where MCP is unavailable. Needs the pcb-lens binary on PATH.",
+      "source": "./plugins/pcb-lens",
+      "category": "development"
+    }
+  ]
+}

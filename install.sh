@@ -15,7 +15,6 @@ set -euo pipefail
 # Configuration
 REPO="IntelligentElectron/pcb-lens"
 BINARY_NAME="pcb-lens"
-MCPB_NAME="pcb-lens.mcpb"
 
 # Determine default install directory based on OS
 get_default_install_dir() {
@@ -56,10 +55,14 @@ detect_platform() {
         *) die "Unsupported architecture: $(uname -m)" ;;
     esac
 
+    # A shell running under Rosetta reports x86_64 on an Apple Silicon Mac.
+    # hw.optional.arm64 reports the hardware, and an Intel Mac has no such key.
+    if [ "$os" = "darwin" ] && [ "$(sysctl -in hw.optional.arm64 2>/dev/null)" = "1" ]; then
+        arch="arm64"
+    fi
+
     # Return platform string
-    if [ "$os" = "darwin" ]; then
-        echo "${BINARY_NAME}-darwin-universal"
-    elif [ "$os" = "windows" ]; then
+    if [ "$os" = "windows" ]; then
         echo "${BINARY_NAME}-${os}-${arch}.exe"
     else
         echo "${BINARY_NAME}-${os}-${arch}"
@@ -140,7 +143,7 @@ get_shell_rc() {
             fi
             ;;
         zsh)
-            echo "$HOME/.zshrc"
+            echo "${ZDOTDIR:-$HOME}/.zshrc"
             ;;
         fish)
             echo "$HOME/.config/fish/config.fish"
@@ -151,40 +154,69 @@ get_shell_rc() {
     esac
 }
 
-# Add to PATH in shell rc file
-add_to_path() {
-    local install_dir="$1"
-    local bin_dir="$install_dir/bin"
-    local shell_rc
-    shell_rc=$(get_shell_rc)
+# Get the login profile, which apps started outside a terminal (the Claude desktop
+# app, an editor launched from the Dock) read for their PATH. Empty when the rc
+# file already covers login shells.
+get_login_profile() {
     local shell_name
     shell_name=$(basename "$SHELL")
 
-    # Check if already in PATH
-    if echo "$PATH" | grep -q "$bin_dir"; then
-        info "Already in PATH"
-        return 0
+    case "$shell_name" in
+        bash)
+            # bash reads the first of these that exists, so a new .bash_profile
+            # would hide an existing .profile
+            if [ -f "$HOME/.bash_profile" ]; then
+                echo "$HOME/.bash_profile"
+            elif [ -f "$HOME/.bash_login" ]; then
+                echo "$HOME/.bash_login"
+            else
+                echo "$HOME/.profile"
+            fi
+            ;;
+        zsh)
+            echo "${ZDOTDIR:-$HOME}/.zprofile"
+            ;;
+    esac
+}
+
+# Add to PATH in the shell rc file and the login profile
+add_to_path() {
+    local install_dir="$1"
+    local bin_dir="$install_dir/bin"
+    local shell_name
+    shell_name=$(basename "$SHELL")
+    local shell_rc
+    shell_rc=$(get_shell_rc)
+    local login_profile
+    login_profile=$(get_login_profile)
+    if [ "$login_profile" = "$shell_rc" ]; then
+        login_profile=""
     fi
 
-    # Check if already added to shell rc
-    if grep -q "pcb-lens" "$shell_rc" 2>/dev/null; then
-        info "PATH entry already exists in $shell_rc"
-        return 0
-    fi
+    local file
+    for file in "$shell_rc" "$login_profile"; do
+        [ -n "$file" ] || continue
 
-    info "Adding to PATH in $shell_rc"
+        if grep -qF "$bin_dir" "$file" 2>/dev/null; then
+            info "PATH entry already exists in $file"
+            continue
+        fi
 
-    if [ "$shell_name" = "fish" ]; then
-        echo "" >> "$shell_rc"
-        echo "# PCB Lens MCP Server" >> "$shell_rc"
-        echo "fish_add_path $bin_dir" >> "$shell_rc"
-    else
-        echo "" >> "$shell_rc"
-        echo "# PCB Lens MCP Server" >> "$shell_rc"
-        echo "export PATH=\"$bin_dir:\$PATH\"" >> "$shell_rc"
-    fi
+        info "Adding to PATH in $file"
+        mkdir -p "$(dirname "$file")"
 
-    success "Added to PATH in $shell_rc"
+        if [ "$shell_name" = "fish" ]; then
+            echo "" >> "$file"
+            echo "# PCB Lens MCP Server" >> "$file"
+            echo "fish_add_path $bin_dir" >> "$file"
+        else
+            echo "" >> "$file"
+            echo "# PCB Lens MCP Server" >> "$file"
+            echo "export PATH=\"$bin_dir:\$PATH\"" >> "$file"
+        fi
+
+        success "Added to PATH in $file"
+    done
 }
 
 # Main installation function
@@ -199,13 +231,12 @@ main() {
 
     local platform
     local download_url
-    local mcpb_url
     local checksum_url
     local expected_checksum
 
     echo ""
     echo "╔═══════════════════════════════════════════════════╗"
-    echo "║          PCB Lens MCP Server Installer            ║"
+    echo "║     PCB Lens MCP Server Installer        ║"
     echo "╚═══════════════════════════════════════════════════╝"
     echo ""
 
@@ -222,7 +253,6 @@ main() {
 
     # Construct download URLs
     download_url="https://github.com/${REPO}/releases/download/${version}/${platform}"
-    mcpb_url="https://github.com/${REPO}/releases/download/${version}/${MCPB_NAME}"
     checksum_url="https://github.com/${REPO}/releases/download/${version}/checksums.txt"
 
     info "Install directory: $install_dir"
@@ -256,19 +286,6 @@ main() {
     chmod +x "$binary_path"
     success "Installed binary to $binary_path"
 
-    # Download .mcpb package for Claude Desktop
-    local mcpb_path="$install_dir/$MCPB_NAME"
-    local mcpb_temp
-    mcpb_temp=$(mktemp)
-    trap "rm -f '$mcpb_temp' '$checksum_file'" EXIT
-
-    if download "$mcpb_url" "$mcpb_temp" 2>/dev/null; then
-        mv "$mcpb_temp" "$mcpb_path"
-        success "Installed Claude Desktop extension to $mcpb_path"
-    else
-        warn "Could not download .mcpb package (Claude Desktop extension)"
-    fi
-
     # Add to PATH
     add_to_path "$install_dir"
 
@@ -276,26 +293,20 @@ main() {
     echo ""
     success "Installation complete!"
     echo ""
-    echo "Installed files:"
-    echo "  Binary: $binary_path"
-    if [ -f "$mcpb_path" ]; then
-        echo "  Claude Desktop extension: $mcpb_path"
-    fi
-    echo ""
     echo "To start using pcb-lens CLI, either:"
     echo "  1. Open a new terminal, or"
     echo "  2. Run: source $(get_shell_rc)"
     echo ""
     echo "Then verify with:"
-    echo "  pcb-lens --version"
+    echo "  pcb-lens version"
     echo ""
     echo "To update, run:"
-    echo "  pcb-lens --update"
+    echo "  pcb-lens update"
     echo ""
-    echo "For Claude Desktop:"
-    echo "  1. Open Claude Desktop -> Settings -> Extensions -> Advanced settings"
-    echo "  2. Click 'Install Extension...' and select:"
-    echo "     $mcpb_path"
+    echo "To connect your agent, install the pcb-lens plugin. In Claude Code:"
+    echo "  /plugin marketplace add IntelligentElectron/pcb-lens"
+    echo "  /plugin install pcb-lens@pcb-lens"
+    echo "Codex, Cursor and other agents: https://github.com/IntelligentElectron/pcb-lens#install"
     echo ""
 }
 

@@ -28,3 +28,4 @@ export const GITHUB_REPO = "IntelligentElectron/pcb-lens";
 
 /** Binary name for the compiled executable. */
 export const BINARY_NAME = "pcb-lens";
+export const NPM_PACKAGE = "@intelligentelectron/pcb-lens";

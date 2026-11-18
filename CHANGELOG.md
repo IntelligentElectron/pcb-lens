@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Every MCP tool is also a command: `pcb-lens <tool> [file] --flag value ...` prints the tool's JSON result, with flags built from the tool's own schema; `pcb-lens <tool> --help` gives its description and flags. Exit 1 on a result with an `error` field, 2 on a usage error. Commands are accepted as words too (`pcb-lens update`, `pcb-lens upgrade`). See `docs/cli.md`
+- Agent plugin for Claude Code, Codex, Cursor and Copilot (`plugins/pcb-lens`): connects the MCP server from the binary on PATH and carries a skill, generated from the tool registry, for the command line where MCP is unavailable
+
+### Changed
+
+- Each Mac installs and updates to the binary for its own CPU, `pcb-lens-darwin-arm64` or `pcb-lens-darwin-x64`, instead of a universal binary that carries both. An x64 binary running under Rosetta on Apple Silicon updates itself to the arm64 one. Releases still publish `pcb-lens-darwin-universal` for installs up to v1.3.x, whose next update moves them to the per-architecture binary
+- The installer adds the binary's folder to the login profile as well as the shell's startup file, so apps started outside a terminal (the Claude desktop app) find it, and it ends by naming the plugin to install
+
+### Removed
+
+- The Claude Desktop extension (`pcb-lens.mcpb`) and its `manifest.json`: the plugin connects the server in Claude Code, the Claude desktop app's Code tab, Codex, Cursor and Copilot
+- The `--no-update` line in `--help`, a flag the binary never implemented
+
 ## [1.3.0] - 2026-11-17
 
 ### Added
