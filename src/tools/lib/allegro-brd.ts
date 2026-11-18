@@ -56,25 +56,99 @@ export const readBrdInfo = (buf: Buffer): BrdInfo | string => {
   return { version, units, mmPerUnit: mmPer / divisor, strings, bodyWord: p >>> 2 };
 };
 
-// 0x03 field codes, verified by matching values against Constraint Manager XML of the same boards
+// 0x03 field codes, verified by matching values and field order against Constraint Manager XML
+// of the same boards (docs/allegro-brd-format.md section 7)
 const FIELD_NAMES: Record<number, string> = {
   0x3a: "TOPOLOGY_TEMPLATE_REVISION",
+  0x3c: "STUB_LENGTH",
   0x49: "PROPAGATION_DELAY",
   0x55: "MIN_LINE_WIDTH",
+  0x58: "MIN_BVIA_GAP",
   0x5b: "VIA_LIST",
+  0x5c: "MIN_NECK_WIDTH",
   0x63: "RELATIVE_PROPAGATION_DELAY",
   0x65: "DIFFP_PRIMARY_GAP",
   0x66: "DIFFP_NECK_GAP",
   0x68: "DIFFP_COUPLED_PLUS",
   0x69: "DIFFP_COUPLED_MINUS",
+  0x6a: "MIN_NOISE_MARGIN",
   0x6c: "DIFFP_MIN_SPACE",
+  0x6d: "DIFFP_GATHER_CONTROL",
   0x6f: "DIFFP_PHASE_TOL",
+  0x70: "MIN_FIRST_SWITCH",
+  0x71: "MAX_FINAL_SETTLE",
   0x77: "ELECTRICAL_CONSTRAINT_SET",
+  0x78: "RATSNEST_SCHEDULE",
   0x7c: "DIFFP_UNCOUPLED_LENGTH",
+  0xd3: "IMPEDANCE_RULE",
+  0xe6: "NET_SCHEDULE",
   0x173: "MAX_LINE_WIDTH",
   0x1a0: "PHYSICAL_CONSTRAINT_SET",
   0x1a1: "SPACING_CONSTRAINT_SET",
+  0x1ce: "THRUPIN_TO_THRUPIN_SPACING",
+  0x1d0: "THRUPIN_TO_THRUVIA_SPACING",
+  0x1d1: "LINE_TO_THRUPIN_SPACING",
+  0x1d2: "THRUPIN_TO_SHAPE_SPACING",
+  0x1d3: "SMDPIN_TO_SMDPIN_SPACING",
+  0x1d4: "SMDPIN_TO_THRUVIA_SPACING",
+  0x1d5: "LINE_TO_SMDPIN_SPACING",
+  0x1d6: "SHAPE_TO_SMDPIN_SPACING",
+  0x1d7: "THRUVIA_TO_THRUVIA_SPACING",
+  0x1d8: "LINE_TO_THRUVIA_SPACING",
+  0x1d9: "SHAPE_TO_THRUVIA_SPACING",
   0x1da: "LINE_TO_LINE_SPACING",
+  0x1db: "LINE_TO_SHAPE_SPACING",
+  0x1dc: "SHAPE_TO_SHAPE_SPACING",
+  0x1dd: "BBV_TO_BBV_SPACING",
+  0x1de: "BBV_TO_THRUPIN_SPACING",
+  0x1df: "BBV_TO_SMDPIN_SPACING",
+  0x1e0: "BBV_TO_THRUVIA_SPACING",
+  0x1e1: "BBV_TO_LINE_SPACING",
+  0x1e2: "BBV_TO_SHAPE_SPACING",
+  0x1e3: "BBV_TO_TESTPIN_SPACING",
+  0x1e4: "BBV_TO_TESTVIA_SPACING",
+  0x1e5: "TESTPIN_TO_TESTPIN_SPACING",
+  0x1e6: "TESTPIN_TO_THRUPIN_SPACING",
+  0x1e7: "SMDPIN_TO_TESTPIN_SPACING",
+  0x1e8: "TESTPIN_TO_THRUVIA_SPACING",
+  0x1e9: "TESTPIN_TO_TESTVIA_SPACING",
+  0x1ea: "LINE_TO_TESTPIN_SPACING",
+  0x1eb: "SHAPE_TO_TESTPIN_SPACING",
+  0x1ec: "TESTVIA_TO_TESTVIA_SPACING",
+  0x1ed: "TESTVIA_TO_THRUPIN_SPACING",
+  0x1ee: "SMDPIN_TO_TESTVIA_SPACING",
+  0x1ef: "TESTVIA_TO_THRUVIA_SPACING",
+  0x1f0: "LINE_TO_TESTVIA_SPACING",
+  0x1f1: "SHAPE_TO_TESTVIA_SPACING",
+  0x1f5: "BONDPAD_TO_THRUVIA_SPACING",
+  0x1f6: "BONDPAD_TO_LINE_SPACING",
+  0x1f7: "BONDPAD_TO_SHAPE_SPACING",
+  0x1f8: "BONDPAD_TO_BBV_SPACING",
+  0x1f9: "BONDPAD_TO_TESTPIN_SPACING",
+  0x1fa: "BONDPAD_TO_TESTVIA_SPACING",
+  0x1fb: "MAXIMUM_NECK_LENGTH",
+  0x22d: "SN_LINE_TO_SHAPE_SPACING",
+  0x253: "HOLE_TO_LINE_SPACING",
+  0x25f: "SAME_NET_SPACING_CONSTRAINT_SET",
+  0x268: "MVIA_TO_MVIA_SPACING",
+  0x269: "MVIA_TO_THRUPIN_SPACING",
+  0x26a: "MVIA_TO_SMDPIN_SPACING",
+  0x26b: "MVIA_TO_THRUVIA_SPACING",
+  0x26c: "MVIA_TO_BBV_SPACING",
+  0x26d: "MVIA_TO_LINE_SPACING",
+  0x26e: "MVIA_TO_SHAPE_SPACING",
+  0x26f: "MVIA_TO_TESTPIN_SPACING",
+  0x270: "MVIA_TO_TESTVIA_SPACING",
+  0x271: "BONDPAD_TO_MVIA_SPACING",
+  0x278: "SN_MVIA_TO_SHAPE_SPACING",
+  0x62d: "CDS_SKILL_DEFINED",
+};
+// Integer fields that hold an enumeration, as the values Constraint Manager XML writes; codes
+// not seen yet are reported as numbers
+const FIELD_ENUMS: Record<number, Record<number, string>> = {
+  0x6d: { 0: "INCLUDE", 1: "IGNORE" },
+  0x78: { 0: "MIN_TREE", 1: "MIN_DAISY_CHAIN", 5: "TEMPLATE", 6: "POWER_AND_GROUND" },
+  0xe6: { 0: "DO_NOT_VERIFY", 1: "VERIFY" },
 };
 const LOGICAL_PATH = 0x37;
 
@@ -214,7 +288,7 @@ export const readBrdConstraints = (
       value = buf.toString("latin1", start, end >= 0 && end < start + len ? end : start + len);
     } else if (sub === 0x6a) value = str(w[i + 6]);
     else if (sub === 0x66) value = mm(w[i + 6]);
-    else if (sub === 0x64) value = String(w[i + 6]);
+    else if (sub === 0x64) value = FIELD_ENUMS[code]?.[w[i + 6]] ?? String(w[i + 6]);
     else if (sub === 0x65) value = "";
     if (value === undefined) continue; // other subtypes hold records not decoded here
     const rec = fields.get(w[i + 3]) ?? {};

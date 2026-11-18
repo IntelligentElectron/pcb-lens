@@ -354,28 +354,145 @@ word 6  value
 
 The reader collects fields by owner key in one pass, without following the chains.
 
+### How the codes were named
+
+Two kinds of evidence, both from boards that embed their Constraint Manager database:
+
+- **Values**: a code's values single out one XML attribute on every object that holds both, across boards.
+- **Order**: Constraint Manager XML lists an object's attributes in the order of its 0x03 chain, from the first field to the last, or in the reverse order (most electrical constraint sets). An object edited after it was created can list them in another order. A chain is taken as lined up with its XML when both hold the same number of attributes (set assignments and the schematic path are references in the XML and are left out), at least three already named codes sit at their own names, and every value is equal position by position. Each unnamed code in such a chain takes the name at its position; a name is kept only when every lined-up chain gives the same one.
+
+Every name below agrees with the XML on every object that holds both, except where a row says otherwise.
+
 | Code | Constraint | Value type | Confidence |
 |------|------------|------------|------------|
 | 0x037 | schematic path of the owner | 0x68 | OBSERVED, not reported |
 | 0x03A | `TOPOLOGY_TEMPLATE_REVISION` | 0x68 | VERIFIED |
+| 0x03C | `STUB_LENGTH` | 0x66 | VERIFIED: order on 9 electrical sets; values on 12 of 13 sets on 5 boards (one archive held another value) |
 | 0x049 | `PROPAGATION_DELAY` (`pin:pin:min:max`, `AD:AR` for all drivers and receivers) | 0x6A | OBSERVED |
 | 0x055 | `MIN_LINE_WIDTH` | 0x66 | KiCad notes |
+| 0x058 | `MIN_BVIA_GAP` | 0x66 | VERIFIED: values on 7 regions, 4 boards |
 | 0x05B | `VIA_LIST` | 0x68 | OBSERVED |
+| 0x05C | `MIN_NECK_WIDTH` | 0x66 | VERIFIED: values on 3 objects, 3 boards |
 | 0x063 | `RELATIVE_PROPAGATION_DELAY` (`group:scope:pin:pin:delta:tolerance`) | 0x6A | OBSERVED |
 | 0x065 | `DIFFP_PRIMARY_GAP` | 0x66 | HEURISTIC (one match) |
 | 0x066 | `DIFFP_NECK_GAP` | 0x66 | HEURISTIC (one match) |
 | 0x068 | `DIFFP_COUPLED_PLUS` | 0x66 | HEURISTIC (plus and minus held equal values) |
 | 0x069 | `DIFFP_COUPLED_MINUS` | 0x66 | HEURISTIC |
+| 0x06A | `MIN_NOISE_MARGIN` (two values with units, high then low) | 0x68 | VERIFIED: order on 3 electrical sets, 2 boards; the XML writes the numbers without units |
 | 0x06C | `DIFFP_MIN_SPACE` | 0x66 | VERIFIED |
+| 0x06D | `DIFFP_GATHER_CONTROL`: integer, 0 `INCLUDE`, 1 `IGNORE` | 0x64 | VERIFIED: values on 67 objects; order on 44 objects, 12 boards |
 | 0x06F | `DIFFP_PHASE_TOL` | 0x68 | VERIFIED |
+| 0x070 | `MIN_FIRST_SWITCH` (`pin:pin:value:value`, values with units; the XML calls it `MIN_FIRST_SWITCH_CNS`) | 0x68 | VERIFIED: order on 3 electrical sets, 2 boards |
+| 0x071 | `MAX_FINAL_SETTLE` (as 0x070; XML `MAX_FINAL_SETTLE_CNS`) | 0x68 | VERIFIED: order on 3 electrical sets, 2 boards |
 | 0x077 | `ELECTRICAL_CONSTRAINT_SET` | 0x6A | OBSERVED (KiCad notes: net schedule) |
+| 0x078 | `RATSNEST_SCHEDULE`: integer, 0 `MIN_TREE`, 1 `MIN_DAISY_CHAIN`, 5 `TEMPLATE`, 6 `POWER_AND_GROUND` | 0x64 | VERIFIED: values on 827 of 832 sets, Xnets and nets; order on 572 objects, 12 boards. Two Xnets on one board read 0 where their archive says `MIN_DAISY_CHAIN` |
 | 0x07C | `DIFFP_UNCOUPLED_LENGTH` | 0x66 | VERIFIED |
+| 0x0D3 | `IMPEDANCE_RULE` (`pin:pin:target:tolerance`; the XML splits it into `IMPEDANCE_RULE_CNS` and `IMPEDANCE_RULE_CNS_TOL`) | 0x68 | HEURISTIC (one set: values and reverse order match) |
+| 0x0E6 | `NET_SCHEDULE`: integer, 0 `DO_NOT_VERIFY`, 1 `VERIFY` | 0x64 | VERIFIED: values on 34 objects, 5 boards; order on 15 |
 | 0x173 | `MAX_LINE_WIDTH` | 0x66 | KiCad notes |
 | 0x1A0 | `PHYSICAL_CONSTRAINT_SET` | 0x6A | VERIFIED |
 | 0x1A1 | `SPACING_CONSTRAINT_SET` | 0x6A | VERIFIED |
-| 0x1DA | `LINE_TO_LINE_SPACING` (region) | 0x66 | HEURISTIC |
+| 0x1FB | `MAXIMUM_NECK_LENGTH` (override on nets, Xnets and net classes) | 0x66 | VERIFIED: values on the 3 objects whose XML holds it (2 nets, 1 Xnet), 3 boards; the other attributes of those objects are named codes |
+| 0x25F | `SAME_NET_SPACING_CONSTRAINT_SET` (region) | 0x6A | VERIFIED: equals the region's same-net spacing set reference (`<r K="46">`) on 2 regions, 2 boards; the XML uses this attribute name on Design objects |
+| 0x62D | `CDS_SKILL_DEFINED` (presence flag; the XML writes `1`) | 0x65 | VERIFIED: on all 450 diff pairs, net classes and physical sets that carry it; order on 388 |
 
-Other codes are reported on sets and tables as `FIELD_0x<code>` with their decoded value, and dropped on nets, where most carry bookkeeping codes. Regions carry a run of codes 0x1CE to 0x27B (spacing and physical overrides per object pair) that are not mapped yet.
+Integer codes of `DIFFP_GATHER_CONTROL`, `RATSNEST_SCHEDULE` and `NET_SCHEDULE` are reported by their XML value; codes not seen yet are reported as numbers. The ratsnest codes follow the order of the schedules in Allegro (minimum spanning tree, minimum daisy chain, source-load daisy chain, star, far-end cluster, template, power and ground); 2 to 4 were not seen.
+
+### Spacing codes
+
+Spacing, same-net spacing and via-gap overrides of regions, Xnets, nets and net classes are 0x66 lengths. The codes come in blocks, one per object kind. The layout is read from the named codes (**Confidence: OBSERVED**); the unnamed codes below are placed by it, not verified:
+
+| Codes | Block |
+|-------|-------|
+| 0x1CE to 0x1DC | through pin, SMD pin, through via, line, shape: each kind with itself and the kinds after it |
+| 0x1DD to 0x1E4 | blind/buried via with itself, the five kinds above, test pin and test via |
+| 0x1E5 to 0x1F1 | test pin, then test via, each with itself, the other kinds and shape last |
+| 0x1F2 to 0x1FA | bond pad |
+| 0x220 to 0x24C | same-net (`SN_`) rules: the codes of 0x1CE to 0x1FA plus 0x52 (0x22D `SN_LINE_TO_SHAPE_SPACING` = 0x1DB + 0x52) |
+| 0x251 to 0x255 | hole |
+| 0x268 to 0x271 | microvia |
+| 0x272 to 0x27B | same-net microvia: the codes of 0x268 to 0x271 plus 0x0A (0x278 `SN_MVIA_TO_SHAPE_SPACING` = 0x26E + 0x0A) |
+
+| Code | Constraint | Named by |
+|------|------------|----------|
+| 0x1CE | `THRUPIN_TO_THRUPIN_SPACING` | order |
+| 0x1D0 | `THRUPIN_TO_THRUVIA_SPACING` | order |
+| 0x1D1 | `LINE_TO_THRUPIN_SPACING` | order |
+| 0x1D2 | `THRUPIN_TO_SHAPE_SPACING` | values, order |
+| 0x1D3 | `SMDPIN_TO_SMDPIN_SPACING` | values, order |
+| 0x1D4 | `SMDPIN_TO_THRUVIA_SPACING` | order |
+| 0x1D5 | `LINE_TO_SMDPIN_SPACING` | values, order |
+| 0x1D6 | `SHAPE_TO_SMDPIN_SPACING` | values, order |
+| 0x1D7 | `THRUVIA_TO_THRUVIA_SPACING` | order |
+| 0x1D8 | `LINE_TO_THRUVIA_SPACING` | order |
+| 0x1D9 | `SHAPE_TO_THRUVIA_SPACING` | order |
+| 0x1DA | `LINE_TO_LINE_SPACING` | HEURISTIC; sits at its name in every lined-up chain |
+| 0x1DB | `LINE_TO_SHAPE_SPACING` | order |
+| 0x1DC | `SHAPE_TO_SHAPE_SPACING` | values, order |
+| 0x1DD | `BBV_TO_BBV_SPACING` | values, order |
+| 0x1DE | `BBV_TO_THRUPIN_SPACING` | order |
+| 0x1DF | `BBV_TO_SMDPIN_SPACING` | order |
+| 0x1E0 | `BBV_TO_THRUVIA_SPACING` | order |
+| 0x1E1 | `BBV_TO_LINE_SPACING` | values, order |
+| 0x1E2 | `BBV_TO_SHAPE_SPACING` | order |
+| 0x1E3 | `BBV_TO_TESTPIN_SPACING` | order |
+| 0x1E4 | `BBV_TO_TESTVIA_SPACING` | order |
+| 0x1E5 | `TESTPIN_TO_TESTPIN_SPACING` | order |
+| 0x1E6 | `TESTPIN_TO_THRUPIN_SPACING` | order |
+| 0x1E7 | `SMDPIN_TO_TESTPIN_SPACING` | order |
+| 0x1E8 | `TESTPIN_TO_THRUVIA_SPACING` | order |
+| 0x1E9 | `TESTPIN_TO_TESTVIA_SPACING` | order |
+| 0x1EA | `LINE_TO_TESTPIN_SPACING` | order |
+| 0x1EB | `SHAPE_TO_TESTPIN_SPACING` | order |
+| 0x1EC | `TESTVIA_TO_TESTVIA_SPACING` | order |
+| 0x1ED | `TESTVIA_TO_THRUPIN_SPACING` | order |
+| 0x1EE | `SMDPIN_TO_TESTVIA_SPACING` | order |
+| 0x1EF | `TESTVIA_TO_THRUVIA_SPACING` | order |
+| 0x1F0 | `LINE_TO_TESTVIA_SPACING` | order |
+| 0x1F1 | `SHAPE_TO_TESTVIA_SPACING` | values, order |
+| 0x1F5 | `BONDPAD_TO_THRUVIA_SPACING` | order |
+| 0x1F6 | `BONDPAD_TO_LINE_SPACING` | order |
+| 0x1F7 | `BONDPAD_TO_SHAPE_SPACING` | values, order |
+| 0x1F8 | `BONDPAD_TO_BBV_SPACING` | order |
+| 0x1F9 | `BONDPAD_TO_TESTPIN_SPACING` | order |
+| 0x1FA | `BONDPAD_TO_TESTVIA_SPACING` | order |
+| 0x22D | `SN_LINE_TO_SHAPE_SPACING` | values (one region) |
+| 0x253 | `HOLE_TO_LINE_SPACING` | values, order |
+| 0x268 | `MVIA_TO_MVIA_SPACING` | order |
+| 0x269 | `MVIA_TO_THRUPIN_SPACING` | order |
+| 0x26A | `MVIA_TO_SMDPIN_SPACING` | order |
+| 0x26B | `MVIA_TO_THRUVIA_SPACING` | order |
+| 0x26C | `MVIA_TO_BBV_SPACING` | values, order |
+| 0x26D | `MVIA_TO_LINE_SPACING` | order; differs from the archive on one region |
+| 0x26E | `MVIA_TO_SHAPE_SPACING` | order |
+| 0x26F | `MVIA_TO_TESTPIN_SPACING` | order |
+| 0x270 | `MVIA_TO_TESTVIA_SPACING` | order |
+| 0x271 | `BONDPAD_TO_MVIA_SPACING` | order |
+| 0x278 | `SN_MVIA_TO_SHAPE_SPACING` | values, order |
+
+The chains that name codes by order are Xnets and regions on 5 boards. Each spacing name agrees in value with the XML on 4 to 32 objects.
+
+### Codes left unnamed
+
+These are reported as `FIELD_0x<code>`. The block layout points to a name for several of them, but no value pattern or lined-up chain singles one out.
+
+| Code | Where | What is known |
+|------|-------|---------------|
+| 0x1CF | regions | Through pin block; its only object has the same value as several candidates. The layout puts `THRUPIN_TO_SMDPIN_SPACING` here |
+| 0x1F2 to 0x1F4 | regions | Bond pad block: `BONDPAD_TO_BONDPAD_SPACING`, `SMDPIN_TO_BONDPAD_SPACING` and `THRUPIN_TO_BONDPAD_SPACING` in an unknown order |
+| 0x225, 0x228 | regions | Same-net block, no XML counterpart; the +0x52 rule gives `SN_SMDPIN_TO_SMDPIN_SPACING` and `SN_SHAPE_TO_SMDPIN_SPACING` |
+| 0x227, 0x22C | regions | `SN_LINE_TO_SMDPIN_SPACING` and `SN_LINE_TO_LINE_SPACING`, equal on their only object. The reverse order of that object and the +0x52 rule both put `SN_LINE_TO_SMDPIN_SPACING` at 0x227 and `SN_LINE_TO_LINE_SPACING` at 0x22C |
+| 0x22F to 0x236, 0x24A | regions, net classes | Same-net blind/buried via rules; the +0x52 rule gives `SN_BBV_TO_BBV_SPACING` to `SN_BBV_TO_TESTVIA_SPACING` (as 0x1DD to 0x1E4) and `SN_BONDPAD_TO_BBV_SPACING` |
+| 0x251, 0x252, 0x254, 0x255 | regions | With 0x253: `HOLE_TO_HOLE_SPACING`, `HOLE_TO_PIN_SPACING`, `HOLE_TO_VIA_SPACING` and `HOLE_TO_SHAPE_SPACING` in an unknown order |
+| 0x272 to 0x277, 0x279 to 0x27B | regions | Same-net microvia rules; the +0x0A rule gives `SN_MVIA_TO_MVIA_SPACING` to `SN_BONDPAD_TO_MVIA_SPACING` (as 0x268 to 0x271) |
+| 0x1FD | regions | Integer; no XML counterpart |
+| 0x1A2 | net classes | Small even integers on most boards; no XML counterpart |
+| 0x28D | diff pairs | Presence flag; no XML counterpart |
+| 0x11E | electrical sets | String; no XML counterpart |
+| 0x38C, 0x425, 0x426 | electrical sets | Integers; no XML counterpart |
+| 0x39C, 0x39D, 0x3A0, 0x3B0, 0x3B1, 0x3B4, 0x3CE, 0x41B, 0x42A, 0x443, 0x45A, 0x6CB, 0x6CC, 0x6F1 | electrical sets | Lengths; the sets that hold them have no XML counterpart on the boards read |
+
+Other codes are reported on sets and tables as `FIELD_0x<code>` with their decoded value, and dropped on nets, where most carry bookkeeping codes.
 
 ## 8. How get_constraints Reports Them
 
@@ -392,6 +509,6 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 | Layer names in `BrdStackup` | Not decoded; conductors are listed top to bottom |
 | Pin pairs, match groups of pin pairs | Not decoded |
 | 0x1D slots 0 and 13, `TS_ALLOWED`, pad-to-pad codes other than 0 and 5 | Not reported, or reported as a number |
-| Region override codes 0x1CE to 0x27B | Reported as `FIELD_0x...` |
+| Same-net, hole and bond pad spacing codes, and codes with no XML counterpart (section 7) | Reported as `FIELD_0x...` |
 | Zip entries with a trailing data descriptor | Skipped; none seen |
 | Embedded archive size | Each entry inflates to at most its header size and 256 MiB, and a file to 1 GiB in all; larger entries are skipped |
