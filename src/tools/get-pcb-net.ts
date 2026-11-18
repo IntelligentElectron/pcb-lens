@@ -27,18 +27,116 @@ import {
   type NetAccumulator,
 } from "./shared.js";
 import { defineTool } from "./registry.js";
+import { isBrdFile, loadBrdLayout } from "./lib/allegro-layout.js";
+
+const queryBrdNet = async (
+  filePath: string,
+  regex: RegExp,
+  pattern: string,
+  detail: Detail
+): Promise<QueryNetsResult | ErrorResult> => {
+  const brd = await loadBrdLayout(filePath);
+  if (typeof brd === "string") return { error: brd };
+  const named = brd.layout.nets.filter((n) => n.name);
+  const matched = named.filter((n) => regex.test(n.name));
+  if (matched.length > 1 && matched.length === named.length) {
+    return {
+      error: `Pattern '${pattern}' matches all ${named.length} physical nets. Use a more specific pattern, or use get_pcb_metadata for net counts and discovery.`,
+    };
+  }
+  const sideOf = new Map(brd.layout.components.map((c) => [c.refdes, c.layer]));
+
+  const matches = matched
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((net) => {
+      // one routed segment per track block or copper shape, as one IPC-2581 Set each
+      const byLayer = new Map<
+        string,
+        { widths: Set<number>; ids: Set<number>; shapes: number; length: number }
+      >();
+      const layerOf = (l: string) =>
+        byLayer.get(l) ??
+        byLayer.set(l, { widths: new Set(), ids: new Set(), shapes: 0, length: 0 }).get(l)!;
+      for (const t of net.tracks) {
+        const r = layerOf(t.layer);
+        r.widths.add(t.width);
+        r.ids.add(t.id);
+        r.length += t.length;
+      }
+      for (const l of net.shapeLayers) layerOf(l).shapes++;
+      const routing: NetRouteInfo[] = [...byLayer.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([layerName, r]) => ({
+          layerName,
+          traceWidths: [...r.widths].sort((a, b) => a - b),
+          segmentCount: r.ids.size + r.shapes,
+          traceLength: Math.round(r.length),
+        }));
+
+      const drills: ViaCount[] = [];
+      const viaRows: ViaRow[] = net.vias.map((v) => {
+        let idx = drills.findIndex((d) => d.diameter === v.drill && d.layer === v.span);
+        if (idx < 0) idx = drills.push({ diameter: v.drill, layer: v.span, count: 0 }) - 1;
+        drills[idx].count++;
+        return [v.x, v.y, idx];
+      });
+
+      const layers = new Set(routing.map((r) => r.layerName));
+      for (const p of net.pins) {
+        const side = sideOf.get(p.refdes);
+        if (side) layers.add(side);
+      }
+      const cappedPins = capDetailRows(net.pins, MAX_PIN_ROWS);
+      const result: QueryNetResult = {
+        netName: net.name,
+        pinCount: net.pins.length,
+        pins: groupPinsByRefdes(cappedPins.rows),
+        layersUsed: [...layers].sort(),
+      };
+      if (cappedPins.truncated) result.truncated = true;
+      if (routing.length) result.routing = routing;
+      if (drills.length) {
+        result.viaCounts = drills;
+        if (detail === "full") {
+          const capped = capRowsStratified(viaRows, MAX_COORD_ROWS, (row) => row[2]);
+          result.viaColumns = ["x", "y", "drillIndex"];
+          result.viaRows = capped.rows;
+          if (capped.truncated) result.truncated = true;
+        }
+      }
+      if (detail === "full" && net.tracks.length) {
+        const segments: RoutingSegment[] = net.tracks.map((t) => ({
+          layer: t.layer,
+          width: t.width,
+          points: t.points,
+          ...(t.arcs.length ? { arcs: t.arcs } : {}),
+        }));
+        const capped = capRowsStratified(segments, MAX_COORD_ROWS, (seg) => seg.layer);
+        result.segments = capped.rows;
+        if (capped.truncated) result.truncated = true;
+      }
+      const totalSegments = routing.reduce((sum, r) => sum + r.segmentCount, 0);
+      const totalTraceLength = routing.reduce((sum, r) => sum + r.traceLength, 0);
+      if (totalSegments) result.totalSegments = totalSegments;
+      if (viaRows.length) result.totalVias = viaRows.length;
+      if (totalTraceLength) result.totalTraceLength = totalTraceLength;
+      return result;
+    });
+  return { pattern, units: "MICRON", matches };
+};
 
 export const queryNet = async (
   filePath: string,
   pattern: string,
   detail: Detail = "summary"
 ): Promise<QueryNetsResult | ErrorResult> => {
-  const err = await validateFile(filePath);
-  if (err) return err;
-
   const validation = validatePattern(pattern);
   if ("error" in validation) return validation;
   const { regex } = validation;
+  if (isBrdFile(filePath)) return queryBrdNet(filePath, regex, pattern, detail);
+
+  const err = await validateFile(filePath);
+  if (err) return err;
 
   const factor = await extractMicronFactor(filePath);
 
@@ -577,7 +675,7 @@ export const tool = defineTool({
   description:
     "Look up nets in a PCB layout by name and inspect their connectivity and routing. Provide a net-name pattern (a regular expression); for each matching net you get the connected component pins (grouped by component), the layers the net uses, a per-layer routing summary (trace widths, number of routed segments, and total routed length), and a via summary (count per drill size). All distances are in microns. Copper that is filled as a pour or plane instead of drawn as a trace is reported as routed on its layer but without a width or length, so a net can be fully routed yet show no trace width. A net that returns pins but no routing was most likely exported without its routed-copper data. Use a specific pattern: one that matches every net in the design is rejected. Set detail='full' to additionally return exact geometry — every via coordinate and the full point-by-point shape of each routed trace (including arcs for curved traces); for very large nets this geometry is sampled and the response is marked truncated.",
   inputSchema: {
-    file: z.string().describe("Path to IPC-2581 XML file"),
+    file: z.string().describe("Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file"),
     pattern: z
       .string()
       .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),

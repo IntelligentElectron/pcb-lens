@@ -12,7 +12,7 @@ Responses are token-bounded by design: the per-pin pad coordinate array (`padRow
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | Yes | - | Path to IPC-2581 XML file |
+| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x or 17.x `.brd` file |
 | `refdes` | string | Yes | - | Exact component reference designator (e.g., `'U5'`, `'C10'`, `'R22'`) |
 | `detail` | `"summary"` \| `"full"` | No | `"summary"` | `summary` returns pad count + shapes only; `full` adds per-pin pad x/y coordinates (capped) |
 
@@ -193,3 +193,4 @@ Response:
 - `padCount` and `padShapes` are present whenever pad geometry resolves. The per-pin `padColumns`/`padRows` coordinates are returned only with `detail="full"`, sorted by pin, and capped to 300 rows (with `truncated: true`) to keep responses token-bounded. Pad shapes defined as a polygon/contour are reported by their bounding box (`shape: "polygon"`).
 - The `characteristics` record contains key-value pairs from the BOM (varies by design, common keys include VALUE, TOL, VOLTAGE).
 - `mountType` and `description` may be absent if the IPC-2581 file omits them.
+- For an Allegro `.brd`, everything comes from the board's own database: `characteristics` holds `DEVICE_TYPE` and, on 17.x boards, `COMP_VALUE`, `description` is the device type, `mountType` is `THMT` when a pad is drilled and `SMT` otherwise, and each pad's shape is its padstack pad on the component's side (rounded and chamfered rectangles as `rect`, shape symbols and other outlines as `polygon` with their bounding box). Components without a refdes, such as fiducials, are not listed

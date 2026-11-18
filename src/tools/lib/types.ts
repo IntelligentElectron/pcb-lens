@@ -47,14 +47,18 @@ export interface SectionInfo {
 export interface DesignOverview {
   fileName: string;
   fileSizeBytes: number;
-  totalLines: number;
+  /** XML line count; absent for an Allegro .brd */
+  totalLines?: number;
   units: string;
   ipc2581Revision?: string;
+  /** Allegro release that wrote a .brd file, e.g. "17.2" */
+  allegroVersion?: string;
   stepName?: string;
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
-  sections: SectionInfo[];
+  /** XML top-level sections by size; absent for an Allegro .brd */
+  sections?: SectionInfo[];
 }
 
 /**

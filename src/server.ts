@@ -1,8 +1,8 @@
 /**
  * PCB Lens MCP Server
  *
- * Model Context Protocol server for querying IPC-2581 PCB layout files.
- * Supports any EDA tool that exports IPC-2581 XML.
+ * Model Context Protocol server for querying PCB layouts: IPC-2581 XML from any EDA tool, and
+ * Cadence Allegro .brd boards read directly.
  */
 
 import crypto from "node:crypto";
@@ -20,12 +20,12 @@ import { formatResult } from "./tools/shared.js";
 const SERVER_INSTRUCTIONS = `
 # PCB Lens MCP Server
 
-This server provides tools to query IPC-2581 PCB layout files for physical design review.
-Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool.
+This server provides tools to query PCB layouts for physical design review.
+Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool, and Cadence Allegro 16.x and 17.x .brd boards, read directly.
 
 ## Workflow Guidance
 
-1. If starting from a Cadence Allegro .brd file, use \`export_cadence_ipc2581\` to generate the IPC-2581 XML first (Windows only)
+1. A Cadence Allegro 16.x or 17.x .brd file can be passed straight to the query tools; \`export_cadence_ipc2581\` (Windows only) is needed only for other Allegro versions
 2. To access design constraints (trace width rules, spacing rules, net classes, stackup), call \`get_constraints\` on the .brd or .dcf file directly; \`export_cadence_constraints\` (Windows) produces a .tcfx file it also reads
 3. Use \`get_pcb_metadata\` first to understand the design structure, layer stackup, and size
 4. Use \`get_pcb_component\` to look up a single component by exact refdes
@@ -33,7 +33,7 @@ Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA t
 
 ## Tool Usage Tips
 
-- All query tools accept an IPC-2581 XML file path as the first argument
+- All query tools accept an IPC-2581 XML or Allegro .brd file path as the first argument
 - Component refdes is an exact match (e.g., "U5", "C10", "R22")
 - Net name patterns use regex (e.g., "DDR_D0", "^VCC", "CLK")
 - All physical values (coordinates, trace widths) are normalized to microns regardless of the source file's native unit

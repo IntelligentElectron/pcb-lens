@@ -16,7 +16,7 @@ If a pattern matches all nets in a design (for example `.`, `.*`, or `.+`), the 
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | Yes | - | Path to IPC-2581 XML file |
+| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x or 17.x `.brd` file |
 | `pattern` | string | Yes | - | Regex pattern for net name (e.g., `^DDR_D0$`, `CLK`, `^VCC_3V3$`) |
 | `detail` | `"summary"` \| `"full"` | No | `"summary"` | `summary` returns via counts only; `full` adds raw per-via x/y coordinates (capped) |
 
@@ -216,3 +216,4 @@ Response (`viaColumns`/`viaRows` now present; each `viaRows` entry's `drillIndex
 - All physical values are normalized to microns
 - `layersUsed` merges layers from PhyNet points and routing geometry
 - Routing within each match is sorted by layer name
+- For an Allegro `.brd`, routing comes from the board's own database on every copper layer: each track counts as one segment and each copper shape (pour, plane, fill) as one segment with no width or length; `traceLength` adds straight spans only, as for IPC-2581. Vias are named by their drill span, `DRILL_<first>-<last>` in 1-based copper layers, as Allegro's IPC-2581 export names them. Unnamed nets are not matched

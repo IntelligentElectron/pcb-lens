@@ -472,7 +472,7 @@ describe("queryConstraints on Allegro .brd", () => {
 
   it("keeps the embedded archives and says why binary sections are missing", async () => {
     for (const [patch, reason] of [
-      [(b: Buffer) => b.writeUInt32LE(0x00131500, 0), "16.x"],
+      [(b: Buffer) => b.writeUInt32LE(0x00131500, 0), "16.6"],
       [(b: Buffer) => b.writeUInt8(9, 0x180), "units code 9"],
       [(b: Buffer) => b.writeUInt32LE(0, 0x26c), "zero units divisor"],
     ] as const) {

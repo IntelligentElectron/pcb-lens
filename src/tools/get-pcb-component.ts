@@ -15,6 +15,7 @@ import {
   transformPin,
 } from "./lib/geometry.js";
 import { parsePackageRef } from "./lib/package-parser.js";
+import { isBrdFile, loadBrdLayout } from "./lib/allegro-layout.js";
 import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js";
 import {
   capDetailRows,
@@ -26,17 +27,85 @@ import {
 } from "./shared.js";
 import { defineTool } from "./registry.js";
 
+const byPin = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+
+const queryBrdComponent = async (
+  filePath: string,
+  refdes: string,
+  detail: Detail
+): Promise<ComponentResult | ErrorResult> => {
+  const brd = await loadBrdLayout(filePath);
+  if (typeof brd === "string") return { error: brd };
+  const c = brd.layout.components.find((x) => x.refdes === refdes);
+  if (!c) return { error: `Component '${refdes}' not found` };
+
+  const netPins = new Map<string, string[]>();
+  for (const p of c.pads) {
+    if (p.net) (netPins.get(p.net) ?? netPins.set(p.net, []).get(p.net)!).push(p.pin);
+  }
+  const netSize = new Map(brd.layout.nets.map((n) => [n.name, n.pins.length]));
+  const netRows: NetRow[] = [...netPins.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([net, pins]) => [net, pins.sort(byPin), netSize.get(net) ?? pins.length]);
+
+  const padShapes: PadShape[] = [];
+  const shapeIdx = new Map<string, number>();
+  const padRows: PadRow[] = c.pads
+    .map((p): PadRow => {
+      const key = `${p.shape}:${p.width}:${p.height}`;
+      let idx = shapeIdx.get(key);
+      if (idx === undefined) {
+        idx = padShapes.push({ shape: p.shape, width: p.width, height: p.height }) - 1;
+        shapeIdx.set(key, idx);
+      }
+      return [p.pin, p.x, p.y, idx];
+    })
+    .sort((a, b) => byPin(a[0], b[0]));
+
+  const nameParsed = parsePackageRef(c.packageRef);
+  const characteristics: Record<string, string> = {};
+  if (c.deviceType) characteristics.DEVICE_TYPE = c.deviceType;
+  if (c.value) characteristics.COMP_VALUE = c.value;
+  const result: ComponentResult = {
+    refdes: c.refdes,
+    units: "MICRON",
+    packageRef: c.packageRef,
+    ...(nameParsed
+      ? { parsed: { ...nameParsed, pinCount: c.pads.length || nameParsed.pinCount } }
+      : {}),
+    x: c.x,
+    y: c.y,
+    rotation: c.rotation,
+    layer: c.layer,
+    mountType: c.pads.some((p) => p.drill > 0) ? "THMT" : "SMT",
+    ...(c.deviceType ? { description: c.deviceType } : {}),
+    characteristics,
+    netColumns: ["netName", "pins", "pinCount"],
+    netRows,
+    padCount: padRows.length,
+    padShapes,
+  };
+  if (detail === "full") {
+    const capped = capDetailRows(padRows, MAX_COORD_ROWS);
+    result.padColumns = ["pin", "x", "y", "shapeIndex"];
+    result.padRows = capped.rows;
+    if (capped.truncated) result.truncated = true;
+  }
+  return result;
+};
+
 export const queryComponent = async (
   filePath: string,
   refdes: string,
   detail: Detail = "summary"
 ): Promise<ComponentResult | ErrorResult> => {
-  const err = await validateFile(filePath);
-  if (err) return err;
-
   if (!refdes || refdes.length > 200) {
     return { error: "refdes must be 1-200 characters" };
   }
+  if (isBrdFile(filePath)) return queryBrdComponent(filePath, refdes, detail);
+
+  const err = await validateFile(filePath);
+  if (err) return err;
 
   const factor = await extractMicronFactor(filePath);
 
@@ -308,7 +377,7 @@ export const tool = defineTool({
   description:
     "Look up a single component by its exact reference designator (refdes). Returns its placement (position, rotation, layer), package and BOM details, the nets connected to each pin, and a summary of its pads (count and the distinct pad shapes). The refdes must match exactly; it is not a pattern. Set detail='full' to additionally get the exact coordinate of every pad (sampled for components with very many pads).",
   inputSchema: {
-    file: z.string().describe("Path to IPC-2581 XML file"),
+    file: z.string().describe("Path to an IPC-2581 XML file or an Allegro 16.x or 17.x .brd file"),
     refdes: z.string().describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
     detail: z
       .enum(["summary", "full"])
