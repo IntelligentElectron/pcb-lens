@@ -172,7 +172,8 @@ export const readBrdConstraints = (
     const tail = buf.readUInt32LE(0x3c + 8 * list);
     const out: number[] = [];
     const seen = new Set<number>();
-    for (let k = buf.readUInt32LE(0x3c + 8 * list + 4); k && k !== tail && !seen.has(k); ) {
+    let k = buf.readUInt32LE(0x3c + 8 * list + 4);
+    while (k && k !== tail && !seen.has(k)) {
       seen.add(k);
       const i = cands.get(k)?.find((c) => ok(c, tail));
       if (i === undefined) break;
@@ -280,7 +281,9 @@ export const readBrdConstraints = (
     // members: chained 0x37 arrays [37][key][previous][next][capacity][used][capacity + 1 key slots],
     // where previous is the table for the first array; empty slots hold 0
     const seen = new Set<number>();
-    for (let k = w[i + 7], prev = w[i + 1]; k && !seen.has(k); ) {
+    let k = w[i + 7];
+    let prev = w[i + 1];
+    while (k && !seen.has(k)) {
       seen.add(k);
       const a = arrays.get(k)?.find((c) => w[c + 2] === prev);
       if (a === undefined) break;
