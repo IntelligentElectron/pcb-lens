@@ -8,7 +8,7 @@ Every piece of drawing in an Allegro board sits on a layer named `CLASS/SUBCLASS
 
 Routed tracks and vias are reported by [`get_pcb_net`](get_pcb_net.md). Items a footprint definition draws as its template are not listed; items a placed component draws are, in board coordinates, with the component's `refdes`.
 
-Responses are token-bounded: the summary gives per-layer counts, filled area and extent. `detail="full"` adds each item, capped to 300 items sampled across the matched layers (with `truncated: true`).
+Responses are token-bounded: the summary gives per-layer counts, filled area and extent. `detail="full"` adds each item, capped to 300 items sampled across the matched layers; an item of more than 200 points (a large copper pour) gives its `extent` and `pointCount` instead of its contours. Either cap sets `truncated: true`.
 
 ## Input Parameters
 
@@ -58,6 +58,8 @@ interface BrdItem {
   height?: number;          // character height
   mirrored?: boolean;       // drawn mirror-imaged, as seen from the top (17.x and later)
   justify?: "left" | "center" | "right";
+  extent?: { minX: number; minY: number; maxX: number; maxY: number }; // in place of contours past 200 points
+  pointCount?: number;      // the points left out
 }
 ```
 

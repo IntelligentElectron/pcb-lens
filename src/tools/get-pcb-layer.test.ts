@@ -41,6 +41,16 @@ describe.skipIf(!existsSync(BBB))("get_pcb_layer on an Allegro .brd", () => {
     const r = (await queryLayer(BBB, "PACKAGE_GEOMETRY", { detail: "full" })) as LayerQueryResult;
     expect(r.items).toHaveLength(300);
     expect(r.truncated).toBe(true);
+    // copper pours past 200 points give their extent instead of their contours
+    const copper = (await queryLayer(BBB, "^ETCH/LYR2_GND$", {
+      detail: "full",
+    })) as LayerQueryResult;
+    const pour = copper.items!.find((i) => i.pointCount);
+    expect(pour).toMatchObject({ kind: "shape", extent: expect.any(Object) });
+    expect(pour!.contours).toBeUndefined();
+    expect(
+      copper.items!.every((i) => (i.contours ?? []).reduce((n, c) => n + c.points.length, 0) <= 200)
+    ).toBe(true);
   });
 
   it("lists the layers holding items in get_pcb_metadata", async () => {

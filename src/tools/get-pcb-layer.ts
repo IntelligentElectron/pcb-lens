@@ -22,10 +22,12 @@ export interface LayerQueryResult {
   units: "MICRON";
   itemCount: number;
   layers: LayerSummary[];
-  items?: BrdItem[]; // detail="full" only, capped
+  // detail="full" only, capped; an item past 200 points gives its extent and point count instead of contours
+  items?: Array<BrdItem & { extent?: LayerSummary["extent"]; pointCount?: number }>;
   truncated?: boolean;
 }
 
+const MAX_ITEM_POINTS = 200;
 const KIND_KEY = {
   line: "lines",
   rectangle: "rectangles",
@@ -109,7 +111,14 @@ export const queryLayer = async (
   };
   if (opts.detail === "full") {
     const capped = capRowsStratified(items, MAX_COORD_ROWS, (it) => it.layer);
-    result.items = capped.rows;
+    // a pour can hold thousands of vertices: past the budget an item keeps its extent instead
+    result.items = capped.rows.map((it) => {
+      const points = it.contours?.reduce((n, c) => n + c.points.length, 0) ?? 0;
+      if (points <= MAX_ITEM_POINTS) return it;
+      result.truncated = true;
+      const { contours: _, ...rest } = it;
+      return { ...rest, extent: extentOf(it), pointCount: points };
+    });
     if (capped.truncated) result.truncated = true;
   }
   return result;

@@ -8,7 +8,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { at, readBrdInfo, type BrdInfo } from "./allegro-brd.js";
-import { walkBrdBlocks } from "./allegro-blocks.js";
+import { TABLE_ITEM, walkBrdBlocks } from "./allegro-blocks.js";
 import { FIELD_ENUMS } from "./allegro-brd.js";
 import { DRC_MODES } from "./allegro-drc-modes.js";
 import { className, PROPERTY_NAMES, subclassName } from "./allegro-names.js";
@@ -378,7 +378,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   const padstack = (key: number) => {
     const p = padstackAt(key);
     if (p === undefined) return undefined;
-    const layers = v16 ? w[p + 12] >>> 16 : w[p + 11];
+    const layers = v16 ? w[p + 12] >>> 16 : w[p + 11] & 0xffff;
     return {
       drill: um(i32(p + O.drill)),
       first: w[p] >>> 24,
@@ -395,12 +395,12 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   // Properties 0x03: [03][0][u16 code][key][previous, the owner after the oldest] then, from
   // g14.04, [owner][subtype, flags, u16 length][0] and the value; in 16.x [subtype ...] follows the
   // previous word. An owner's chain can pass through its 0x30 texts. User codes (16000 and up)
-  // are rows of the 0x36 table of discriminator 2: 108-byte rows (100 in 16.x) from word 9 (8 in
+  // are rows of the 0x36 table of discriminator 2: 108-byte rows (100 or 88 in 16.x) from word 9 (8 in
   // g14.04, 7 in 16.x), each starting with a 32-byte name.
   const dictionary = starts.find((i) => type(i) === 0x36 && ((w[i] >>> 16) & 0xffff) === 2);
   const userName = (code: number) => {
     if (dictionary === undefined) return undefined;
-    const row = (dictionary + (v16 ? 7 : v174 ? 9 : 8)) * 4 + (code - 16000) * (v16 ? 100 : 108);
+    const row = (dictionary + (v16 ? 7 : v174 ? 9 : 8)) * 4 + (code - 16000) * TABLE_ITEM[2][f];
     if (row + 32 > buf.length || code - 16000 >= w[dictionary + (v16 ? 3 : 4)]) return undefined;
     return buf.toString("latin1", row, buf.indexOf(0, row)).slice(0, 32) || undefined;
   };
@@ -774,17 +774,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       const owner = footprint ? mechanical(w[i + 3]) : w[i + 3] === tail(t === 0x14 ? 4 : 7);
       if (!owner) continue;
       if (t === 0x24) {
-        // a rectangle holds its corners directly: words 6-9 from g14.04, 5-8 before
-        const r = i + (v16 ? 5 : 6);
-        const [x1, y1, x2, y2] = [0, 1, 2, 3].map((j) => um(i32(r + j)));
-        const corners: [number, number][] = [
-          [x1, y1],
-          [x2, y1],
-          [x2, y2],
-          [x1, y2],
-          [x1, y1],
-        ];
-        for (let j = 0; j < 4; j++) out.push({ start: corners[j], end: corners[j + 1], width: 0 });
+        const { points } = rectangle(i);
+        for (let j = 0; j < 4; j++) out.push({ start: points[j], end: points[j + 1], width: 0 });
       } else out.push(...segments(i, w[i + (t === 0x14 ? O.graphicSeg : O.shapeSeg)]));
     }
     return out;
@@ -826,9 +817,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     return f;
   };
   const padstacks: BrdPadstack[] = list(6, 0x1c).map((p) => {
-    const drill = um(i32(p + O.drill));
-    const first = w[p] >>> 24;
-    const count = v16 ? w[p + 12] >>> 16 : w[p + 11] & 0xffff;
+    const { drill, first, layers: count } = padstack(w[p + 1])!;
     const slots = p + psHeader;
     const fixed = (k: number) => (v16 ? undefined : figure(slots + k * compWords));
     const perConductor = (layer: number, k: number) =>
