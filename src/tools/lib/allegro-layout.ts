@@ -98,6 +98,7 @@ export interface BrdVia {
   y: number;
   drill: number;
   span: string; // DRILL_<first>-<last>, 1-based copper layers, as IPC-2581 exports name them
+  padstack?: string; // its padstack's name; get_pcb_footprint gives the pads
 }
 
 export interface BrdNet {
@@ -669,6 +670,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
           y: um(i32(i + O.viaX + 1)),
           drill: ps?.drill ?? 0,
           span: `DRILL_${first + 1}-${Math.max(last, first) + 1}`,
+          ...(ps ? { padstack: str(w[padstackAt(w[i + O.viaPadstack])! + 3]) } : {}),
         });
       } else if (t === 0x05) {
         let track: BrdTrack | undefined;
