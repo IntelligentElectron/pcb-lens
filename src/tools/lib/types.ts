@@ -82,6 +82,8 @@ export interface DesignOverview {
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
+  /** Allegro .brd only: named design-level properties */
+  properties?: Record<string, string>;
   /** Allegro .brd only: every CLASS/SUBCLASS layer holding drawn items, with their count */
   drawingLayers?: Array<{ name: string; itemCount: number }>;
   /** Board outline, when the file has one */
@@ -165,6 +167,11 @@ export interface ComponentResult {
   /** Per-pin pad coordinates. Only included when detail="full" is requested. */
   padColumns?: ["pin", "x", "y", "shapeIndex"];
   padRows?: PadRow[];
+  /** Allegro .brd only: padstack names the pads use (get_pcb_footprint describes them) */
+  padstacks?: string[];
+  /** Allegro .brd only: each pin's logical name and gate (slot), sorted by pin */
+  pinFunctionColumns?: ["pin", "pinName", "gate"];
+  pinFunctions?: Array<[string, string, string]>;
   /** True when a detail array was capped to stay within the response budget. */
   truncated?: boolean;
 }
@@ -303,6 +310,8 @@ export interface QueryNetResult {
   totalVias?: number;
   totalTraceLength?: number;
   layersUsed: string[];
+  /** Allegro .brd only: the net's named properties (voltage, constraint sets, ...) */
+  properties?: Record<string, string>;
   /**
    * True when data was truncated to stay within the response budget: either the
    * detail="full" viaRows array or the connected-pin list (capped before being

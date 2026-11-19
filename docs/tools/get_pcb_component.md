@@ -37,6 +37,9 @@ interface ComponentResult {
   padShapes?: PadShape[];           // Unique pad shapes, referenced by index from padRows
   padColumns?: ["pin", "x", "y", "shapeIndex"]; // detail="full" only
   padRows?: PadRow[];               // [pin, x, y, shapeIndex], sorted by pin; detail="full" only (capped)
+  padstacks?: string[];             // .brd only: padstacks the pads use (get_pcb_footprint describes them)
+  pinFunctionColumns?: ["pin", "pinName", "gate"]; // .brd only
+  pinFunctions?: [string, string, string][];       // .brd only: each pin's logical name and gate (slot), sorted by pin
   truncated?: boolean;              // true when padRows was capped to the response budget
 }
 
@@ -193,4 +196,4 @@ Response:
 - `padCount` and `padShapes` are present whenever pad geometry resolves. The per-pin `padColumns`/`padRows` coordinates are returned only with `detail="full"`, sorted by pin, and capped to 300 rows (with `truncated: true`) to keep responses token-bounded. Pad shapes defined as a polygon/contour are reported by their bounding box (`shape: "polygon"`).
 - The `characteristics` record contains key-value pairs from the BOM (varies by design, common keys include VALUE, TOL, VOLTAGE).
 - `mountType` and `description` may be absent if the IPC-2581 file omits them.
-- For an Allegro `.brd`, everything comes from the board's own database: `characteristics` holds `DEVICE_TYPE` and `COMP_VALUE`, `description` is the device type, `mountType` is `THMT` when a pad is drilled and `SMT` otherwise, and each pad's shape is its padstack pad on the component's side (rounded and chamfered rectangles as `rect`, shape symbols and other outlines as `polygon` with their bounding box). Components without a refdes, such as fiducials, are not listed
+- For an Allegro `.brd`, everything comes from the board's own database: `characteristics` holds `DEVICE_TYPE`, `COMP_VALUE` and every named property of the part, the component and its placed footprint (`PART_NUMBER`, `DEVICE_CLASS`, user properties by their own names, ...), `pinFunctions` gives each pin's logical name (VDD, PA3) and gate, `padstacks` the padstacks its pads use, `description` is the device type, `mountType` is `THMT` when a pad is drilled and `SMT` otherwise, and each pad's shape is its padstack pad on the component's side (rounded and chamfered rectangles as `rect`, shape symbols and other outlines as `polygon` with their bounding box). Components without a refdes, such as fiducials, are not listed

@@ -90,6 +90,7 @@ const getBrdOverview = async (filePath: string): Promise<DesignOverview | ErrorR
     })),
     componentCount: components.length,
     netCount: nets.filter((n) => n.name).length,
+    ...(brd.layout.properties ? { properties: brd.layout.properties } : {}),
     drawingLayers: [...counts]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, itemCount]) => ({ name, itemCount })),

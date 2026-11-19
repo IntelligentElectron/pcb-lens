@@ -26,6 +26,7 @@ interface DesignOverview {
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
+  properties?: Record<string, string>; // .brd only: named design-level properties
   drawingLayers?: Array<{ name: string; itemCount: number }>; // .brd only: CLASS/SUBCLASS layers holding lines, shapes or text
   outline?: BoardOutline;     // absent when the file has no outline
   sections?: SectionInfo[];   // XML only; sorted by lineCount descending

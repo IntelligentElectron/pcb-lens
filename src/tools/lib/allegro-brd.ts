@@ -178,7 +178,7 @@ const lastSaved = (buf: Buffer, start: number, layout: Layout) => {
 
 // 0x03 field codes, verified by matching values and field order against Constraint Manager XML
 // of the same boards (docs/allegro-brd-format.md section 7)
-const FIELD_NAMES: Record<number, string> = {
+export const FIELD_NAMES: Record<number, string> = {
   0x3a: "TOPOLOGY_TEMPLATE_REVISION",
   0x3c: "STUB_LENGTH",
   0x49: "PROPAGATION_DELAY",
@@ -265,7 +265,7 @@ const FIELD_NAMES: Record<number, string> = {
 };
 // Integer fields that hold an enumeration, as the values Constraint Manager XML writes; codes
 // not seen yet are reported as numbers
-const FIELD_ENUMS: Record<number, Record<number, string>> = {
+export const FIELD_ENUMS: Record<number, Record<number, string>> = {
   0x6d: { 0: "INCLUDE", 1: "IGNORE" },
   0x78: { 0: "MIN_TREE", 1: "MIN_DAISY_CHAIN", 5: "TEMPLATE", 6: "POWER_AND_GROUND" },
   0xe6: { 0: "DO_NOT_VERIFY", 1: "VERIFY" },

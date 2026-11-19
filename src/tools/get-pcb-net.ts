@@ -101,6 +101,7 @@ const queryBrdNet = async (
         layersUsed: [...layers].sort(),
       };
       if (cappedPins.truncated) result.truncated = true;
+      if (net.properties) result.properties = net.properties;
       if (routing.length) result.routing = routing;
       if (drills.length) {
         result.viaCounts = drills;

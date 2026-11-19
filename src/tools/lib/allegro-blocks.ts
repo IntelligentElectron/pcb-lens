@@ -58,7 +58,7 @@ const FIXED: Record<number, Array<number | undefined>> = {
 };
 
 // 0x36 table item sizes in bytes, by discriminator (byte 2), per family as above
-const TABLE_ITEM: Record<number, number[]> = {
+export const TABLE_ITEM: Record<number, number[]> = {
   0x02: r([88, 2], [100, 3], [108, 6]),
   0x03: r([32, 5], [64, 1], [68, 5]),
   0x05: r([28, 7], [32, 4]),

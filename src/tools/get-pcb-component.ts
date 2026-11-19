@@ -20,6 +20,7 @@ import { attr, numAttr, loadAllLines, streamAllLines } from "./lib/xml-utils.js"
 import {
   capDetailRows,
   MAX_COORD_ROWS,
+  MAX_PIN_ROWS,
   extractMicronFactor,
   extractMicronFactorFromLines,
   validateFile,
@@ -66,6 +67,13 @@ const queryBrdComponent = async (
   const characteristics: Record<string, string> = {};
   if (c.deviceType) characteristics.DEVICE_TYPE = c.deviceType;
   if (c.value) characteristics.COMP_VALUE = c.value;
+  for (const [k, val] of Object.entries(c.properties ?? {}))
+    if (k !== "VALUE" && !(k in characteristics)) characteristics[k] = val;
+  const pinFunctions = c.pads
+    .filter((p) => p.pinName || p.gate)
+    .map((p): [string, string, string] => [p.pin, p.pinName ?? "", p.gate ?? ""])
+    .sort((a, b) => byPin(a[0], b[0]));
+  const padstacks = [...new Set(c.pads.flatMap((p) => p.padstack ?? []))].sort();
   const result: ComponentResult = {
     refdes: c.refdes,
     units: "MICRON",
@@ -84,7 +92,15 @@ const queryBrdComponent = async (
     netRows,
     padCount: padRows.length,
     padShapes,
+    ...(padstacks.length ? { padstacks } : {}),
+    ...(pinFunctions.length
+      ? {
+          pinFunctionColumns: ["pin", "pinName", "gate"],
+          pinFunctions: pinFunctions.slice(0, MAX_PIN_ROWS),
+        }
+      : {}),
   };
+  if (pinFunctions.length > MAX_PIN_ROWS) result.truncated = true;
   if (detail === "full") {
     const capped = capDetailRows(padRows, MAX_COORD_ROWS);
     result.padColumns = ["pin", "x", "y", "shapeIndex"];

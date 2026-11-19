@@ -548,7 +548,7 @@ Flag bit 0x8000 is set on routable layers; layers without it are the planes (the
 | 0x2B definition (list 9) | 2 | 2 | footprint name (string id) |
 | | 8 | 8 | next definition |
 | | 9 | 9 | first 0x2D instance |
-| 0x2D instance | 0 | 0 | byte 2: side, 1 bottom |
+| 0x2D instance | 0 | 0 | byte 2: side: 0 top; 1 (to g14.09) or 3 (from g14.14) bottom; 2 an embedded part facing down, on the copper layer in byte 3 |
 | | 2 | 2 | next instance; the chain ends at its definition |
 | | 10 | 3 | 0x07 instance data |
 | | 7 | 6 | rotation |
@@ -559,7 +559,13 @@ Flag bit 0x8000 is set on routable layers; layers without it are the planes (the
 | 0x06 part | 3 | 3 | device type (string id) |
 | | 8 | 8 | first 0x03 field; fields chain through word 2 back to the part |
 
-A field is `[0x03 | code << 16][key][next]`, then from g14.04 two more words, then `[subtype | length << 16]` and the value; subtype 0x68 is a string. The part's value is its field of code 2. A part without one has no value; KiCad then shows the value text printed on the board instead. The component's rotation is reported as stored for a top-side part and as `360 - rotation` for a bottom-side one, matching the IPC-2581 export.
+A field is `[0x03 | code << 16][key][next]`, then from g14.04 two more words, then `[subtype | length << 16]` and the value; subtype 0x68 is a string. The part's value is its field of code 2. A part without one has no value; KiCad then shows the value text printed on the board instead. The component's rotation is reported as stored for a top-side part and as `360 - rotation` for a bottom-side one, matching the IPC-2581 export. Any side other than 0 is mirrored: 23.1 and 25.1 boards mark bottom parts 3, not 1.
+
+### Properties, pin names and gates (from g14.04)
+
+A property is a 0x03 block: `[03][0][u16 code][key][previous][owner][subtype, flags, u16 length][0]`, then the value: subtype 0x68 a text, 0x6A a string id, 0x66 a length, 0x64 an integer, 0x65 none (present means set). An owner's head word names its newest property, each property names the previous one, and the oldest names the owner; the chain can pass through the owner's 0x30 texts. Heads: 0x06 part word 8 (also in 16.x), 0x07 instance word 9, 0x2D and 0x2B word 13, 0x1B net word 9, 0x1C padstack word 6, and the design at header word 0x90 (0x11C from g15.00), owned by the list sentinel one word before. Codes 16000 and up are user properties, named by the rows of the 0x36 table of discriminator 2 (108-byte rows from word 9, word 8 in g14.04, each starting with a 32-byte name). Properties are reported by name; codes with no known name are left out.
+
+A placed pad's word 12 is its logical pin (0x08), whose word 5 is the pin's 0x11 name record (the name in word 2). Its word 10 is its 0x12 binding, which chains through word 2 to its 0x10 gate instance; the slot name is word 7 (6 in g14.04).
 
 ### Pads
 
@@ -570,7 +576,10 @@ A field is `[0x03 | code << 16][key][next]`, then from g14.04 two more words, th
 | | 9 | 9 | 8 | 0x0D pad definition |
 | 0x0D pad definition | 2 | 2 | 2 | pin name (string id) |
 | | 4, 5 | 5, 6 | 4, 5 | x, y in the footprint's frame |
-| | 6 | 7 | 6 | 0x1C padstack |
+| | 6 | 7 | 6 | 0x1C padstack, or a 0x2F reference whose word 2 is the 0x1C |
+| | 10 | 11 | 9 | rotation in millidegrees |
+
+A footprint definition (0x2B) lists its pins from word 10, chained through the pin's word 3 (from g14.04), and draws its template (silkscreen, assembly, place bound) as items owned by it, in its own frame; its extent is words 4 to 7. 16.x footprint pins are read through a placed instance's pads.
 
 A pad's board position is the footprint position plus its local offset rotated by the footprint rotation, with x negated first for a bottom-side footprint.
 
@@ -586,7 +595,11 @@ A pad's board position is the footprint position plus its local offset rotated b
 | Words per component | 9 | 7 | 7 |
 | Component layout | [shape, ?, width, height, ...] | [?, shape, width, height, ...] | same as 16.5 |
 
-The top byte of word 0 is the first copper layer of the span. The pad of copper layer `l` is component `fixed + perLayer × l + 2` (antipad and thermal relief come first). These sizes account for the whole block on 17.x boards (`48 + 21 × 9 + layers × 36` words) and on 16.x boards (`21 + (11 + 3 × layers) × 7`, or `20 + (10 + 3 × layers) × 7` before 16.5). Shape codes are those of the KiCad notes; rounded and chamfered rectangles are reported as `rect`.
+The top byte of word 0 is the first copper layer of the span. Copper layer `l` has the antipad, thermal relief and pad as components `fixed + perLayer × l` + 0, 1 and 2. These sizes account for the whole block on 17.x boards (`48 + 21 × 9 + layers × 36` words) and on 16.x boards (`21 + (11 + 3 × layers) × 7`, or `20 + (10 + 3 × layers) × 7` before 16.5).
+
+**Confidence: VERIFIED** on BeagleBone Black: every padstack's drill and plating (116 holes) and its regular, antipad and thermal figure on every layer (2,280 figures) equal the PadStackDefs of the board's IPC-2581 export, which writes ovals with the long side as width. The plating bit also names every non-plated padstack across the corpus by its name (MTG, NPTH, NP...).
+
+From g14.04 a component is `[figure | corners << 16][0][width][height][radius][offset x][offset y][flash name][0x28 outline]`. Figures: 0x02 circle, 0x03 octagon, 0x05 square, 0x06 rectangle, 0x0B oblong long in x, 0x0C oblong long in y, 0x16 custom (the outline is the ring of the 0x28 in word 8, in the pad's frame), 0x17 flash (same), 0x19 donut (word 4 the inner diameter), 0x1B rounded rectangle and 0x1C chamfered rectangle (word 4 the radius or chamfer, bits 16 to 19 the corners: lower left, lower right, upper right, upper left). Fixed components 14 to 17 are the soldermask top and bottom and the pastemask top and bottom. The header also holds byte 2 of word 7, whose bit 0x20 marks a plated hole; a slot's width and height in words 19 and 20; and the drill symbol (width, height, figure, four characters) from word 23 (30 from g15.00). In placed pads, rounded and chamfered rectangles are reported as `rect`.
 
 ### Nets
 

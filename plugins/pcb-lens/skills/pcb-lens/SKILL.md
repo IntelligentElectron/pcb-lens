@@ -99,6 +99,14 @@ List what is drawn on the layers of an Allegro .brd whose CLASS/SUBCLASS name ma
 - `--within` (string). Only items overlapping this box: 'minX,minY,maxX,maxY' in microns.
 - `--detail` (string; default "summary"). 'summary' (default) gives counts, filled area and extent per layer. 'full' adds every item's geometry and text, sampled across layers when there are very many.
 
+### get_pcb_footprint
+
+Look up footprint (package symbol) and padstack definitions of an Allegro .brd by name pattern. A footprint gives its kind, the components placed with it, its pin count, the padstacks its pins use, its extent and properties; detail='full' adds each pin's position, rotation and padstack in the footprint's own frame, and its template drawing (silkscreen, assembly, place bound). A padstack gives its drill, slot, plating and type (smd, through, blind/buried), the pad, antipad and thermal figure on each copper layer, the soldermask and pastemask openings, custom pad outlines and the drill symbol. get_pcb_component gives a component's footprint name (packageRef) and each pad's padstack.
+
+- `--file` (required; string; may be the first argument). Path to an Allegro .brd file (Allegro 16.0 to 25.1).
+- `--pattern` (required; string). Case-insensitive regex on footprint and padstack names (e.g. '^SOIC', 'QFN48', 'VIA').
+- `--detail` (string; default "summary"). 'summary' (default) describes each definition. 'full' adds footprint pins and template drawing, capped.
+
 ### get_constraints
 
 Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, BrdStackup, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.
