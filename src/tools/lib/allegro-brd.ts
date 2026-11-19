@@ -5,19 +5,42 @@
  * and 0x1E electrical constraint sets, 0x2C tables (net classes, match groups,
  * diff pairs, regions) with their 0x37 member arrays and 0x26 links, and the
  * 0x36 cross-section. Layouts and confidence levels are in
- * docs/allegro-brd-format.md. Allegro 17.x files only.
+ * docs/allegro-brd-format.md. Layout families g14.04 (Allegro 17.2) and later.
  */
 
 import { walkBrdBlocks } from "./allegro-blocks.js";
 import type { ConstraintObject } from "./types.js";
 
+/**
+ * Layout families, oldest first, named by the generation and revision bytes of the magic word.
+ * The family fixes the header and every block layout; one Allegro release can write several.
+ */
+export const LAYOUTS = [
+  "g13.00",
+  "g13.04",
+  "g13.0C",
+  "g13.10",
+  "g13.15",
+  "g14.04",
+  "g14.09",
+  "g14.14",
+  "g15.00",
+  "g15.02",
+  "g16.01",
+] as const;
+export type Layout = (typeof LAYOUTS)[number];
+/** Position of a family in LAYOUTS, for "this family or later" tests. */
+export const at = (l: Layout) => LAYOUTS.indexOf(l);
+
 export interface BrdInfo {
-  version: string; // "17.2"
+  version: string; // release that last saved the file: "17.2", "23.1", ...
+  layout: Layout;
   units: string; // board units: "mm", "mils", ...
   mmPerUnit: number; // mm per internal unit
   strings: Map<number, string>;
   bodyWord: number; // word index of the first object block
   listBase: number; // byte offset of the header list descriptors
+  streamEnd: number; // byte offset where the blocks end and the attachment chain starts
 }
 
 const UNITS: Record<number, [string, number]> = {
@@ -28,38 +51,87 @@ const UNITS: Record<number, [string, number]> = {
   5: ["um", 0.001],
 };
 
-const VERSIONS: Record<number, string> = { 0x13: "16", 0x14: "17", 0x15: "18" };
-const RELEASES: Record<number, string> = {
-  0x1300: "16.0",
-  0x1304: "16.2",
-  0x1305: "16.2",
-  0x130c: "16.4",
-  0x1310: "16.5",
-  0x1315: "16.6",
-  0x1404: "17.2",
-  0x1409: "17.4",
-  0x1415: "17.5",
-  0x1500: "18.0",
+// Family of each known `magic >>> 8`; generation 0x13 by revision range
+const MAGICS: Record<number, Layout> = {
+  0x1404: "g14.04",
+  0x1405: "g14.04",
+  0x1406: "g14.04",
+  0x1407: "g14.04",
+  0x1409: "g14.09",
+  0x140e: "g14.09",
+  0x1411: "g14.09",
+  0x1412: "g14.09",
+  0x1414: "g14.14",
+  0x1415: "g14.14",
+  0x1417: "g14.14",
+  0x1500: "g15.00",
+  0x1502: "g15.02",
+  0x1601: "g16.01",
+};
+const g13 = (rev: number): Layout =>
+  rev < 0x04
+    ? "g13.00"
+    : rev < 0x0c
+      ? "g13.04"
+      : rev < 0x10
+        ? "g13.0C"
+        : rev < 0x15
+          ? "g13.10"
+          : "g13.15";
+// Release named when the file holds no last-save record
+const RELEASE: Record<Layout, string> = {
+  "g13.00": "16.0",
+  "g13.04": "16.2",
+  "g13.0C": "16.4",
+  "g13.10": "16.5",
+  "g13.15": "16.6",
+  "g14.04": "17.2",
+  "g14.09": "17.4",
+  "g14.14": "17.4",
+  "g15.00": "23.1",
+  "g15.02": "25.1",
+  "g16.01": "25.1",
 };
 
-/** Header and string table, or an error string; `majors` are the releases whose layout is read. */
-export const readBrdInfo = (buf: Buffer, majors = ["17"]): BrdInfo | string => {
+// Header offsets, by header layout: g14 (generations 0x13 and 0x14), g15 (g15.00), g16 (g15.02, g16.01)
+const HEADERS = {
+  g14: { lists: 0x3c, units: 0x180, divisor: 0x26c, strings: 0x194, end: 0x18c },
+  g15: { lists: 0x60, units: 0x18c, divisor: 0x26c, strings: 0x34, end: 0x28 },
+  g16: { lists: 0x60, units: 0x1ac, divisor: 0x28c, strings: 0x34, end: 0x28 },
+};
+const header = (l: Layout) =>
+  HEADERS[at(l) <= at("g14.14") ? "g14" : l === "g15.00" ? "g15" : "g16"];
+
+/**
+ * Header and string table, or an error string. `layout` overrides the family the magic names, to
+ * try a family for a magic no file has shown yet.
+ */
+export const readBrdInfo = (buf: Buffer, layout?: Layout): BrdInfo | string => {
   if (buf.length < 0x1200 + 4) return "File too small for an Allegro board";
   const magic = buf.readUInt32LE(0);
-  const major = VERSIONS[magic >>> 16];
-  if (!major) return `Unrecognised Allegro magic 0x${magic.toString(16)}`;
-  const version = RELEASES[(magic >>> 8) & 0xffff] ?? `${major}.x`;
-  if (!majors.includes(major))
-    return `Allegro ${version} binary layout is not decoded (${majors.map((m) => `${m}.x`).join(", ")} only)`;
-
-  // 18.x moves the list descriptors, units and string count; the divisor stays
-  const v18 = major === "18";
-  const unitCode = buf.readUInt8(v18 ? 0x18c : 0x180);
+  const gen = magic >>> 16;
+  layout ??= gen === 0x13 ? g13((magic >>> 8) & 0xff) : MAGICS[magic >>> 8];
+  if (!layout) {
+    // a revision no file has shown yet: keep the first family of its generation that frames it
+    for (const l of LAYOUTS.filter((l) => parseInt(l.slice(1, 3), 16) === gen)) {
+      const info = readBrdInfo(buf, l);
+      const w = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >>> 2);
+      if (
+        typeof info === "object" &&
+        !(buf.byteOffset % 4) &&
+        typeof walkBrdBlocks(w, info) === "object"
+      )
+        return info;
+    }
+    return `Allegro database 0x${(magic >>> 8).toString(16)} has no known layout`;
+  }
+  const h = header(layout);
+  const unitCode = buf.readUInt8(h.units);
   if (!UNITS[unitCode]) return `Unknown Allegro board units code ${unitCode}`;
   const [units, mmPer] = UNITS[unitCode];
-  const divisor = buf.readUInt32LE(0x26c); // internal units per board unit
+  const divisor = buf.readUInt32LE(h.divisor); // internal units per board unit
   if (!divisor) return "Allegro board header has a zero units divisor";
-  const count = buf.readUInt32LE(v18 ? 0x34 : 0x194);
+  const count = buf.readUInt32LE(h.strings);
   const strings = new Map<number, string>();
   let p = 0x1200;
   for (let i = 0; i < count && p + 4 < buf.length; i++) {
@@ -69,14 +141,39 @@ export const readBrdInfo = (buf: Buffer, majors = ["17"]): BrdInfo | string => {
     strings.set(id, buf.toString("latin1", p + 4, end));
     p += 4 + ((end - p - 4 + 1 + 3) & ~3); // NUL-terminated, padded to 4 bytes
   }
+  // 0 on files without attachments: the blocks run to the end of the file
+  const end = buf.readUInt32LE(h.end);
+  const streamEnd = end ? end - 1 : buf.length & ~3;
   return {
-    version,
+    version: lastSaved(buf, streamEnd, layout) ?? RELEASE[layout],
+    layout,
     units,
     mmPerUnit: mmPer / divisor,
     strings,
     bodyWord: p >>> 2,
-    listBase: v18 ? 0x60 : 0x3c,
+    listBase: h.lists,
+    streamEnd,
   };
+};
+
+/**
+ * The release in the ALLEGRO_DESIGN_WAS_LAST_SAVED attachment ("allegro 17.4 S037 - 3/2/2023").
+ * Attachments run from the end of the blocks to the end of the file: [3B][0][?][0][payload
+ * length], a 128-byte name and a 32-byte class, a time and two more words, then the payload
+ * padded to 4 bytes; the header is one word shorter before g14.04.
+ */
+const lastSaved = (buf: Buffer, start: number, layout: Layout) => {
+  const head = at(layout) < at("g14.04") ? 176 : 180;
+  let p = start;
+  while (p > 0 && p + head <= buf.length && buf[p] === 0x3b) {
+    const n = buf.readUInt32LE(p + 4);
+    if (buf.toString("latin1", p + 8, buf.indexOf(0, p + 8)) === "ALLEGRO_DESIGN_WAS_LAST_SAVED") {
+      const line = buf.toString("latin1", p + head, Math.min(p + head + n, buf.length));
+      return line.match(/^\S+ (\d+\.\d+)\b/)?.[1];
+    }
+    p += head + ((n + 3) & ~3);
+  }
+  return undefined;
 };
 
 // 0x03 field codes, verified by matching values and field order against Constraint Manager XML
@@ -223,7 +320,7 @@ const newObject = (name: string): ConstraintObject => ({
 });
 
 /**
- * Binary constraint sections of a 17.x board, keyed by section name
+ * Binary constraint sections of a g14.04 or later board, keyed by section name
  * (BrdPhysicalCSet, BrdElectricalCSet, BrdNetClass, BrdMatchGroup, BrdDiffPair,
  * BrdRegion, BrdXnet, BrdBus, BrdNet, BrdStackup), or an error string when the board's object
  * stream cannot be walked. Lengths are in mm.
@@ -232,6 +329,8 @@ export const readBrdConstraints = (
   buf: Buffer,
   info: BrdInfo
 ): Record<string, ConstraintObject[]> | string => {
+  if (at(info.layout) < at("g14.04"))
+    return `Allegro ${info.version} constraint blocks are not decoded (17.2 and later only)`;
   if (buf.byteOffset % 4) buf = Buffer.from(buf); // shortcut: assumes a little-endian host, as all supported targets are
   const w = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >>> 2);
   const n = w.length;
@@ -375,20 +474,23 @@ export const readBrdConstraints = (
     push(`Brd${kind}`, obj);
   }
 
-  // Stackup: 0x36 substruct 0x10 [type][key][next][0][?][layers][last slot][0], then last slot + 1
-  // records of 108 bytes, empty ones all zero; doubles are two 32-bit words, high word first,
-  // thickness in metres
+  // Stackup: 0x36 substruct 0x10 [type][key][next][0][capacity][layers][last slot][0], one more 0
+  // from g14.09, then last slot + 1 records of 108 bytes (112 from g15.00, 4 more before the
+  // thickness), empty ones all zero; doubles are two 32-bit words, high word first, in metres
   const dbl = (p: number) => {
     const b = Buffer.alloc(8);
     b.writeUInt32BE(buf.readUInt32LE(p), 0);
     b.writeUInt32BE(buf.readUInt32LE(p + 4), 4);
     return b.readDoubleBE(0);
   };
-  const readLayers = (i: number, header: number) => {
+  const header = at(info.layout) >= at("g14.09") ? 9 : 8;
+  const row = at(info.layout) >= at("g15.00") ? 28 : 27;
+  const x = row === 28 ? 4 : 0; // the thickness and later fields move by one word
+  const readLayers = (i: number) => {
     const count = w[i + 5];
     const slots = w[i + 6] + 1;
-    if (count < 3 || slots < count || slots > 256 || i + header + 27 * slots > n) return undefined;
-    const layers = Array.from({ length: slots }, (_, j) => (i + header + 27 * j) * 4)
+    if (count < 3 || slots < count || slots > 256 || i + header + row * slots > n) return undefined;
+    const layers = Array.from({ length: slots }, (_, j) => (i + header + row * j) * 4)
       .filter((r) => str(buf.readUInt32LE(r + 40)) !== undefined)
       .map((r) => {
         const t = buf.readUInt32LE(r + 24);
@@ -397,10 +499,10 @@ export const readBrdConstraints = (
           type: LAYER_TYPES[t] ?? String(t),
           attributes: {
             CDS_LAYER_MATERIAL: str(buf.readUInt32LE(r + 40)) ?? "",
-            CDS_LAYER_THICKNESS: String(Number((dbl(r + 60) * 1000).toFixed(5))),
-            CDS_LAYER_DIELECTRIC_CONSTANT: String(Number(dbl(r + 84).toFixed(4))),
-            CDS_LAYER_LOSS_TANGENT: String(Number(dbl(r + 92).toFixed(5))),
-            CDS_LAYER_ELECTRICAL_CONDUCTIVITY: String(Number(dbl(r + 100).toPrecision(6))),
+            CDS_LAYER_THICKNESS: String(Number((dbl(r + x + 60) * 1000).toFixed(5))),
+            CDS_LAYER_DIELECTRIC_CONSTANT: String(Number(dbl(r + x + 84).toFixed(4))),
+            CDS_LAYER_LOSS_TANGENT: String(Number(dbl(r + x + 92).toFixed(5))),
+            CDS_LAYER_ELECTRICAL_CONDUCTIVITY: String(Number(dbl(r + x + 100).toPrecision(6))),
           },
         };
       });
@@ -409,8 +511,7 @@ export const readBrdConstraints = (
     return valid ? layers : undefined;
   };
   for (const i of crossSections) {
-    // the header is 8 words in 17.2 files and 9 in 17.4
-    const layers = readLayers(i, 8) ?? readLayers(i, 9);
+    const layers = readLayers(i);
     if (!layers) continue;
     const obj = newObject("PRIMARY");
     obj.crossSection = {

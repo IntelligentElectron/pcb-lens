@@ -215,13 +215,15 @@ describe("loadBrdLayout headers", () => {
   it("names a missing file and an unknown format", async () => {
     expect(await loadBrdLayout("/no/such/board.brd")).toMatch(/not found/);
     const file = await board("v19.brd", (b) => b.writeUInt32LE(0x00160000, 0));
-    expect(await loadBrdLayout(file)).toMatch(/Unrecognised Allegro magic/);
+    expect(await loadBrdLayout(file)).toMatch(/database 0x1600 has no known layout/);
     expect(await queryNet(file, "X")).toHaveProperty("error");
   });
 
-  it("reads an 18.x header: units at 0x18C, string count at 0x34, lists from 0x60", async () => {
+  it("reads a g15 header: units at 0x18C, string count at 0x34, lists from 0x60", async () => {
     const file = await board("v18.brd", (b) => {
       b.writeUInt32LE(0x00150000, 0);
+      b.writeUInt32LE(1, 0x14); // one object: the string
+      b.writeUInt32LE(0x1208 + 1, 0x28); // no blocks: the stream ends after the string table
       b.writeUInt32LE(1, 0x34);
       b.writeUInt8(3, 0x18c);
       b.writeUInt32LE(10000, 0x26c);
@@ -230,7 +232,12 @@ describe("loadBrdLayout headers", () => {
     });
     const brd = await loadBrdLayout(file);
     if (typeof brd === "string") throw new Error(brd);
-    expect(brd.info).toMatchObject({ version: "18.0", units: "mm", listBase: 0x60 });
+    expect(brd.info).toMatchObject({
+      version: "23.1",
+      layout: "g15.00",
+      units: "mm",
+      listBase: 0x60,
+    });
     expect(brd.info.strings.get(0x7d)).toBe("TOP");
     expect(brd.layout.components).toEqual([]);
   });

@@ -12,7 +12,7 @@ Responses are token-bounded by design: the per-pin pad coordinate array (`padRow
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x `.brd` file |
+| `file` | string | Yes | - | Path to an IPC-2581 XML file or an Allegro `.brd` file (Allegro 16.0 to 25.1) |
 | `refdes` | string | Yes | - | Exact component reference designator (e.g., `'U5'`, `'C10'`, `'R22'`) |
 | `detail` | `"summary"` \| `"full"` | No | `"summary"` | `summary` returns pad count + shapes only; `full` adds per-pin pad x/y coordinates (capped) |
 
