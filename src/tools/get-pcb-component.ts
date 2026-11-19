@@ -379,7 +379,7 @@ export const tool = defineTool({
   inputSchema: {
     file: z
       .string()
-      .describe("Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file"),
+      .describe("Path to an IPC-2581 XML file or an Allegro .brd file (Allegro 16.0 to 25.1)"),
     refdes: z.string().describe("Exact component reference designator (e.g., 'U5', 'C10', 'R22')"),
     detail: z
       .enum(["summary", "full"])

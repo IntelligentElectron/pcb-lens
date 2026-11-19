@@ -21,11 +21,11 @@ const SERVER_INSTRUCTIONS = `
 # PCB Lens MCP Server
 
 This server provides tools to query PCB layouts for physical design review.
-Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool, and Cadence Allegro 16.x, 17.x and 18.x .brd boards, read directly.
+Supports IPC-2581 XML files (RevA, RevB, RevC) exported from any compliant EDA tool, and Cadence Allegro .brd boards (Allegro 16.0 to 25.1), read directly.
 
 ## Workflow Guidance
 
-1. A Cadence Allegro 16.x, 17.x or 18.x .brd file can be passed straight to the query tools; \`export_cadence_ipc2581\` (Windows only) is needed only for other Allegro versions
+1. A Cadence Allegro .brd file (Allegro 16.0 to 25.1) can be passed straight to the query tools; \`export_cadence_ipc2581\` (Windows only) is needed only for older Allegro versions
 2. To access design constraints (trace width rules, spacing rules, net classes, stackup), call \`get_constraints\` on the .brd or .dcf file directly; \`export_cadence_constraints\` (Windows) produces a .tcfx file it also reads
 3. Use \`get_pcb_metadata\` first to understand the design structure, layer stackup, and size
 4. Use \`get_pcb_component\` to look up a single component by exact refdes

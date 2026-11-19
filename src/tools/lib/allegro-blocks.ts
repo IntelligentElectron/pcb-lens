@@ -1,156 +1,147 @@
 /**
  * The object stream of an Allegro .brd, read block by block. Blocks follow the string table back to
- * back up to the end of the file (or into all-zero padding); each starts with a type byte and has
- * a size set by its type and the file's release, some sizes growing with a count the block holds.
- * Every block of 75 board files (16.4 to 18.0) is walked this way to the exact end of its file. Sizes
- * and how they were found are in docs/allegro-brd-format.md (section 11).
+ * back up to the end-of-stream offset in the header (the last one is the 0x27 sector table); a chain
+ * of 0x3B attachments runs from there to the end of the file. Each block starts with a type byte and
+ * has a size set by its type and the file's layout family, some sizes growing with a count the
+ * block holds. A walk is accepted only when it ends exactly at the end-of-stream offset and, from
+ * g14.04, when its block count matches the header's object count.
  */
 
-import type { BrdInfo } from "./allegro-brd.js";
+import { at, LAYOUTS, type BrdInfo, type Layout } from "./allegro-brd.js";
 
-/** Release families whose block sizes differ, oldest first. */
-type Family = 0 | 1 | 2 | 3 | 4 | 5; // 16.4 and older, 16.5, 16.6, 17.2, 17.4 and 17.5, 18.x
-
-// Fixed block sizes in words, per family [16.4, 16.5, 16.6, 17.2, 17.4, 18]
+// Fixed block sizes in bytes, per family: g13.00 g13.04 g13.0C g13.10 g13.15 g14.04 g14.09 g14.14
+// g15.00 g15.02 g16.01
+const r = (...runs: Array<[number, number]>) => runs.flatMap(([size, n]) => Array(n).fill(size));
 const FIXED: Record<number, Array<number | undefined>> = {
-  0x01: [20, 20, 20, 21, 21, 21], // arc segment
-  0x04: [5, 5, 5, 5, 6, 6], // net assignment
-  0x05: [15, 15, 15, 17, 17, 17], // track
-  0x06: [9, 9, 9, 10, 10, 10], // part
-  0x07: [10, 10, 10, 12, 12, 12], // instance
-  0x08: [6, 6, 6, 8, 8, 8],
-  0x09: [11, 11, 11, 12, 13, 13],
-  0x0a: [17, 17, 17, 18, 19, 19], // DRC marker
-  0x0c: [14, 14, 14, 16, 17, 17],
-  0x0d: [10, 10, 10, 11, 12, 12], // pad definition
-  0x0e: [15, 15, 15, 17, 17, 17], // copper rectangle
-  0x0f: [14, 14, 14, 15, 16, 16],
-  0x10: [8, 8, 8, 9, 10, 10],
-  0x11: [6, 6, 6, 6, 7, 7],
-  0x12: [6, 7, 7, 7, 8, 8],
-  0x14: [8, 8, 8, 9, 9, 9], // graphic
-  0x15: [10, 10, 10, 11, 11, 11], // line segments
-  0x16: [10, 10, 10, 11, 11, 11],
-  0x17: [10, 10, 10, 11, 11, 11],
-  0x1b: [14, 14, 14, 15, 15, 15], // net
-  0x22: [11, 11, 11, 11, 11, 11],
-  0x23: [21, 21, 21, 21, 22, 22], // ratsnest connection
-  0x24: [13, 13, 13, 14, 14, 14], // rectangle
-  0x26: [5, 5, 5, 6, 7, 7],
-  0x28: [17, 17, 17, 19, 19, 19], // shape
-  0x2b: [18, 18, 18, 19, 19, 19], // footprint definition
-  0x2c: [9, 9, 9, 11, 11, 11], // table
-  0x2d: [16, 16, 16, 18, 18, 18], // placed footprint
-  0x2e: [9, 9, 9, 10, 10, 10],
-  0x2f: [undefined, undefined, undefined, 8, undefined, undefined], // seen on 17.2 only
-  0x30: [11, 11, 11, 14, 15, 15], // text
-  0x32: [19, 19, 19, 21, 21, 21], // placed pad
-  0x33: [18, 18, 18, 20, 20, 20], // via
-  0x34: [8, 8, 8, 9, 9, 9], // keepout
-  0x35: [31, 31, 31, 31, 31, 31], // file reference
-  0x38: [16, 16, 13, 13, 14, 14], // film
-  0x39: [15, 15, 15, 15, 15, 15],
-  0x3a: [4, 4, 4, 4, 5, 5],
+  0x01: r([80, 5], [84, 6]), // arc segment
+  0x04: r([20, 6], [24, 5]), // net assignment (branch)
+  0x05: r([60, 5], [68, 6]), // track
+  0x06: r([36, 5], [40, 6]), // part
+  0x07: r([40, 5], [48, 6]), // instance
+  0x08: r([24, 5], [32, 6]),
+  0x09: r([44, 5], [48, 1], [52, 5]),
+  0x0a: r([68, 5], [72, 1], [76, 5]), // DRC marker
+  0x0c: r([56, 5], [64, 1], [68, 5]),
+  0x0d: r([40, 5], [44, 1], [48, 5]), // pad definition
+  0x0e: r([60, 5], [68, 6]), // copper rectangle
+  0x0f: r([56, 5], [60, 1], [64, 4], [36, 1]),
+  0x10: r([32, 5], [36, 1], [40, 5]),
+  0x11: r([24, 6], [28, 5]),
+  0x12: r([24, 3], [28, 3], [32, 5]),
+  0x14: r([32, 5], [36, 6]), // graphic
+  0x15: r([40, 5], [44, 6]), // line segments
+  0x16: r([40, 5], [44, 6]),
+  0x17: r([40, 5], [44, 6]),
+  0x1b: r([56, 5], [60, 6]), // net
+  0x20: r([40, 6], [80, 5]), // hatch
+  0x22: r([40, 5], [44, 6]),
+  0x23: r([68, 2], [84, 4], [88, 5]), // ratsnest connection
+  0x24: r([52, 5], [56, 6]), // rectangle
+  0x26: r([20, 5], [24, 1], [28, 5]),
+  0x28: r([68, 5], [76, 6]), // shape
+  0x29: r([56, 11]),
+  0x2b: r([68, 2], [72, 3], [76, 6]), // footprint definition
+  0x2c: r([36, 5], [44, 6]), // table
+  0x2d: r([64, 5], [72, 6]), // placed footprint
+  0x2e: r([36, 5], [40, 6]),
+  0x2f: r([32, 11]), // padstack reference
+  0x30: r([44, 5], [56, 1], [60, 3], [64, 2]), // text
+  0x32: r([76, 5], [84, 6]), // placed pad
+  0x33: r([72, 5], [80, 6]), // via
+  0x34: r([32, 5], [36, 6]), // void
+  0x35: r([124, 11]), // file reference
+  0x37: r([428, 6]), // key array; sized by its capacity from g14.09
+  0x38: r([64, 4], [52, 2], [56, 5]), // film
+  0x39: r([60, 11]),
+  0x3a: r([16, 6], [20, 5]),
+  0x3e: r([0, 10], [44, 1]), // g16.01 only; unknown in g15.02
 };
 
-// 0x03 field payloads in words for a type byte whose length half is zero
-const FIELD_WORDS: Record<number, number> = {
-  0x64: 1,
-  0x65: 0,
-  0x66: 1,
-  0x67: 1,
-  0x69: 2,
-  0x6a: 1,
+// 0x36 table item sizes in bytes, by discriminator (byte 2), per family as above
+const TABLE_ITEM: Record<number, number[]> = {
+  0x02: r([88, 2], [100, 3], [108, 6]),
+  0x03: r([32, 5], [64, 1], [68, 5]),
+  0x05: r([28, 7], [32, 4]),
+  0x06: r([208, 5], [8, 6]),
+  0x08: r([32, 5], [64, 1], [68, 4], [64, 1]),
+  0x0b: r([1016, 11]),
+  0x0c: r([232, 11]),
+  0x0d: r([200, 11]),
+  0x0f: r([20, 11]),
+  0x10: r([108, 8], [112, 3]),
+  0x11: r([1600, 11]),
+  0x12: r([1052, 11]),
 };
 
-// 0x36 table record sizes in words, by substruct (byte 2), with per-family overrides
-const TABLE_RECORD: Record<number, number> = {
-  0x02: 27,
-  0x06: 2,
-  0x08: 16,
-  0x0b: 254,
-  0x0f: 5,
-  0x10: 27,
-};
-const TABLE_RECORD_16 = { 0x02: 25, 0x03: 8, 0x06: 52, 0x08: 8 };
-const TABLE_RECORD_BY_FAMILY: Partial<Record<Family, Record<number, number>>> = {
-  0: TABLE_RECORD_16,
-  1: TABLE_RECORD_16,
-  2: TABLE_RECORD_16,
-  3: { 0x12: 263 }, // 0x12 seen on one 17.2 board only
-  4: { 0x08: 17 },
-  5: { 0x08: 17, 0x10: 28 },
-};
+const ceil4 = (bytes: number) => (bytes + 3) & ~3;
 
-const family = (version: string): Family | undefined => {
-  const [major, minor] = version.split(".").map(Number);
-  if (major === 16) return minor < 5 ? 0 : minor === 5 ? 1 : 2;
-  if (major === 17) return minor < 4 ? 3 : 4;
-  if (major === 18) return 5;
-  return undefined;
-};
-
-const words = (bytes: number) => (bytes + 3) >>> 2;
-
-/** Size in words of the block at word `i`, or undefined for a block type or variant not known. */
-const blockSize = (w: Uint32Array, i: number, f: Family): number | undefined => {
+/** Size in bytes of the block at word `i`, or undefined for a block type or variant not known. */
+const blockSize = (w: Uint32Array, i: number, l: Layout): number | undefined => {
   const t = w[i] & 0xff;
-  const fixed = FIXED[t];
-  if (fixed) return fixed[f];
-  const v16 = f <= 2;
-  const v174 = f >= 4;
+  const f = at(l);
+  const v16 = f <= at("g13.15");
+  const v174 = f >= at("g14.09");
+  const u16 = (byte: number) => (w[i + (byte >>> 2)] >>> ((byte & 2) * 8)) & 0xffff;
+  if (t === 0x37 && v174) return 32 + 4 * w[i + 4]; // capacity
+  const fixed = FIXED[t]?.[f];
+  if (fixed) return fixed;
   switch (t) {
     case 0x03: {
-      // field: [03][key][next][owner (17.x only)][type | length << 16][0 (17.x only)] then a payload
-      const head = v16 ? 4 : 6;
+      // field: [03][key][next][owner (g14.04+)][subtype, flags, u16 size][0 (g14.04+)] then a payload
+      const head = v16 ? 16 : 24;
       const tw = w[i + (v16 ? 3 : 4)];
-      const sub = tw & 0xff;
-      const len = tw >>> 16;
-      if (sub === 0x6c) return head + (v16 ? len >>> 2 : len >>> 3);
-      if (sub === 0x74) return head + 3 + ((len - 12) >>> 3);
-      if (len) return head + words(len);
-      return FIELD_WORDS[sub] === undefined ? undefined : head + FIELD_WORDS[sub];
+      const s = tw & 0xff;
+      const z = tw >>> 16;
+      const payload = w[i + head / 4];
+      if (s === 0x65) return head;
+      if (s === 0x64 || s === 0x66 || s === 0x67 || s === 0x6a) return head + 4;
+      if (s === 0x69) return head + 8;
+      if (s === 0x6c) return head + 4 + 4 * payload;
+      if (s === 0x70 || s === 0x74) return head + 4 + (payload >>> 16) + 4 * (payload & 0xffff);
+      if (s === 0xf6) return head + 80;
+      if ([0x68, 0x6b, 0x6d, 0x6e, 0x6f, 0x71, 0x73, 0x78].includes(s)) return head + ceil4(z);
+      return z === 4 || z === 8 ? head + z : undefined;
     }
     case 0x1c: {
-      // padstack: header, then fixed and per-copper-layer components
-      const [header, fixedComps, perLayer, compWords] = v16
-        ? f === 0
-          ? [20, 10, 3, 7]
-          : [21, 11, 3, 7]
-        : [f === 5 ? 56 : 48, 21, 4, 9];
-      const layers = v16 ? w[i + 12] >>> 16 : w[i + 11];
-      return header + (fixedComps + perLayer * layers) * compWords;
+      // padstack: header, fixed and per-copper-layer components, then T 40-byte tails (g14.04+)
+      if (v16) {
+        const [header, fixedComps] = f <= at("g13.0C") ? [80, 10] : [84, 11];
+        return header + (fixedComps + 3 * (w[i + 12] >>> 16)) * 28;
+      }
+      const h = f >= at("g15.00") ? 208 : 176;
+      return 16 + h + (21 + 4 * u16(0x2c)) * 36 + 40 * ((w[i] >>> 16) & 0xff);
     }
-    case 0x1d: // physical constraint set: per-layer 14-word and via-slot 64-word records
-      return (v16 ? 6 : 7) + (w[i + 5] >>> 16) * 14 + (w[i + 5] & 0xffff) * 64;
-    case 0x1e: // electrical constraint set: a text of word-5 bytes
-      return (v16 ? 6 : 7) + words(w[i + 5]);
-    case 0x1f: // padstack dimensions: per copper layer
-      return (v16 ? 8 : 9) + (f === 5 ? 96 : 70) * (w[i + 6] >>> 16);
+    case 0x1d: // physical constraint set: 256-byte via slots and 56-byte layer rows
+      return (v16 ? 24 : 28) + 256 * u16(0x14) + 56 * u16(0x16);
+    case 0x1e: // electrical constraint set: a text of word-5 bytes (word 4 before g13.0C)
+      if (f <= at("g13.04")) return 20 + ceil4(w[i + 4]);
+      return (v16 ? 24 : f === at("g16.01") ? 32 : 28) + ceil4(w[i + 5]);
+    case 0x1f: {
+      // spacing constraint set: one row per copper layer
+      const [row, tail] =
+        f >= at("g14.14")
+          ? [384, 8]
+          : f >= at("g14.04")
+            ? [280, 8]
+            : f >= at("g13.04")
+              ? [280, 4]
+              : [240, 4];
+      return 28 + u16(0x1a) * row + tail;
+    }
     case 0x21: // word 1 is the size in bytes
-      return w[i + 1] >>> 2;
-    case 0x27: {
-      // runs to the offset (+1) in the header, or to the end of the file when that is 0
-      const end = w[(f === 5 ? 0x28 : 0x18c) >>> 2];
-      return (end ? (end - 1) >>> 2 : w.length) - i;
-    }
+      return w[i + 1];
     case 0x2a: // layer list: count entries, then its key
-      return 2 + (v174 ? 1 : 0) + (w[i] >>> 16) * (f === 0 ? 9 : 3);
+      return (v174 ? 12 : 8) + u16(2) * (f <= at("g13.0C") ? 36 : 12);
     case 0x31: // text string: length in the upper half of word 5
-      return (v174 ? 7 : 6) + words(w[i + 5] >>> 16);
+      return (v174 ? 28 : 24) + ceil4(u16(0x16));
     case 0x36: {
-      const sub = (w[i] >>> 16) & 0xff;
-      const record = TABLE_RECORD_BY_FAMILY[f]?.[sub] ?? TABLE_RECORD[sub];
-      if (record === undefined) return undefined;
-      if (v16) return 7 + w[i + 3] * record;
-      return (v174 ? 9 : 8) + w[i + 4] * record;
+      const item = TABLE_ITEM[u16(2)]?.[f];
+      if (item === undefined) return undefined;
+      if (v16) return 28 + w[i + 3] * item;
+      return (v174 ? 36 : 32) + w[i + 4] * item;
     }
-    case 0x37: // key array: capacity in word 4
-      return (v174 ? 8 : 7) + w[i + 4];
-    case 0x3b: // named property: a 128-byte name, then a value of word-1 bytes
-      return (v16 ? 44 : 45) + words(w[i + 1]);
     case 0x3c: // key list
-      return v174 ? 4 + w[i + 3] : 3 + w[i + 2];
+      return v174 ? 16 + 4 * w[i + 3] : 12 + 4 * w[i + 2];
     default:
       return undefined;
   }
@@ -163,26 +154,39 @@ export interface BrdBlocks {
   byKey: Map<number, number>;
 }
 
-/** Walk every block from the end of the string table to the end of the file, or an error string. */
+/** Walk every block from the end of the string table to the end of the stream, or an error string. */
 export const walkBrdBlocks = (w: Uint32Array, info: BrdInfo): BrdBlocks | string => {
-  const f = family(info.version);
-  if (f === undefined) return `Allegro ${info.version} block layout is not known`;
-  const n = w.length;
+  const l = info.layout;
+  if (!LAYOUTS.includes(l)) return `Allegro layout ${l} is not known`;
+  const fail = (what: string) => `Allegro ${info.version} (${l}) ${what}`;
+  const end = info.streamEnd >>> 2;
+  if (info.streamEnd % 4 || end > w.length || end < info.bodyWord)
+    return fail("has no valid end-of-stream offset");
   const starts: number[] = [];
   const byKey = new Map<number, number>();
   let i = info.bodyWord;
-  while (i < n) {
-    if (!w[i] && w.subarray(i).every((x) => !x)) break; // zero padding to the end
+  while (i < end) {
     const t = w[i] & 0xff;
-    const size = blockSize(w, i, f);
-    // a size from a header offset can point backwards, which would loop
-    if (size === undefined || size <= 0 || i + size > n || (w[i] >>> 8) & 0xfd)
-      return `Allegro ${info.version} block 0x${t.toString(16)} at byte 0x${(i * 4).toString(16)} is not decoded`;
+    // the sector table runs to the end of the stream
+    const size = t === 0x27 ? (end - i) * 4 : blockSize(w, i, l);
+    // a size of 0, past the end, or misaligned means a wrong layout or an unknown block
+    if (!size || size % 4 || i + size / 4 > end || (w[i] >>> 8) & 0x7d)
+      return fail(`block 0x${t.toString(16)} at byte 0x${(i * 4).toString(16)} is not decoded`);
     starts.push(i);
-    // the key is word 1, except: 0x21 word 2, 0x2A its last word; 0x27 and 0x3B have none
-    const key = t === 0x21 ? w[i + 2] : t === 0x2a ? w[i + size - 1] : w[i + 1];
-    if (t !== 0x27 && t !== 0x3b && key) byKey.set(key, i);
-    i += size;
+    // the key is word 1, except: 0x21 word 2, 0x2A its last word, 0x35 word 30; 0x27 has none
+    const key =
+      t === 0x21 ? w[i + 2] : t === 0x2a ? w[i + size / 4 - 1] : t === 0x35 ? w[i + 30] : w[i + 1];
+    if (t !== 0x27 && key) {
+      if (byKey.has(key)) return fail(`key 0x${key.toString(16)} is used twice`);
+      byKey.set(key, i);
+    }
+    i += size / 4;
+  }
+  // every block except the sector table, plus every string, makes the header's object count
+  if (at(l) >= at("g14.04")) {
+    const objects =
+      starts.length - starts.filter((s) => (w[s] & 0xff) === 0x27).length + info.strings.size;
+    if (objects !== w[5]) return fail(`holds ${objects} objects where its header counts ${w[5]}`);
   }
   return { starts, byKey };
 };

@@ -13,7 +13,7 @@ Each section marks its confidence level:
 
 Public boards in the [test-fixtures](https://github.com/IntelligentElectron/test-fixtures) repo (`cadence/`) exercise the reader: one 17.2 board and five 17.4 boards read; the 16.x boards there are outside the binary coverage below.
 
-Coverage: Allegro 17.x files (magic `0x0014xxxx`). Files written by 17.2 (`0x00140400`), by a 17.2 build with magic `0x00140500`, and by 17.4 (`0x00140902`) were decoded. 16.x and 18.x files differ in header and block layouts; for them only the embedded archives are read.
+Coverage: layout from every family of section 11 (Allegro 16.0 to 25.1); constraints from g14.04 (Allegro 17.2) on. Older files differ in their constraint blocks; for them only the embedded archives are read.
 
 ## Table of Contents
 
@@ -133,16 +133,18 @@ The `Design` object holds the stackup:
 
 ## 4. Binary Header and String Table
 
-**Confidence: VERIFIED** (offsets for 16.x and 17.x headers; 18.x moves fields)
+**Confidence: VERIFIED** (offsets for the g13 and g14 headers; g15 and g16 move fields, section 11)
 
 All integers are little-endian.
 
 | Offset | Size | Field |
 |--------|------|-------|
-| 0x000 | u32 | Magic. Upper 16 bits: `0x0013` 16.x, `0x0014` 17.x, `0x0015` 18.x. Release byte `(magic >> 8) & 0xFF`: `0x04` and `0x05` 17.2, `0x09` 17.4, `0x15` 17.5 |
-| 0x03C | 23 × (u32, u32) | Linked list descriptors: tail sentinel, head key (section 5) |
+| 0x000 | u32 | Magic. `magic >> 8` names the layout family (section 11), not a release |
+| 0x014 | u32 | Object count: every block except the 0x27, plus every string |
+| 0x03C | 23 × (u32, u32) | Linked list descriptors: the list's sentinel, head key (section 5) |
 | 0x0F8 | 60 bytes | Allegro build string |
 | 0x180 | u8 | Board units: 1 mils, 2 inches, 3 mm, 4 cm, 5 µm |
+| 0x18C | u32 | End of the block stream, plus 1; 0 when the file holds no attachments |
 | 0x194 | u32 | String count |
 | 0x26C | u32 | Units divisor: internal units per board unit |
 | 0x1200 | | String table |
@@ -506,7 +508,7 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 
 | Gap | Effect |
 |-----|--------|
-| 16.x and 18.x binary constraint layouts | Only embedded archives are read (layout geometry is read, section 10) |
+| Constraint blocks before g14.04 (16.x) | Only embedded archives are read (layout geometry is read, section 10) |
 | Spacing constraint sets in the binary | Not located; read from the archives (every board read has them in one of its archives) |
 | Layer names in `BrdStackup` | Not decoded; conductors are listed top to bottom |
 | Pin pairs, match groups of pin pairs | Not decoded |
@@ -517,14 +519,14 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 
 ## 10. Layout Geometry
 
-**Confidence: VERIFIED** against KiCad 10's Allegro importer, run as a separate program, on the ten public boards (one 16.4, three 16.6, one 17.2, five 17.4) and on 61 more boards from a local corpus (five 16.4, seven 16.5, thirty 16.6, twelve 17.2, six 17.4, one 18.0). On every board, every named component's position and side, every pad's position, size and net, every track segment, every arc (centre and direction) and every via (position, drill, net) agree, apart from KiCad's own departures: it names nets and parts it cannot resolve (`Net_<n>`, `UNK…`), lists mounting-hole pads under other pin names, and drops the routing of one net on the 18.0 board. On BeagleBone Black RevC the components, their values and device types, and the TOP and BOTTOM routing of the nets checked also agree with the board's IPC-2581 export.
+**Confidence: VERIFIED** against KiCad 10's Allegro importer, run as a separate program, on the ten public boards (one 16.4, three 16.6, one 17.2, five 17.4) and on 61 more boards from a local corpus (five 16.4, seven 16.5, thirty 16.6, twelve 17.2, six 17.4, one 23.1). On every board, every named component's position and side, every pad's position, size and net, every track segment, every arc (centre and direction) and every via (position, drill, net) agree, apart from KiCad's own departures: it names nets and parts it cannot resolve (`Net_<n>`, `UNK…`), lists mounting-hole pads under other pin names, and drops the routing of one net on the 23.1 board. On BeagleBone Black RevC the components, their values and device types, and the TOP and BOTTOM routing of the nets checked also agree with the board's IPC-2581 export.
 
-The reader in `src/tools/lib/allegro-layout.ts` reads 16.x, 17.x and 18.x boards. It uses the header, string table and lists of sections 4 and 5, with these additions:
+The reader in `src/tools/lib/allegro-layout.ts` reads boards of every family in section 11. It uses the header, string table and lists of sections 4 and 5, with these additions:
 
-- 16.x files keep the string count at 0x194 too. 18.x files keep it at 0x34, the units byte at 0x18C (the divisor stays at 0x26C) and the list descriptors from 0x60; the string table still starts at 0x1200.
+- Header offsets follow the family's header layout (section 11); the string table always starts at 0x1200.
 - Blocks are found through the block walk of section 11.
 
-Coordinates are signed internal units (section 4) with Y up; rotations are millidegrees counterclockwise. 18.x blocks are read with the 17.4 layouts; only the padstack header grows (see Padstacks).
+Coordinates are signed internal units (section 4) with Y up; rotations are millidegrees counterclockwise. Families from g15.00 read their blocks at the g14.09 offsets; only the padstack header grows (see Padstacks).
 
 ### Copper layers
 
@@ -557,7 +559,7 @@ Flag bit 0x8000 is set on routable layers; layers without it are the planes (the
 | 0x06 part | 3 | 3 | device type (string id) |
 | | 8 | 8 | first 0x03 field; fields chain through word 2 back to the part |
 
-A field is `[0x03 | code << 16][key][next]`, then in 17.x and 18.x two more words, then `[subtype | length << 16]` and the value; subtype 0x68 is a string. The part's value is its field of code 2. A part without one has no value; KiCad then shows the value text printed on the board instead. The component's rotation is reported as stored for a top-side part and as `360 - rotation` for a bottom-side one, matching the IPC-2581 export.
+A field is `[0x03 | code << 16][key][next]`, then from g14.04 two more words, then `[subtype | length << 16]` and the value; subtype 0x68 is a string. The part's value is its field of code 2. A part without one has no value; KiCad then shows the value text printed on the board instead. The component's rotation is reported as stored for a top-side part and as `360 - rotation` for a bottom-side one, matching the IPC-2581 export.
 
 ### Pads
 
@@ -574,11 +576,11 @@ A pad's board position is the footprint position plus its local offset rotated b
 
 ### Padstacks (0x1C)
 
-| | 17.x, 18.x | 16.5, 16.6 | 16.4 |
+| | 17.x and later | 16.5, 16.6 | 16.4 |
 |---|------|------------|------|
 | Copper layer count | word 11 | upper half of word 12 | upper half of word 12 |
 | Drill | word 16 | word 4 | word 4 |
-| Header words | 48 (56 in 18.x) | 21 | 20 |
+| Header words | 48 (56 from g15.00) | 21 | 20 |
 | Fixed components | 21 | 11 | 10 |
 | Components per copper layer | 4 | 3 | 3 |
 | Words per component | 9 | 7 | 7 |
@@ -612,7 +614,7 @@ From word 4, the island's items chain through their word 2 back to the assignmen
 | | 11 | 9 | 0x1C padstack, for the drill and span |
 | 0x28 shape | 0 | 0 | byte 3: copper layer index |
 
-Arc centres and directions were checked on 16.5, 17.4 and 18.0 boards. Shapes are counted per layer; their outlines are not read.
+Arc centres and directions were checked on 16.5, 17.4 and 23.1 boards. Shapes are counted per layer; their outlines are not read.
 
 ### Board outline
 
@@ -620,7 +622,7 @@ Arc centres and directions were checked on 16.5, 17.4 and 18.0 boards. Shapes ar
 
 The outline is drawn on BOARD_GEOMETRY (class 1) by 0x14 graphics, 0x28 shapes and 0x24 rectangles. Subclass 0xEA (DESIGN_OUTLINE) is read when present, else 0xFD (OUTLINE); BOARD_GEOMETRY 0xEF holds regions that split the board, not its edge.
 
-| Block | Word (17.x, 18.x) | Word (16.x) | Field |
+| Block | Word (17.x and later) | Word (16.x) | Field |
 |-------|-------------------|-------------|-------|
 | 0x14 graphic, 0x28 shape, 0x24 rectangle | 3 | 3 | owner: the header list's tail (list 4 for graphics, list 7 for shapes and rectangles) when board-level, else the 0x2D or 0x2B footprint that draws it |
 | 0x14 graphic | 6 | 5 | first segment |
@@ -639,71 +641,24 @@ Pieces are joined end to end into contours, reversing a piece (and its arc's dir
 
 ## 11. Block Sizes
 
-**Confidence: VERIFIED** by walking 75 distinct board files (five 16.4, ten 16.5, thirty-five 16.6, thirteen 17.2, eleven 17.4, one 18.0, the public fixtures among them) block by block from the end of the string table: every walk lands exactly on the end of its file, or on all-zero padding that runs to it. A wrong size lands on a word that is no block header, so one clean walk accounts for every block of the file. Blocks and keys found this way match every block the layout and constraint readers reached before the walk existed; the walk also finds 0x03 fields and net list members that the earlier scan missed. The reader is `src/tools/lib/allegro-blocks.ts`.
+**Confidence: VERIFIED** by walking 118 distinct board files (six 16.4, ten 16.5, thirty-seven 16.6, fifty-two 17.2, twelve 17.4 or 22.1, one 23.1; public, corpus and private boards) block by block. Every walk ends exactly at the end of the block stream, no key repeats, and on every 17.2 and later board the block and string count equals the header's object count. A wrong size lands on a word that is no block header, so one clean walk accounts for every block of the file. The reader is `src/tools/lib/allegro-blocks.ts`, which holds the size tables.
 
-Word 0 of a block holds the type in byte 0; byte 1 is 0 or 2. The key is word 1, except 0x21 (word 2) and 0x2A (its last word); 0x27 and 0x3B have none.
+The magic word picks a layout family, named by its generation and revision bytes. One release can write several families, and a family's name says nothing about the release:
 
-### Fixed sizes
+| Family | `magic >> 8` | Usually written by | Header |
+| ------ | ------------ | ------------------ | ------ |
+| g13.00 to g13.15 | `0x1300` to `0x1315` | 16.0 to 16.6 | g14 |
+| g14.04 | `0x1404` to `0x1407` | 17.2 | g14 |
+| g14.09 | `0x1409`, `0x140E`, `0x1411`, `0x1412` | 17.4, 22.1 | g14 |
+| g14.14 | `0x1414`, `0x1415`, `0x1417` | 17.4, 22.1, 23.1 | g14 |
+| g15.00 | `0x1500` | 23.1, 25.1 | g15 |
+| g15.02 | `0x1502` | 25.1 | g16 |
+| g16.01 | `0x1601` | 25.1 | g16 |
 
-Sizes in words. Releases group into six families: 16.4 (and older), 16.5, 16.6, 17.2, 17.4 (and 17.5), 18.x.
+The release that last saved the file is the `ALLEGRO_DESIGN_WAS_LAST_SAVED` attachment (`allegro 17.4 S037 - ...`); a file without one is named by its family's usual release. A revision byte outside the table is read with the first family of its generation that frames the file exactly.
 
-| Type | 16.4 | 16.5 | 16.6 | 17.2 | 17.4 | 18.x |
-| ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| 0x01 arc | 20 | 20 | 20 | 21 | 21 | 21 |
-| 0x04 net assignment | 5 | 5 | 5 | 5 | 6 | 6 |
-| 0x05 track | 15 | 15 | 15 | 17 | 17 | 17 |
-| 0x06 part | 9 | 9 | 9 | 10 | 10 | 10 |
-| 0x07 instance | 10 | 10 | 10 | 12 | 12 | 12 |
-| 0x08 | 6 | 6 | 6 | 8 | 8 | 8 |
-| 0x09 | 11 | 11 | 11 | 12 | 13 | 13 |
-| 0x0A DRC marker | 17 | 17 | 17 | 18 | 19 | 19 |
-| 0x0C | 14 | 14 | 14 | 16 | 17 | 17 |
-| 0x0D pad definition | 10 | 10 | 10 | 11 | 12 | 12 |
-| 0x0E copper rectangle | 15 | 15 | 15 | 17 | 17 | 17 |
-| 0x0F | 14 | 14 | 14 | 15 | 16 | 16 |
-| 0x10 | 8 | 8 | 8 | 9 | 10 | 10 |
-| 0x11 | 6 | 6 | 6 | 6 | 7 | 7 |
-| 0x12 | 6 | 7 | 7 | 7 | 8 | 8 |
-| 0x14 graphic | 8 | 8 | 8 | 9 | 9 | 9 |
-| 0x15, 0x16, 0x17 line segments | 10 | 10 | 10 | 11 | 11 | 11 |
-| 0x1B net | 14 | 14 | 14 | 15 | 15 | 15 |
-| 0x22 | 11 | 11 | 11 | 11 | 11 | 11 |
-| 0x23 connection | 21 | 21 | 21 | 21 | 22 | 22 |
-| 0x24 rectangle | 13 | 13 | 13 | 14 | 14 | 14 |
-| 0x26 group link | 5 | 5 | 5 | 6 | 7 | 7 |
-| 0x28 shape | 17 | 17 | 17 | 19 | 19 | 19 |
-| 0x2B footprint definition | 18 | 18 | 18 | 19 | 19 | 19 |
-| 0x2C table | 9 | 9 | 9 | 11 | 11 | 11 |
-| 0x2D placed footprint | 16 | 16 | 16 | 18 | 18 | 18 |
-| 0x2E | 9 | 9 | 9 | 10 | 10 | 10 |
-| 0x2F | ? | ? | ? | 8 | ? | ? |
-| 0x30 text | 11 | 11 | 11 | 14 | 15 | 15 |
-| 0x32 placed pad | 19 | 19 | 19 | 21 | 21 | 21 |
-| 0x33 via | 18 | 18 | 18 | 20 | 20 | 20 |
-| 0x34 keepout | 8 | 8 | 8 | 9 | 9 | 9 |
-| 0x35 file reference | 31 | 31 | 31 | 31 | 31 | 31 |
-| 0x38 film | 16 | 16 | 13 | 13 | 14 | 14 |
-| 0x39 film layers | 15 | 15 | 15 | 15 | 15 | 15 |
-| 0x3A film layer | 4 | 4 | 4 | 4 | 5 | 5 |
+Header layouts: g14 keeps the list descriptors from 0x3C, the units byte at 0x180, the divisor at 0x26C, the string count at 0x194 and the end of the stream at 0x18C. g15 moves the descriptors to 0x60, the units byte to 0x18C, the string count to 0x34 and the end of the stream to 0x28. g16 moves the units byte to 0x1AC and the divisor to 0x28C as well.
 
-0x22 is seen in 17.2 files only; its other sizes are assumed. 0x2F is seen in one 17.2 file only; in any other release the walk stops on it with an error.
+Blocks run back to back from the end of the string table to the end of the stream; the 0x27 sector table is the last and runs up to it. A chain of 0x3B attachments (a 180-byte header from g14.04, 176 before, then the payload padded to a word) runs from there to the end of the file. Word 0 of a block holds the type in byte 0; byte 1 is 0, 2 or (on 0x2C) 0x80. The key is word 1, except 0x21 (word 2), 0x2A (its last word) and 0x35 (word 30); 0x27 has none. Most block types have a fixed size per family; 0x03, 0x1C, 0x1D, 0x1E, 0x1F, 0x21, 0x2A, 0x31, 0x36 (by discriminator), 0x37 (from g14.09) and 0x3C grow with a count they hold.
 
-### Sizes that grow with a count
-
-| Type | Size |
-| ---- | ---- |
-| 0x03 field | A header of 4 words (16.x) or 6, then a payload set by the type word (word 3 in 16.x, word 4 otherwise: type byte, length in the upper half). A nonzero length is the payload in bytes, rounded up to words, except type 0x6C (length / 4 words in 16.x, length / 8 in 17.x and 18.x) and 0x74 (3 + (length - 12) / 8 words). A zero length: 0x65 none, 0x64, 0x66, 0x67, 0x6A one word, 0x69 two |
-| 0x1C padstack | header + (fixed + per-layer × copper layers) × component words (section 10, Padstacks) |
-| 0x1D physical set | 6 words (16.x) or 7, then 14 words per layer and 64 per via slot (counts in word 5) |
-| 0x1E electrical set | 6 words (16.x) or 7, then a text of word-5 bytes |
-| 0x1F padstack dimensions | 8 words (16.x) or 9, then 70 words per layer (96 in 18.x); the layer count in the upper half of word 6 |
-| 0x21 | word 1 bytes |
-| 0x27 | up to the byte offset (plus 1) at header 0x18C (0x28 in 18.x), or to the end of the file when that word is 0 |
-| 0x2A layer list | 2 words, one more in 17.4 and later, then 3 words per entry (9 in 16.4); the count in the upper half of word 0 |
-| 0x31 text string | 6 words (7 from 17.4), then the string, its length with the NUL in the upper half of word 5 |
-| 0x36 table | 7 words (16.x, count in word 3), 8 (17.2) or 9 (17.4 and later, count in word 4), then count records of a size set by the substruct in byte 2: 0x02 25 words in 16.x, 27 later; 0x03 8; 0x06 52 in 16.x, 2 later; 0x08 8 in 16.x, 16 in 17.2, 17 later; 0x0B 254; 0x0F 5; 0x10 27, 28 in 18.x; 0x12 263 in 17.2 (one file; other releases unknown) |
-| 0x37 key array | 7 words (8 from 17.4), then word-4 key slots |
-| 0x3B named property | a 128-byte name from word 2, then the value of word-1 bytes from word 44 (16.x) or 45 |
-| 0x3C key list | 3 words, then word-2 keys; from 17.4, 4 words, then word-3 keys |
-
-A block type or 0x36 substruct outside these tables stops the walk with an error that names it and its byte offset.
+A block type or 0x36 discriminator outside these tables stops the walk with an error that names it and its byte offset.

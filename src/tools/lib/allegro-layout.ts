@@ -1,5 +1,5 @@
 /**
- * Layout geometry from the binary object database of an Allegro 16.x, 17.x or 18.x `.brd` file: copper
+ * Layout geometry from the binary object database of an Allegro `.brd` file (16.0 to 25.1): copper
  * layers, placed components with their pads, and every net's pads, tracks, vias and shapes.
  * Block layouts and how each field was confirmed are in docs/allegro-brd-format.md
  * (section 10). Lengths are returned in microns, rounded.
@@ -7,7 +7,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { readBrdInfo, type BrdInfo } from "./allegro-brd.js";
+import { at, readBrdInfo, type BrdInfo } from "./allegro-brd.js";
 import { walkBrdBlocks } from "./allegro-blocks.js";
 import { boardOutline } from "./geometry.js";
 import type { BoardOutline, OutlineContour, RoutingArc } from "./types.js";
@@ -126,12 +126,13 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   const str = (id: number) => info.strings.get(id);
   const type = (i: number) => w[i] & 0xff;
   const cls = (i: number) => (w[i] >>> 16) & 0xff;
-  const v16 = info.version.startsWith("16");
-  const v18 = info.version.startsWith("18");
+  const f = at(info.layout);
+  const v16 = f <= at("g13.15");
+  const v18 = f >= at("g15.00");
   const O = v16 ? V16 : V17;
-  const pre165 = v16 && Number(info.version) < 16.5;
-  // 17.4 inserts a word in some blocks, and 18.x keeps it
-  const v174 = v18 || Number(info.version) >= 17.4;
+  const pre165 = f <= at("g13.0C");
+  // g14.09 inserts a word in some blocks, and later families keep it
+  const v174 = f >= at("g14.09");
 
   // the block with this key, if it has type `t`
   const find = (key: number, t: number) => {
@@ -153,7 +154,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     }
     return out;
   };
-  // Header list descriptors (from 0x3C, 0x60 in 18.x): [tail][head], a list ends at its tail
+  // Header list descriptors (from 0x3C, 0x60 from g15.00): [sentinel][head], a list ends at its sentinel
   const list = (index: number, t: number, nextAt = 2) =>
     chain(
       w[(info.listBase >>> 2) + 2 * index + 1],
@@ -424,7 +425,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       const owner = footprint ? mechanical(w[i + 3]) : w[i + 3] === tail(t === 0x14 ? 4 : 7);
       if (!owner) continue;
       if (t === 0x24) {
-        // a rectangle holds its corners directly: words 6-9 in 17.x and 18.x, 5-8 in 16.x
+        // a rectangle holds its corners directly: words 6-9 from g14.04, 5-8 before
         const r = i + (v16 ? 5 : 6);
         const [x1, y1, x2, y2] = [0, 1, 2, 3].map((j) => um(i32(r + j)));
         const corners: [number, number][] = [
@@ -507,7 +508,7 @@ export const loadBrdLayout = async (
   const key = `${path.resolve(filePath)}:${s.size}:${s.mtimeMs}`;
   if (cached?.key === key) return cached.result;
   const buf = await readFile(filePath);
-  const info = readBrdInfo(buf, ["16", "17", "18"]);
+  const info = readBrdInfo(buf);
   if (typeof info === "string") return info;
   const layout = readBrdLayout(buf, info);
   if (typeof layout === "string") return layout;

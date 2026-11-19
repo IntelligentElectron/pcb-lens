@@ -322,7 +322,8 @@ const syntheticBrd = (): Buffer => {
     words(0x3 | (0x1cf << 16), 0x306, 0x400, 0x400, 0x66, 0, 500), // unnamed spacing code
     words(0x2c | (0x15 << 16), 0x400, 0x401, LT_TABLES, 0, 0, 5, 0x500, 0, 0, 0),
     words(0x2c | (0x103 << 16), 0x401, LT_TABLES, LT_TABLES, 0, 0, 6, 0, 0, 0, 0),
-    words(0x37, 0x500, 0x400, 0, 2, 2, 0x100, 0x101, 0),
+    words(0x37, 0x500, 0x400, 0, 2, 2, 0x100, 0x101, 0), // a fixed 428 bytes before g14.09
+    Buffer.alloc(428 - 36),
     words(0x26, 0x600, 0, 0x100, 0x401, 0),
     words(0x26, 0x601, 0, 0x101, 0x401, 0),
     words(0x00100036, 0x700, 0, 0, 4, 3, 3, 0), // 3 layers in 4 slots
@@ -344,7 +345,9 @@ const syntheticBrd = (): Buffer => {
   // the archive rides in a 0x21 block: [21][size in bytes][key], padded to a word
   const padded = Buffer.concat([archive, Buffer.alloc(-archive.length & 3)]);
   const blob = words(0x21, 12 + padded.length, 0x800);
-  return Buffer.concat([header, strTable, ...blocks, blob, padded, Buffer.alloc(64)]);
+  // the header counts every block (18 here) and string; the blocks run to the end of the file
+  header.writeUInt32LE(18 + strings.length, 0x14);
+  return Buffer.concat([header, strTable, ...blocks, blob, padded]);
 };
 
 describe("queryConstraints on Cadence .dcf", () => {

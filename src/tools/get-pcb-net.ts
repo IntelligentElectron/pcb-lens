@@ -677,7 +677,7 @@ export const tool = defineTool({
   inputSchema: {
     file: z
       .string()
-      .describe("Path to an IPC-2581 XML file or an Allegro 16.x, 17.x or 18.x .brd file"),
+      .describe("Path to an IPC-2581 XML file or an Allegro .brd file (Allegro 16.0 to 25.1)"),
     pattern: z
       .string()
       .describe("Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$')"),

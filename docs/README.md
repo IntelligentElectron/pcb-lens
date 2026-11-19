@@ -10,7 +10,7 @@ The PCB Lens MCP Server provides tools for querying IPC-2581 PCB layout files th
 |--------|------------|-------------|
 | IPC-2581 XML | `.xml` | Industry-standard PCB layout format (RevA, RevB, RevC) from any compliant EDA tool |
 | Cadence TCFX | `.tcfx` | Constraint XML exported from Cadence Allegro `.brd` files |
-| Cadence Allegro | `.brd` | Native board files, read directly on any OS ([format notes](allegro-brd-format.md)): layout from 16.x, 17.x and 18.x boards, constraints from 17.x boards. IPC-2581 and `.tcfx` export needs Windows and a Cadence SPB installation |
+| Cadence Allegro | `.brd` | Native board files, read directly on any OS ([format notes](allegro-brd-format.md)): layout from Allegro 16.0 to 25.1 boards, constraints from 17.2 to 25.1. IPC-2581 and `.tcfx` export needs Windows and a Cadence SPB installation |
 | Cadence Constraint Manager | `.dcf` | Constraint database of a schematic or board |
 
 ## Design Philosophy
