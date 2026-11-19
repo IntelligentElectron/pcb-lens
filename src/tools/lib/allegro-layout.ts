@@ -1,8 +1,7 @@
 /**
  * Layout geometry from the binary object database of an Allegro `.brd` file (16.0 to 25.1): copper
  * layers, placed components with their pads, and every net's pads, tracks, vias and shapes.
- * Block layouts and how each field was confirmed are in docs/allegro-brd-format.md
- * (section 10). Lengths are returned in microns, rounded.
+ * Lengths are returned in microns, rounded.
  */
 
 import { readFile, stat } from "node:fs/promises";

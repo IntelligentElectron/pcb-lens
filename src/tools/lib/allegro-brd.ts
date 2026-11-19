@@ -4,8 +4,7 @@
  * Reads the header, the string table, 0x1B nets, 0x03 fields, 0x1D physical
  * and 0x1E electrical constraint sets, 0x2C tables (net classes, match groups,
  * diff pairs, regions) with their 0x37 member arrays and 0x26 links, and the
- * 0x36 cross-section. Layouts and confidence levels are in
- * docs/allegro-brd-format.md. Layout families g14.04 (Allegro 17.2) and later.
+ * 0x36 cross-section. Layout families g14.04 (Allegro 17.2) and later.
  */
 
 import { walkBrdBlocks } from "./allegro-blocks.js";
@@ -203,7 +202,7 @@ const lastSaved = (buf: Buffer, start: number, layout: Layout) => {
 };
 
 // 0x03 field codes, verified by matching values and field order against Constraint Manager XML
-// of the same boards (docs/allegro-brd-format.md section 7)
+// of the same boards
 export const FIELD_NAMES: Record<number, string> = {
   0x3a: "TOPOLOGY_TEMPLATE_REVISION",
   0x3c: "STUB_LENGTH",
