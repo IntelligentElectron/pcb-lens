@@ -417,7 +417,7 @@ export interface ConstraintsOverviewResult {
   allegroVersion?: string;
   /** Why a .brd's binary (Brd*) sections are missing, e.g. an Allegro version not decoded */
   note?: string;
-  /** source: where a .dcf/.brd section was read (see docs/allegro-brd-format.md); units: of its lengths */
+  /** source: where a .dcf/.brd section was read; units: of its lengths */
   sections: Array<{ name: string; objectCount: number; source?: string; units?: string }>;
 }
 

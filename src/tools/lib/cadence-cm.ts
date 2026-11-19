@@ -5,7 +5,7 @@
  * (a physical database, a technology "Attach" and sometimes a logical view),
  * each starting with a `FileType.txt` member. The object files
  * (`objects/PhysicalCSet.xml`, `objects/MatchGroup.xml`, ...) are single-line
- * XML; see docs/allegro-brd-format.md for the schema.
+ * XML.
  */
 
 import { inflateRawSync } from "node:zlib";

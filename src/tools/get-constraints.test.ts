@@ -187,7 +187,7 @@ describe("queryConstraints", () => {
 });
 
 // =============================================================================
-// Cadence .dcf and Allegro .brd (synthetic files built from docs/allegro-brd-format.md)
+// Cadence .dcf and Allegro .brd (synthetic files)
 // =============================================================================
 
 /** Zip local-file entries, stored (method 0); the reader does not check CRCs. */

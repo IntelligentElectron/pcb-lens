@@ -104,4 +104,4 @@ interface PadFigure {
 
 - IPC-2581 files are not read by this tool; `get_pcb_component` reports their pads.
 - For 16.x boards only the per-layer pad, antipad and thermal figures are read (no masks, offsets, slot, plating or drill symbol), and footprint pins come from a placed instance, so a footprint nothing is placed with has none.
-- The padstack figures, drills and plating equal the board's IPC-2581 export on the boards checked (see the [format notes](../allegro-brd-format.md)).
+- The padstack figures, drills and plating equal the board's IPC-2581 export on the boards checked.

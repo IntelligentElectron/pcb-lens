@@ -169,7 +169,7 @@ See **[Observability (OpenTelemetry)](docs/observability.md)** for setup, config
 
 ## Documentation
 
-See [docs/](docs/README.md) for API documentation, response schemas and [supported platforms](docs/README.md#supported-platforms), [docs/cli.md](docs/cli.md) for the binary's command line, and [docs/allegro-brd-format.md](docs/allegro-brd-format.md) for the Allegro board format as pcb-lens reads it.
+See [docs/](docs/README.md) for API documentation, response schemas and [supported platforms](docs/README.md#supported-platforms) and [docs/cli.md](docs/cli.md) for the binary's command line.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 

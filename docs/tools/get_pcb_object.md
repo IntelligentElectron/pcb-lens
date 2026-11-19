@@ -64,4 +64,3 @@ interface AttachmentContent extends ObjectQueryBase {
 ## Notes
 
 - A word is resolved when its value is a block key or a string id; a coordinate or count can coincide with one, so a resolution is a lead, not a fact. `referencedBy` has the same caveat.
-- Block layouts are described in the [format notes](../allegro-brd-format.md).
