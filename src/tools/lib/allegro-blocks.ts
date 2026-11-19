@@ -71,10 +71,11 @@ const TABLE_RECORD: Record<number, number> = {
   0x0f: 5,
   0x10: 27,
 };
+const TABLE_RECORD_16 = { 0x02: 25, 0x03: 8, 0x06: 52, 0x08: 8 };
 const TABLE_RECORD_BY_FAMILY: Partial<Record<Family, Record<number, number>>> = {
-  0: { 0x02: 25, 0x03: 8, 0x06: 52, 0x08: 8 },
-  1: { 0x02: 25, 0x03: 8, 0x06: 52, 0x08: 8 },
-  2: { 0x02: 25, 0x03: 8, 0x06: 52, 0x08: 8 },
+  0: TABLE_RECORD_16,
+  1: TABLE_RECORD_16,
+  2: TABLE_RECORD_16,
   4: { 0x08: 17 },
   5: { 0x08: 17, 0x10: 28 },
 };
@@ -172,7 +173,8 @@ export const walkBrdBlocks = (w: Uint32Array, info: BrdInfo): BrdBlocks | string
     if (!w[i] && w.subarray(i).every((x) => !x)) break; // zero padding to the end
     const t = w[i] & 0xff;
     const size = blockSize(w, i, f);
-    if (!size || i + size > n || t > 0x3c || (w[i] >>> 8) & 0xfd)
+    // a size from a header offset can point backwards, which would loop
+    if (size === undefined || size <= 0 || i + size > n || (w[i] >>> 8) & 0xfd)
       return `Allegro ${info.version} block 0x${t.toString(16)} at byte 0x${(i * 4).toString(16)} is not decoded`;
     starts.push(i);
     // the key is word 1, except: 0x21 word 2, 0x2A its last word; 0x27 and 0x3B have none

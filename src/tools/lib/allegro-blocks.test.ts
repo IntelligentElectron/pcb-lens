@@ -41,6 +41,16 @@ describe("walkBrdBlocks errors", () => {
     expect(walkBrdBlocks(new Uint32Array([0x1b, 1, 2]), info)).toMatch(/0x1b at/);
   });
 
+  it("rejects a 0x27 whose header end offset points back at an earlier block", () => {
+    const w = new Uint32Array(0x110);
+    w.set([0x04, 7, 0, 0, 0], 0x100); // a 5-word net assignment, then the 0x27
+    w[0x105] = 0x27;
+    w[0x18c >>> 2] = 0x100 * 4 + 1; // end offset + 1: back to the net assignment
+    expect(walkBrdBlocks(w, { version: "17.2", bodyWord: 0x100 } as BrdInfo)).toBe(
+      "Allegro 17.2 block 0x27 at byte 0x414 is not decoded"
+    );
+  });
+
   it("stops at zero padding", () => {
     const info = { version: "17.2", bodyWord: 0 } as BrdInfo;
     const w = new Uint32Array(8);
