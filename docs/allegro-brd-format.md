@@ -683,6 +683,15 @@ Board-level pieces are read first. A board without any has its outline drawn by 
 
 Pieces are joined end to end into contours, reversing a piece (and its arc's direction) where needed. The largest is the board edge, kept even when open: some boards leave a gap where a connector footprint draws a notch. Other closed contours (cutouts, mounting holes, panel rails) follow; other open fragments and contours drawn twice are dropped.
 
+### DRC markers, unrouted connections, films and attachments (from g14.04)
+
+**Confidence: OBSERVED.** DRC markers name objects that overlap where the marker sits (on reComputer J401, a PACKAGE_PACKAGE marker sits on the edge of Q7's place bound inside J11's); check names are Constraint Manager's.
+
+- **DRC markers** are 0x0A blocks on header lists 11 and 22, left by Allegro's last DRC run: the layer (class 5), point 1 and point 2 in words 5 to 8, the constraint set's name in word 9, the two objects in conflict in words 10 and 11, and the check in the lower half of word 13 (one word earlier in g14.04). Checks are numbered as Constraint Manager's analysis modes; the names are in `src/tools/lib/allegro-drc-modes.ts`, and about 8% of markers seen carry a code with no known name. The 0x36 table of discriminator 6 holds every check's state: 8-byte items from word 9 (8 in g14.04), the code in the lower half and the state in byte 3 (0 off, 1 on, 2 batch).
+- **Unrouted connections**: a 0x23 ratsnest pair names its two pads in words 6 and 8 (5 and 7 in g14.04); byte 3 of word 0 is 1 once the routing connects them.
+- **Films** (list 14): a 0x38 holds the film's name in word 4 and its 0x39 in word 3, whose word 3 heads a chain of 0x3A entries (through word 2), each naming a class and subclass to plot. Films read on 16.x boards too.
+- **Attachments** follow the block stream to the end of the file: a 180-byte header (176 before g14.04) with the payload length in word 1, a 128-byte name at byte 8, a 32-byte class at 0x88 and a Unix time at 0xA8, then the payload padded to 4 bytes. Payloads are text, ZIP or zlib.
+
 ### Not read
 
 - Thermal spokes and custom pad outlines (reported by their bounding box)

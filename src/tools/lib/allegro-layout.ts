@@ -10,6 +10,7 @@ import path from "node:path";
 import { at, readBrdInfo, type BrdInfo } from "./allegro-brd.js";
 import { walkBrdBlocks } from "./allegro-blocks.js";
 import { FIELD_ENUMS } from "./allegro-brd.js";
+import { DRC_MODES } from "./allegro-drc-modes.js";
 import { className, PROPERTY_NAMES, subclassName } from "./allegro-names.js";
 import { boardOutline } from "./geometry.js";
 import type { BoardOutline, OutlineContour, RoutingArc } from "./types.js";
@@ -107,6 +108,18 @@ export interface BrdNet {
   vias: BrdVia[];
   shapes: BrdItem[]; // copper shapes and filled rectangles (pours, planes, fills, teardrops)
   properties?: Record<string, string>;
+  unrouted?: Array<[string, string]>; // pin pairs (REFDES.PIN) the routing does not connect yet
+}
+
+export interface BrdDrcMarker {
+  check: string; // the DRC check's Constraint Manager name, or its code
+  layer?: string;
+  x: number;
+  y: number;
+  x2?: number; // a second point, when it differs
+  y2?: number;
+  constraintSet?: string;
+  objects: string[]; // the objects in conflict, e.g. "U5.A3", "via on GND", "track on CLK (TOP)"
 }
 
 /** A drawn item on a layer: a line, a rectangle, a shape or a text. Lengths in microns. */
@@ -138,6 +151,10 @@ export interface BrdLayout {
   items: BrdItem[];
   footprints: BrdFootprint[];
   padstacks: BrdPadstack[];
+  /** DRC markers left in the board by Allegro's last DRC run, and each check's on/off state */
+  drc: { markers: BrdDrcMarker[]; checks: Record<string, "on" | "off" | "batch"> };
+  /** Artwork films and the CLASS/SUBCLASS layers each plots */
+  films: Array<{ name: string; layers: string[] }>;
   /** Design-level properties */
   properties?: Record<string, string>;
   outline?: BoardOutline;
@@ -481,6 +498,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   // first 0x32 pad.
   const components: BrdComponent[] = [];
   const refdesOf = new Map<number, string>(); // 0x2D placement or 0x32 pad key -> refdes
+  const pinOf = new Map<number, string>(); // 0x32 pad key -> REFDES.PIN
   const pinsByNet = new Map<string, Array<{ refdes: string; pin: string }>>();
   for (const d of list(9, 0x2b, 8)) {
     const packageRef = str(w[d + 2]) ?? "";
@@ -511,6 +529,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
         const geo = ps?.pad(bottom && ps.layers > 1 ? ps.layers - 1 : 0);
         const pin = str(w[pd + 2]) ?? "";
         refdesOf.set(w[p + 1], refdes);
+        pinOf.set(w[p + 1], `${refdes}.${pin}`);
         const net = netOf.get(w[p + 1]) ?? "";
         const fn = v16 ? {} : pinFunction(p);
         pads.push({
@@ -920,6 +939,84 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   const designAt = (v18 ? 0x11c : 0x90) >>> 2;
   const design = v16 ? undefined : properties(w[designAt], w[designAt - 1]);
 
+  // Unrouted connections, from g14.04: a 0x23 ratsnest pair names its two pads (words 6 and 8,
+  // 5 and 7 in g14.04); byte 3 of word 0 is 1 once the routing connects them
+  const byName = new Map(nets.map((x) => [x.name, x]));
+  if (!v16)
+    for (const i of starts) {
+      if (type(i) !== 0x23 || w[i] >>> 24) continue;
+      const [a, b] = [w[i + (v174 ? 6 : 5)], w[i + (v174 ? 8 : 7)]];
+      const net = byName.get(netOf.get(a) ?? netOf.get(b) ?? "");
+      if (net) (net.unrouted ??= []).push([pinOf.get(a) ?? "?", pinOf.get(b) ?? "?"]);
+    }
+
+  // DRC markers 0x0A on lists 11 and 22, from g14.04: the layer, point 1 and point 2 (words 5 to 8),
+  // the constraint set name (9), the objects in conflict (10, 11) and the check code in the lower
+  // half of word 13 (12 in g14.04). The 0x36 table of discriminator 6 holds every check's state:
+  // 8-byte items from word 9 (8 in g14.04), the code in the lower half, the state in byte 3.
+  const describe = (key: number): string | undefined => {
+    const i = byKey.get(key);
+    if (i === undefined) return undefined;
+    const t = type(i);
+    if (t === 0x32) return pinOf.get(key) ?? "pin";
+    if (t === 0x1b) return `net ${str(w[i + 3]) ?? ""}`;
+    const owner = SEGMENT_TYPES.has(t) ? byKey.get(w[i + 3]) : i; // a segment's track or shape
+    const net = owner === undefined ? undefined : netOf.get(w[owner + 1]);
+    const kind =
+      {
+        0x33: "via",
+        0x05: "track",
+        0x28: "shape",
+        0x0e: "rectangle",
+        0x24: "rectangle",
+        0x14: "line",
+        0x31: "text",
+        0x2c: "group",
+      }[owner === undefined ? t : type(owner)] ?? `0x${t.toString(16)}`;
+    const layer = owner !== undefined && type(owner) !== 0x33 ? layerOf(owner) : undefined;
+    const refdes = owner === undefined ? undefined : refdesOf.get(w[owner + 3]);
+    const where = layer ? ` (${layer.replace(/^ETCH\//, "")})` : "";
+    return `${kind}${net ? ` on ${net}` : ""}${refdes ? ` of ${refdes}` : ""}${where}`;
+  };
+  const markers: BrdDrcMarker[] = v16
+    ? []
+    : [...list(11, 0x0a), ...list(22, 0x0a)].map((i) => {
+        const o = v174 ? 0 : -1;
+        const code = w[i + 13 + o] & 0xffff;
+        const m: BrdDrcMarker = {
+          check: DRC_MODES[code] ?? `0x${code.toString(16)}`,
+          x: um(i32(i + 5)),
+          y: um(i32(i + 6)),
+          objects: [w[i + 10 + o], w[i + 11 + o]].flatMap((k) => (k && describe(k)) || []),
+        };
+        const layer = layerOf(i);
+        if (layer) m.layer = layer.replace(/^DRC_ERROR\//, "");
+        if (i32(i + 7) !== i32(i + 5) || i32(i + 8) !== i32(i + 6))
+          [m.x2, m.y2] = [um(i32(i + 7)), um(i32(i + 8))];
+        const set = str(w[i + 9 + o]);
+        if (set) m.constraintSet = set;
+        return m;
+      });
+  const modesTable = v16
+    ? undefined
+    : starts.find((i) => type(i) === 0x36 && ((w[i] >>> 16) & 0xffff) === 6);
+  const checks: BrdLayout["drc"]["checks"] = {};
+  if (modesTable !== undefined)
+    for (let j = 0; j < w[modesTable + 5]; j++) {
+      const item = modesTable + (v174 ? 9 : 8) + 2 * j;
+      const name = DRC_MODES[w[item] & 0xffff];
+      const state = ["off", "on", "batch"][w[item] >>> 24] as "on" | "off" | "batch" | undefined;
+      if (name && state) checks[name] = state;
+    }
+
+  // Films (list 14): 0x38 word 4 the name, word 3 its 0x39, whose word 3 heads a chain of 0x3A
+  // entries (through word 2, back to the 0x39), each naming a class and subclass
+  const films = list(14, 0x38).map((i) => {
+    const block = find(w[i + 3], 0x39);
+    const entries = block === undefined ? [] : chain(w[block + 3], w[block + 1], 0x3a);
+    return { name: str(w[i + 4]) ?? "", layers: entries.flatMap((e) => layerOf(e) ?? []) };
+  });
+
   return {
     copperLayers,
     layers,
@@ -928,6 +1025,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     items,
     footprints,
     padstacks,
+    drc: { markers, checks },
+    films,
     ...(design ? { properties: design } : {}),
     ...(outline ? { outline } : {}),
   };
