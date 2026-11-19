@@ -8,7 +8,7 @@ It reads IPC-2581 layouts from any EDA tool, and Cadence Allegro boards and cons
 
 | Format | Input Files | Description |
 |--------|------------|-------------|
-| Cadence Allegro | `.brd` | Reads the binary board directly. Layout (Allegro 16.0 to 25.1): copper layers, board outline, component placement and pads, net connectivity, routing (tracks and arcs), vias, copper shapes with their area, footprint and padstack definitions (pads, antipads and thermals per layer, drill, plating, masks), properties and pin names, DRC markers and check settings, unrouted connections, artwork films, and every other layer: silkscreen, assembly, place bounds, keepouts, board geometry and text. Constraints (Allegro 17.2 to 25.1): the live physical and electrical constraint sets, net classes, match groups, diff pairs, regions, per-net assignments and the stackup, plus the Constraint Manager archives the board embeds. See [the Allegro .brd format](docs/allegro-brd-format.md) |
+| Cadence Allegro | `.brd` | The full board database, read directly: layout (Allegro 16.0 to 25.1) and constraints (17.2 to 25.1) |
 | Cadence Constraint Manager | `.dcf` | Constraint database of a schematic or board |
 | Cadence TCFX | `.tcfx` | Constraint XML exported from Allegro: physical and spacing rules, net classes, stackup, regions |
 | IPC-2581 | `.xml` | RevA, RevB and RevC files from any compliant EDA tool: stackup, board outline, component placement and pads, net connectivity, routing and vias |
