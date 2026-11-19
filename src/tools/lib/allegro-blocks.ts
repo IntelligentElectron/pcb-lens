@@ -12,7 +12,7 @@ import type { BrdInfo } from "./allegro-brd.js";
 type Family = 0 | 1 | 2 | 3 | 4 | 5; // 16.4 and older, 16.5, 16.6, 17.2, 17.4 and 17.5, 18.x
 
 // Fixed block sizes in words, per family [16.4, 16.5, 16.6, 17.2, 17.4, 18]
-const FIXED: Record<number, number[]> = {
+const FIXED: Record<number, Array<number | undefined>> = {
   0x01: [20, 20, 20, 21, 21, 21], // arc segment
   0x04: [5, 5, 5, 5, 6, 6], // net assignment
   0x05: [15, 15, 15, 17, 17, 17], // track
@@ -42,6 +42,7 @@ const FIXED: Record<number, number[]> = {
   0x2c: [9, 9, 9, 11, 11, 11], // table
   0x2d: [16, 16, 16, 18, 18, 18], // placed footprint
   0x2e: [9, 9, 9, 10, 10, 10],
+  0x2f: [undefined, undefined, undefined, 8, undefined, undefined], // seen on 17.2 only
   0x30: [11, 11, 11, 14, 15, 15], // text
   0x32: [19, 19, 19, 21, 21, 21], // placed pad
   0x33: [18, 18, 18, 20, 20, 20], // via
@@ -76,6 +77,7 @@ const TABLE_RECORD_BY_FAMILY: Partial<Record<Family, Record<number, number>>> = 
   0: TABLE_RECORD_16,
   1: TABLE_RECORD_16,
   2: TABLE_RECORD_16,
+  3: { 0x12: 263 }, // 0x12 seen on one 17.2 board only
   4: { 0x08: 17 },
   5: { 0x08: 17, 0x10: 28 },
 };

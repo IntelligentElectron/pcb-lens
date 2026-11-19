@@ -139,7 +139,7 @@ All integers are little-endian.
 
 | Offset | Size | Field |
 |--------|------|-------|
-| 0x000 | u32 | Magic. Upper 16 bits: `0x0013` 16.x, `0x0014` 17.x, `0x0015` 18.x. Release byte `(magic >> 8) & 0xFF`: `0x04` 17.2, `0x09` 17.4, `0x15` 17.5 |
+| 0x000 | u32 | Magic. Upper 16 bits: `0x0013` 16.x, `0x0014` 17.x, `0x0015` 18.x. Release byte `(magic >> 8) & 0xFF`: `0x04` and `0x05` 17.2, `0x09` 17.4, `0x15` 17.5 |
 | 0x03C | 23 × (u32, u32) | Linked list descriptors: tail sentinel, head key (section 5) |
 | 0x0F8 | 60 bytes | Allegro build string |
 | 0x180 | u8 | Board units: 1 mils, 2 inches, 3 mm, 4 cm, 5 µm |
@@ -676,6 +676,7 @@ Sizes in words. Releases group into six families: 16.4 (and older), 16.5, 16.6, 
 | 0x2C table | 9 | 9 | 9 | 11 | 11 | 11 |
 | 0x2D placed footprint | 16 | 16 | 16 | 18 | 18 | 18 |
 | 0x2E | 9 | 9 | 9 | 10 | 10 | 10 |
+| 0x2F | ? | ? | ? | 8 | ? | ? |
 | 0x30 text | 11 | 11 | 11 | 14 | 15 | 15 |
 | 0x32 placed pad | 19 | 19 | 19 | 21 | 21 | 21 |
 | 0x33 via | 18 | 18 | 18 | 20 | 20 | 20 |
@@ -685,7 +686,7 @@ Sizes in words. Releases group into six families: 16.4 (and older), 16.5, 16.6, 
 | 0x39 film layers | 15 | 15 | 15 | 15 | 15 | 15 |
 | 0x3A film layer | 4 | 4 | 4 | 4 | 5 | 5 |
 
-0x22 is seen in 17.2 files only; its other sizes are assumed.
+0x22 is seen in 17.2 files only; its other sizes are assumed. 0x2F is seen in one 17.2 file only; in any other release the walk stops on it with an error.
 
 ### Sizes that grow with a count
 
@@ -700,7 +701,7 @@ Sizes in words. Releases group into six families: 16.4 (and older), 16.5, 16.6, 
 | 0x27 | up to the byte offset (plus 1) at header 0x18C (0x28 in 18.x), or to the end of the file when that word is 0 |
 | 0x2A layer list | 2 words, one more in 17.4 and later, then 3 words per entry (9 in 16.4); the count in the upper half of word 0 |
 | 0x31 text string | 6 words (7 from 17.4), then the string, its length with the NUL in the upper half of word 5 |
-| 0x36 table | 7 words (16.x, count in word 3), 8 (17.2) or 9 (17.4 and later, count in word 4), then count records of a size set by the substruct in byte 2: 0x02 25 words in 16.x, 27 later; 0x03 8; 0x06 52 in 16.x, 2 later; 0x08 8 in 16.x, 16 in 17.2, 17 later; 0x0B 254; 0x0F 5; 0x10 27, 28 in 18.x |
+| 0x36 table | 7 words (16.x, count in word 3), 8 (17.2) or 9 (17.4 and later, count in word 4), then count records of a size set by the substruct in byte 2: 0x02 25 words in 16.x, 27 later; 0x03 8; 0x06 52 in 16.x, 2 later; 0x08 8 in 16.x, 16 in 17.2, 17 later; 0x0B 254; 0x0F 5; 0x10 27, 28 in 18.x; 0x12 263 in 17.2 (one file; other releases unknown) |
 | 0x37 key array | 7 words (8 from 17.4), then word-4 key slots |
 | 0x3B named property | a 128-byte name from word 2, then the value of word-1 bytes from word 44 (16.x) or 45 |
 | 0x3C key list | 3 words, then word-2 keys; from 17.4, 4 words, then word-3 keys |

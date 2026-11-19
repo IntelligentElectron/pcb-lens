@@ -29,6 +29,37 @@ describe.each(FIXTURES.map((f) => [path.basename(f), f]))("walkBrdBlocks on %s",
   });
 });
 
+describe("walkBrdBlocks on blocks seen in one release only", () => {
+  it("sizes 0x2F and the 0x36 substruct 0x12 in 17.2", () => {
+    const w = new Uint32Array(8 + 8 + 263 + 5);
+    w.set([0x0c00002f, 1], 0); // 8 words
+    w.set([0x00120036, 2, 0, 0, 1], 8); // 8-word header, one 263-word record
+    w.set([0x04, 3], 8 + 8 + 263); // a 5-word net assignment ends the file
+    const blocks = walkBrdBlocks(w, { version: "17.2", bodyWord: 0 } as BrdInfo);
+    expect(blocks).toEqual({
+      starts: [0, 8, 279],
+      byKey: new Map([
+        [1, 0],
+        [2, 8],
+        [3, 279],
+      ]),
+    });
+  });
+
+  it("stops on 0x2F in a release whose size is not known", () => {
+    const w = new Uint32Array([0x2f, 1, 0, 0, 0, 0, 0, 0]);
+    expect(walkBrdBlocks(w, { version: "17.4", bodyWord: 0 } as BrdInfo)).toMatch(/0x2f at/);
+  });
+
+  it("reads release code 0x1405 as 17.2", () => {
+    const buf = Buffer.alloc(0x1300);
+    buf.writeUInt32LE(0x00140500, 0);
+    buf.writeUInt8(3, 0x180); // mm
+    buf.writeUInt32LE(10000, 0x26c);
+    expect((readBrdInfo(buf) as BrdInfo).version).toBe("17.2");
+  });
+});
+
 describe("walkBrdBlocks errors", () => {
   it("names a block it cannot size", () => {
     const info = { version: "17.2", bodyWord: 0 } as BrdInfo;
