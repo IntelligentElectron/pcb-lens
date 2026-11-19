@@ -9,7 +9,8 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { at, readBrdInfo, type BrdInfo } from "./allegro-brd.js";
 import { walkBrdBlocks } from "./allegro-blocks.js";
-import { className, subclassName } from "./allegro-names.js";
+import { FIELD_ENUMS } from "./allegro-brd.js";
+import { className, PROPERTY_NAMES, subclassName } from "./allegro-names.js";
 import { boardOutline } from "./geometry.js";
 import type { BoardOutline, OutlineContour, RoutingArc } from "./types.js";
 
@@ -22,6 +23,52 @@ export interface BrdPad {
   height: number;
   drill: number; // 0 for a surface-mount pad
   net: string;
+  padstack?: string;
+  pinName?: string; // the logical pin's name, e.g. VDD or PA3
+  gate?: string; // the gate (slot) the pin belongs to
+}
+
+/** One pad figure of a padstack, in the padstack's own frame. Lengths in microns. */
+export interface BrdPadFigure {
+  shape: string; // circle, square, rectangle, oblong, octagon, rounded-rectangle, chamfered-rectangle, donut, custom, flash
+  width: number;
+  height: number;
+  offsetX?: number;
+  offsetY?: number;
+  radius?: number; // corner radius, chamfer, or a donut's inner diameter
+  corners?: number; // rounded or chamfered corners: bit 0 lower left, 1 lower right, 2 upper right, 3 upper left
+  outline?: OutlineContour[]; // custom and flash figures
+}
+
+export interface BrdPadstack {
+  name: string;
+  drill: number; // 0 for no hole; a slot's smaller side
+  slot?: { width: number; height: number };
+  plated?: boolean;
+  type: "smd" | "through" | "blind/buried" | "mechanical";
+  layers: Array<{
+    layer: string;
+    pad?: BrdPadFigure;
+    antipad?: BrdPadFigure;
+    thermal?: BrdPadFigure;
+  }>;
+  soldermaskTop?: BrdPadFigure;
+  soldermaskBottom?: BrdPadFigure;
+  pastemaskTop?: BrdPadFigure;
+  pastemaskBottom?: BrdPadFigure;
+  drillSymbol?: { figure: number; width: number; height: number; text?: string };
+  properties?: Record<string, string>;
+}
+
+export interface BrdFootprint {
+  name: string;
+  kind: number; // 1 package, 2 mechanical, 3 format, 4 shape, 7 flash (2 to 7 unconfirmed)
+  refdes: string[]; // placed components using it
+  placements: number; // placed instances, with or without a refdes
+  pins: Array<{ number: string; x: number; y: number; rotation: number; padstack?: string }>;
+  extent?: { minX: number; minY: number; maxX: number; maxY: number };
+  items: BrdItem[]; // its template drawing, in its own frame
+  properties?: Record<string, string>;
 }
 
 export interface BrdComponent {
@@ -29,6 +76,7 @@ export interface BrdComponent {
   packageRef: string;
   deviceType?: string;
   value?: string;
+  properties?: Record<string, string>; // the part's, the component's and the placed symbol's
   x: number;
   y: number;
   rotation: number; // degrees counterclockwise, as seen from the component's side
@@ -58,6 +106,7 @@ export interface BrdNet {
   tracks: BrdTrack[];
   vias: BrdVia[];
   shapes: BrdItem[]; // copper shapes and filled rectangles (pours, planes, fills, teardrops)
+  properties?: Record<string, string>;
 }
 
 /** A drawn item on a layer: a line, a rectangle, a shape or a text. Lengths in microns. */
@@ -87,6 +136,10 @@ export interface BrdLayout {
   nets: BrdNet[];
   /** Board-level and component graphics, text and non-copper shapes, in file order. */
   items: BrdItem[];
+  footprints: BrdFootprint[];
+  padstacks: BrdPadstack[];
+  /** Design-level properties */
+  properties?: Record<string, string>;
   outline?: BoardOutline;
 }
 
@@ -102,6 +155,19 @@ const PAD_SHAPES: Record<number, BrdPad["shape"]> = {
   0x1c: "rect", // chamfered rectangle, same
 };
 const VALUE_FIELD = 2; // 0x03 field code holding a component's value
+const FIGURES: Record<number, string> = {
+  0x02: "circle",
+  0x03: "octagon",
+  0x05: "square",
+  0x06: "rectangle",
+  0x0b: "oblong",
+  0x0c: "oblong",
+  0x16: "custom",
+  0x17: "flash",
+  0x19: "donut",
+  0x1b: "rounded-rectangle",
+  0x1c: "chamfered-rectangle",
+};
 
 // Word offsets of the fields read, which move between the 16.x and 17.x layouts
 const V17 = {
@@ -287,8 +353,13 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       : [21, 11, 3, 7]
     : [v18 ? 56 : 48, 21, 4, 9];
   const shapeAt = v16 ? 1 : 0;
+  // a pin or via names its padstack directly, or through a 0x2F reference whose word 2 is the 0x1C
+  const padstackAt = (key: number) => {
+    const ref = find(key, 0x2f);
+    return find(ref === undefined ? key : w[ref + 2], 0x1c);
+  };
   const padstack = (key: number) => {
-    const p = find(key, 0x1c);
+    const p = padstackAt(key);
     if (p === undefined) return undefined;
     const layers = v16 ? w[p + 12] >>> 16 : w[p + 11];
     return {
@@ -302,6 +373,52 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
           : undefined;
       },
     };
+  };
+
+  // Properties 0x03: [03][0][u16 code][key][previous, the owner after the oldest] then, from
+  // g14.04, [owner][subtype, flags, u16 length][0] and the value; in 16.x [subtype ...] follows the
+  // previous word. An owner's chain can pass through its 0x30 texts. User codes (16000 and up)
+  // are rows of the 0x36 table of discriminator 2: 108-byte rows (100 in 16.x) from word 9 (8 in
+  // g14.04, 7 in 16.x), each starting with a 32-byte name.
+  const dictionary = starts.find((i) => type(i) === 0x36 && ((w[i] >>> 16) & 0xffff) === 2);
+  const userName = (code: number) => {
+    if (dictionary === undefined) return undefined;
+    const row = (dictionary + (v16 ? 7 : v174 ? 9 : 8)) * 4 + (code - 16000) * (v16 ? 100 : 108);
+    if (row + 32 > buf.length || code - 16000 >= w[dictionary + (v16 ? 3 : 4)]) return undefined;
+    return buf.toString("latin1", row, buf.indexOf(0, row)).slice(0, 32) || undefined;
+  };
+  const sub = v16 ? 3 : 4;
+  const propertyValue = (i: number) => {
+    const s = w[i + sub] & 0xff;
+    const v = i + sub + (v16 ? 1 : 2);
+    if (s === 0x68) {
+      const len = w[i + sub] >>> 16;
+      const end = buf.indexOf(0, v * 4);
+      return buf.toString("latin1", v * 4, end >= 0 && end < v * 4 + len ? end : v * 4 + len);
+    }
+    if (s === 0x6a) return str(w[v]);
+    if (s === 0x66) return `${((w[v] | 0) * info.mmPerUnit).toFixed(4)} mm`;
+    if (s === 0x64) return FIELD_ENUMS[w[i] >>> 16]?.[w[v]] ?? String(w[v] | 0);
+    if (s === 0x65) return "true";
+    return undefined; // binary values are not decoded
+  };
+  /** Named properties of an owner, from the head of its chain; unnamed codes are left out. */
+  const properties = (head: number, owner: number) => {
+    const out: Record<string, string> = {};
+    const seen = new Set<number>();
+    let k = head;
+    while (k && k !== owner && !seen.has(k)) {
+      seen.add(k);
+      const i = byKey.get(k);
+      if (i === undefined || (type(i) !== 0x03 && type(i) !== 0x30)) break;
+      k = w[i + 2];
+      if (type(i) !== 0x03) continue;
+      const code = w[i] >>> 16;
+      const name = code >= 16000 ? userName(code) : PROPERTY_NAMES[code];
+      const value = name === undefined ? undefined : propertyValue(i);
+      if (value !== undefined && !(name! in out)) out[name!] = value;
+    }
+    return Object.keys(out).length ? out : undefined;
   };
 
   // An instance's (0x07) word 2 leads to its 0x06 part, through the part's other instances
@@ -332,6 +449,31 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     return buf.toString("latin1", start, end >= 0 && end < start + len ? end : start + len);
   };
 
+  // A placed pad's logical pin (word 12, a 0x08: word 5 its 0x11 pin name, whose word 2 is the
+  // name) and its binding (word 10, a 0x12 chained through word 2 to its 0x10 gate instance: the
+  // slot name in word 7, 6 in g14.04)
+  const pinFunction = (p: number) => {
+    const out: { pinName?: string; gate?: string } = {};
+    const logical = find(w[p + 12], 0x08);
+    const named = logical === undefined ? undefined : find(w[logical + 5], 0x11);
+    if (named !== undefined && str(w[named + 2])) out.pinName = str(w[named + 2]);
+    const seen = new Set<number>();
+    let k = w[p + 10];
+    while (k && !seen.has(k)) {
+      seen.add(k);
+      const i = byKey.get(k);
+      if (i === undefined) break;
+      if (type(i) === 0x10) {
+        const slot = str(w[i + (v174 ? 7 : 6)]);
+        if (slot) out.gate = slot;
+        break;
+      }
+      if (type(i) !== 0x12) break;
+      k = w[i + 2];
+    }
+    return out;
+  };
+
   // Components: 0x2B footprint definitions (list 9: word 2 name, word 8 next, word 9 first
   // instance), each with a chain of 0x2D instances through word 2 ending at the definition.
   // 0x2D: byte 2 of word 0 the side (1 bottom), rotation in millidegrees and then x and y, its
@@ -348,7 +490,9 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       if (!refdes) continue; // unnamed mechanical symbols
       refdesOf.set(w[i + 1], refdes);
       const part = inst === undefined ? undefined : partOf(inst);
-      const bottom = cls(i) === 1;
+      // side: 0 top; 1 (to g14.09) or 3 (from g14.14) bottom; 2 an embedded part facing down,
+      // byte 3 its copper layer
+      const bottom = cls(i) !== 0;
       const raw = w[i + O.instRot] / 1000;
       const rot = (raw * Math.PI) / 180;
       const X = i32(i + O.instRot + 1);
@@ -368,6 +512,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
         const pin = str(w[pd + 2]) ?? "";
         refdesOf.set(w[p + 1], refdes);
         const net = netOf.get(w[p + 1]) ?? "";
+        const fn = v16 ? {} : pinFunction(p);
         pads.push({
           pin,
           x: um(X + lx * Math.cos(rot) - ly * Math.sin(rot)),
@@ -377,18 +522,26 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
           height: geo?.height ?? 0,
           drill: ps?.drill ?? 0,
           net,
+          ...(ps ? { padstack: str(w[padstackAt(w[o + 6])! + 3]) } : {}),
+          ...fn,
         });
         if (net) (pinsByNet.get(net) ?? pinsByNet.set(net, []).get(net)!).push({ refdes, pin });
       }
+      const props = {
+        ...(part === undefined ? {} : properties(w[part + 8], w[part + 1])),
+        ...(v16 || inst === undefined ? {} : properties(w[inst + 9], w[inst + 1])),
+        ...(v16 ? {} : properties(w[i + 13], w[i + 1])),
+      };
       components.push({
         refdes,
         packageRef,
         deviceType: part === undefined ? undefined : str(w[part + 3]),
         value: part === undefined ? undefined : textField(part, VALUE_FIELD),
+        ...(Object.keys(props).length ? { properties: props } : {}),
         x: um(X),
         y: um(Y),
         rotation: bottom ? (360 - raw) % 360 : raw,
-        layer: bottom ? bottomLayer : topLayer,
+        layer: cls(i) === 2 ? layerName(w[i] >>> 24) : bottom ? bottomLayer : topLayer,
         pads,
       });
     }
@@ -559,13 +712,14 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   // board coordinates; a footprint definition (0x2B) for its template drawing, skipped; otherwise a
   // header list. A text's owner is its 0x30's.
   const items: BrdItem[] = [];
+  const defItems = new Map<number, BrdItem[]>(); // 0x2B key -> its template drawing
   for (const i of starts) {
     const t = type(i);
     if (t !== 0x14 && t !== 0x24 && t !== 0x0e && t !== 0x28 && t !== 0x31) continue;
     if (copper.has(i)) continue;
     const ownerAt = t === 0x31 ? find(w[i + 2], 0x30) : i;
     const owner = ownerAt === undefined ? undefined : byKey.get(w[ownerAt + 3]);
-    if (owner !== undefined && type(owner) === 0x2b) continue;
+    const def = owner !== undefined && type(owner) === 0x2b ? w[owner + 1] : undefined;
     const layer = layerOf(i);
     if (!layer) continue; // a deleted subclass
     let item: BrdItem;
@@ -576,7 +730,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     } else item = areaItem(i, layer);
     const refdes = owner === undefined ? undefined : refdesOf.get(w[owner + 1]);
     if (refdes) item.refdes = refdes;
-    items.push(item);
+    if (def === undefined) items.push(item);
+    else (defItems.get(def) ?? defItems.set(def, []).get(def)!).push(item);
   }
 
   // Board outline: 0x14 graphics, 0x28 shapes and 0x24 rectangles on BOARD_GEOMETRY (class 1)
@@ -626,7 +781,156 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     )
   );
 
-  return { copperLayers, layers, components, nets, items, ...(outline ? { outline } : {}) };
+  // Padstacks (list 6). From g14.04: byte 3 of word 0 the first conductor, word 3 the name, byte
+  // 2 of word 7 attribute flags (0x20 a plated hole), the conductor count in the lower half of word
+  // 11, the drill in word 16, a slot's width and height in words 19 and 20, the drill symbol
+  // (width, height, figure, four characters) from word 23 (30 from g15.00). Then 9-word figures
+  // from word 48 (56 from g15.00): 21 fixed ones (14 to 17 the soldermask and pastemask, top and
+  // bottom) and four per conductor (antipad, thermal, pad, unknown), each [figure | corners << 16,
+  // 0, width, height, radius, offset x, offset y, flash name, 0x28 outline]. In 16.x only the
+  // per-conductor figures are read: three of 7 words, [?, figure, width, height, ...].
+  const figure = (c: number): BrdPadFigure | undefined => {
+    const code = w[c + shapeAt] & 0xff;
+    if (!code || c + 8 >= n) return undefined;
+    const f: BrdPadFigure = {
+      shape: FIGURES[code] ?? `0x${code.toString(16)}`,
+      width: um(i32(c + 2)),
+      height: um(i32(c + 3)),
+    };
+    if (v16) return f;
+    if (code === 0x05) f.height = f.width;
+    if (i32(c + 5) || i32(c + 6)) [f.offsetX, f.offsetY] = [um(i32(c + 5)), um(i32(c + 6))];
+    if (code === 0x19 || code === 0x1b || code === 0x1c) f.radius = um(i32(c + 4));
+    if (code === 0x1b || code === 0x1c) f.corners = (w[c] >>> 16) & 0xf;
+    const shape = code === 0x16 || code === 0x17 ? find(w[c + 8], 0x28) : undefined;
+    if (shape !== undefined) f.outline = contours(segments(shape, w[shape + O.shapeSeg]));
+    return f;
+  };
+  const padstacks: BrdPadstack[] = list(6, 0x1c).map((p) => {
+    const drill = um(i32(p + O.drill));
+    const first = w[p] >>> 24;
+    const count = v16 ? w[p + 12] >>> 16 : w[p + 11] & 0xffff;
+    const slots = p + psHeader;
+    const fixed = (k: number) => (v16 ? undefined : figure(slots + k * compWords));
+    const perConductor = (layer: number, k: number) =>
+      figure(slots + (psFixed + perLayer * layer + k) * compWords);
+    const ps: BrdPadstack = {
+      name: str(w[p + 3]) ?? "",
+      drill,
+      type: !drill
+        ? count === 1
+          ? "smd"
+          : "mechanical"
+        : first === 0 && count === copperLayers.length
+          ? "through"
+          : "blind/buried",
+      layers: Array.from({ length: Math.min(count, 256) }, (_, j) => ({
+        layer: layerName(first + j),
+        pad: perConductor(j, 2),
+        antipad: perConductor(j, 0),
+        thermal: perConductor(j, 1),
+      })).map(
+        (l) =>
+          Object.fromEntries(
+            Object.entries(l).filter(([, v]) => v !== undefined)
+          ) as BrdPadstack["layers"][number]
+      ),
+    };
+    if (!v16) {
+      if (i32(p + 20) > 0) ps.slot = { width: um(i32(p + 19)), height: um(i32(p + 20)) };
+      // byte 2 of word 7 bit 0x20: a plated hole (Allegro's IPC-2581 export agrees on every hole)
+      if (drill) ps.plated = Boolean((w[p + 7] >>> 16) & 0x20);
+      const masks = {
+        soldermaskTop: 14,
+        soldermaskBottom: 15,
+        pastemaskTop: 16,
+        pastemaskBottom: 17,
+      } as const;
+      for (const [k, slot] of Object.entries(masks)) {
+        const f = fixed(slot);
+        if (f) ps[k as keyof typeof masks] = f;
+      }
+      const sym = p + (v18 ? 30 : 23);
+      if (w[sym + 2] || i32(sym)) {
+        const text = buf.toString("latin1", (sym + 3) * 4, (sym + 4) * 4).replace(/\0.*$/s, "");
+        ps.drillSymbol = {
+          figure: w[sym + 2],
+          width: um(i32(sym)),
+          height: um(i32(sym + 1)),
+          ...(text ? { text } : {}),
+        };
+      }
+      const props = properties(w[p + 6], w[p + 1]);
+      if (props) ps.properties = props;
+    }
+    return ps;
+  });
+
+  // Footprint definitions (list 9): byte 2 of word 0 the kind, word 2 the name, its extent in
+  // words 4 to 7 and its first 0x0D pin in word 10 (chained through word 3), from g14.04. A pin
+  // holds its number in word 2, then (one word later from g14.09) x, y, the padstack and, four
+  // words on, the rotation; 16.x pins are read through the first placement's pads.
+  const footprints: BrdFootprint[] = list(9, 0x2b, 8).map((d) => {
+    const placed = chain(w[d + 9], w[d + 1], 0x2d);
+    const pinBlocks = v16
+      ? placed.length
+        ? chain(w[placed[0] + O.instPad], 0, 0x32, O.padNext).flatMap(
+            (p) => find(w[p + O.padDef], 0x0d) ?? []
+          )
+        : []
+      : chain(w[d + 10], w[d + 1], 0x0d, 3);
+    const fp: BrdFootprint = {
+      name: str(w[d + 2]) ?? "",
+      kind: cls(d),
+      refdes: placed.flatMap((i) => refdesOf.get(w[i + 1]) ?? []),
+      placements: placed.length,
+      pins: pinBlocks.map((pd) => {
+        const o = pd + extra;
+        const ps = padstackAt(w[o + 6]);
+        return {
+          number: str(w[pd + 2]) ?? "",
+          x: um(i32(o + 4)),
+          y: um(i32(o + 5)),
+          rotation: (w[pd + (v16 ? 9 : extra + 10)] | 0) / 1000,
+          ...(ps === undefined ? {} : { padstack: str(w[ps + 3]) }),
+        };
+      }),
+      items: defItems.get(w[d + 1]) ?? [],
+    };
+    if (!v16 && (i32(d + 4) || i32(d + 6)))
+      fp.extent = {
+        minX: um(i32(d + 4)),
+        minY: um(i32(d + 5)),
+        maxX: um(i32(d + 6)),
+        maxY: um(i32(d + 7)),
+      };
+    const props = v16 ? undefined : properties(w[d + 13], w[d + 1]);
+    if (props) fp.properties = props;
+    return fp;
+  });
+
+  // Net properties (word 9 of a 0x1B) and design properties (from header word 0x90, 0x11C from
+  // g15.00, owned by the sentinel one word before), from g14.04
+  if (!v16) {
+    list(5, 0x1b).forEach((ni, k) => {
+      const props = properties(w[ni + 9], w[ni + 1]);
+      if (props && nets[k]) nets[k].properties = props;
+    });
+  }
+  const designAt = (v18 ? 0x11c : 0x90) >>> 2;
+  const design = v16 ? undefined : properties(w[designAt], w[designAt - 1]);
+
+  return {
+    copperLayers,
+    layers,
+    components,
+    nets,
+    items,
+    footprints,
+    padstacks,
+    ...(design ? { properties: design } : {}),
+    ...(outline ? { outline } : {}),
+  };
 };
 
 /**

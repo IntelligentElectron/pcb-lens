@@ -42,6 +42,7 @@ interface QueryNetResult {
   totalVias?: number;                // omitted when 0
   totalTraceLength?: number;         // omitted when 0
   layersUsed: string[];
+  properties?: Record<string, string>; // .brd only: the net's named properties (VOLTAGE, TOTAL_ETCH_LENGTH, constraint sets, ...)
   truncated?: boolean;               // true when a detail array or the pins map was capped
 }
 

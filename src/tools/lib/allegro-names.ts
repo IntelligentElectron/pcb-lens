@@ -5,6 +5,8 @@
  * Built-in names are not stored in the file.
  */
 
+import { FIELD_NAMES } from "./allegro-brd.js";
+
 export const CLASS_NAMES: Record<number, string> = {
   1: "BOARD_GEOMETRY",
   2: "COMPONENT_VALUE",
@@ -159,4 +161,47 @@ export const subclassName = (c: number, s: number, list: string[], builtIns: num
   if (s < list.length) return list[s];
   if (s > 0xfd || s < 0xfe - builtIns) return undefined;
   return BUILT_IN[c]?.[0xfd - s] ?? `0x${s.toString(16).toUpperCase()}`;
+};
+
+/**
+ * Names of 0x03 property codes: the constraint fields, Allegro's names for the other known codes,
+ * and a descriptive name for codes whose role is known but whose Allegro name is not. User
+ * properties (16000 and up) are named by the board's own dictionary.
+ */
+export const PROPERTY_NAMES: Record<number, string> = {
+  ...FIELD_NAMES,
+  0x02: "VALUE",
+  0x05: "PART_NUMBER",
+  0x18: "ALT_FOOTPRINTS",
+  0x27: "VOLTAGE",
+  0x4d: "PADSTACK_FILE",
+  0x79: "MAX_VIA_COUNT",
+  0x7a: "DIFFERENTIAL_PAIR",
+  0xc4: "DEVICE_CLASS",
+  0x10f: "PACKAGE_HEIGHT_MIN",
+  0x110: "PACKAGE_HEIGHT_MAX",
+  0x119: "DFA_DEV_CLASS",
+  0x11e: "TOTAL_ETCH_LENGTH",
+  0x14a: "LAST_MODIFIED",
+  0x168: "DYN_FIXED_THERM_WIDTH",
+  0x1fb: "MAXIMUM_NECK_LENGTH",
+  0x228: "SN_SHAPE_TO_SMDPIN_SPACING",
+  0x250: "MECH_PIN_TO_MECH_PIN_SPACING",
+  0x261: "MECH_PIN_TO_CONDUCTOR_SPACING",
+  0x26d: "MVIA_TO_LINE_SPACING",
+  0x296: "NAME",
+  0x2dc: "LAST_MODIFIED_BY",
+  0x2f8: "MIN_METAL_SPACING",
+  0x345: "MODEL_3D",
+  0x354: "MINIMUM_LINE_TO_LINE_ANGLE",
+  0x355: "MINIMUM_LINE_TO_SHAPE_ANGLE",
+  0x356: "MINIMUM_LINE_TO_PAD_ANGLE",
+  0x357: "MINIMUM_SHAPE_EDGE_ANGLE",
+  0x389: "CDS_DI_CONTROL_MASK",
+  0x794: "DFF_MAX_VIA_ALGN_TOL",
+  0x8c8: "MAX_RSS_FIBERWEAVE_ANGLE",
+  0x8c9: "MAX_RSS_FIBERWEAVE_IGNORE_LEN",
+  0x8d0: "DP_PHASE_TUNE_LEN_TOL",
+  0x8d1: "DP_PHASE_TUNE_SPC_TOL",
+  0x8d2: "DP_PHASE_TUNE_ANG_TOL",
 };
