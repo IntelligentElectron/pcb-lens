@@ -10,6 +10,7 @@ import type {
 } from "./lib/types.js";
 import { attr, streamAllLines } from "./lib/xml-utils.js";
 import { isBrdFile, loadBrdLayout } from "./lib/allegro-layout.js";
+import { allItems } from "./get-pcb-layer.js";
 import { boardOutline } from "./lib/geometry.js";
 import { extractMicronFactor, validateFile } from "./shared.js";
 import { defineTool } from "./registry.js";
@@ -75,6 +76,8 @@ const getBrdOverview = async (filePath: string): Promise<DesignOverview | ErrorR
   if (typeof brd === "string") return { error: brd };
   const { copperLayers, components, nets, outline } = brd.layout;
   const last = copperLayers.length - 1;
+  const counts = new Map<string, number>();
+  for (const it of allItems(brd.layout)) counts.set(it.layer, (counts.get(it.layer) ?? 0) + 1);
   return {
     fileName: path.basename(filePath),
     fileSizeBytes: (await stat(filePath)).size,
@@ -87,6 +90,9 @@ const getBrdOverview = async (filePath: string): Promise<DesignOverview | ErrorR
     })),
     componentCount: components.length,
     netCount: nets.filter((n) => n.name).length,
+    drawingLayers: [...counts]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, itemCount]) => ({ name, itemCount })),
     ...(outline ? { outline } : {}),
   };
 };
@@ -205,7 +211,7 @@ export const tool = defineTool({
   name: "get_pcb_metadata",
   title: "Design overview",
   description:
-    "Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, the board outline (its width, height and extent, and its edge and cutout contours), and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.",
+    "Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, the board outline (its width, height and extent, and its edge and cutout contours), and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom, and drawingLayers lists every CLASS/SUBCLASS layer that holds lines, shapes or text (silkscreen, assembly, place bounds, keepouts, copper shapes...) with its item count; get_pcb_layer reads them.",
   inputSchema: {
     file: z
       .string()

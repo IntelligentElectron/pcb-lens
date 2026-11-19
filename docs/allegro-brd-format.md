@@ -614,7 +614,44 @@ From word 4, the island's items chain through their word 2 back to the assignmen
 | | 11 | 9 | 0x1C padstack, for the drill and span |
 | 0x28 shape | 0 | 0 | byte 3: copper layer index |
 
-Arc centres and directions were checked on 16.5, 17.4 and 23.1 boards. Shapes are counted per layer; their outlines are not read.
+Arc centres and directions were checked on 16.5, 17.4 and 23.1 boards. Copper shapes are read below.
+
+### Layers
+
+**Confidence: VERIFIED** (layer lists and fixed subclass codes on every board read; names of built-in subclasses are Allegro's and are not stored in the file)
+
+The header holds, per class `c` (0 to 27), the class's built-in subclass count at 0x428 + 8·c and its 0x2A subclass list at 0x42C + 8·c. A layered block keeps its class in byte 2 and its subclass in byte 3. A subclass below the list's length is that list entry (a user subclass; for the ETCH classes, conductor `s` from TOP). The top `n` codes ending at 0xFD, `n` being the built-in count, are built-in subclasses: for BOARD_GEOMETRY 0xFD is OUTLINE, 0xF1 SILKSCREEN_TOP, 0xEA DESIGN_OUTLINE and 0xE9 CUTOUT, and so on for each class (the names are in `src/tools/lib/allegro-names.ts`). Any other code is a deleted subclass, and its items are left out. Classes 5, 6, 12, 15, 18 and 19 to 24 share the ETCH list. Classes 23, 24, 25 and 27 have no known name and are reported as CLASS_23 and so on; a built-in subclass with no known name is reported by its code, such as `0xFB`.
+
+Layers are reported as `CLASS/SUBCLASS`: `BOARD_GEOMETRY/SILKSCREEN_TOP`, `PACKAGE_GEOMETRY/PLACE_BOUND_TOP`, `ETCH/TOP`.
+
+### Graphics, text and shapes
+
+**Confidence: VERIFIED** for text: on BeagleBone Black RevC (17.2) all 694 board texts, and on CC13xxEM (16.6) all 29, agree with KiCad's import in string, position, rotation, height and justification (KiCad anchors text 0.45 of its height higher). **VERIFIED** for copper area: on BeagleBone Black's TOP and BOTTOM layers the area of every net's shapes agrees within 0.5% with the copper contours of the board's IPC-2581 export (407 net and layer pairs, 886.9 mm² in all).
+
+Word 3 of a drawn block is its owner. A placed footprint (0x2D) or placed pad (0x32) owns what a component draws, already in board coordinates; a footprint definition (0x2B) owns its template drawing, which is not read; a header list sentinel owns board-level items; a net branch (0x04) owns copper shapes.
+
+| Block | Word (17.x and later) | Word (16.x) | Field |
+|-------|-------------------|-------------|-------|
+| 0x14 line | 6 | 5 | first segment; the chain ends at the line |
+| 0x24 rectangle (outline) | 6-9 | 5-8 | corners x1, y1, x2, y2 before rotation |
+| | 13 | | rotation in millidegrees about the first corner |
+| 0x0E rectangle (filled) | 9-12 | 7-10 | corners |
+| | 16 | 14 | rotation |
+| 0x28 shape | 5 | 5 | flags: bit 0 filled; 0x100 a dynamic boundary or its generated fill |
+| | 9 | 7 | first 0x34 void |
+| | 10 | 8 | first ring segment |
+| 0x34 void | 2 | 2 | next void; the chain ends at the shape |
+| | 6 | 5 | first ring segment |
+| 0x30 text | 5 | 5 | byte 0: text block (1-based); byte 2: justification 1 left, 2 right, 3 centre; byte 3: mirrored (1 in g14.04 and g14.09, bit 1 from g14.14; not known in 16.x) |
+| | 13 (14 from g14.09) | 9 | rotation in millidegrees |
+| 0x31 text line | 2 | 2 | its 0x30 |
+| | 3, 4 | 3, 4 | anchor x, y |
+| | 5 | 5 | upper half: length with the NUL |
+| | 6 (7 from g14.09) | 6 | the characters |
+
+A ring is a closed chain of 0x15 to 0x17 lines and 0x01 arcs, like a track's. A shape's area is its ring's area less its voids'; an arc adds the circular segment between its chord and its sweep. A filled 0x28 or a 0x0E on ETCH is copper: dynamic fills (flags 0x101) and teardrops (0x1001, 0x3001) are owned by their net's branch like static pours, so every copper shape is reached from its net. The dynamic boundary the user drew is a separate shape on BOUNDARY (class 21) and is not copper.
+
+The character height comes from the 0x36 table of discriminator 8, one row per text block: rows of 8 words from word 7 in 16.x, 16 words from word 8 in g14.04, 17 words from word 9 from g14.09 (16 again in g16.01), the height in row word 2.
 
 ### Board outline
 
@@ -635,9 +672,9 @@ Pieces are joined end to end into contours, reversing a piece (and its arc's dir
 
 ### Not read
 
-- Keepouts, text and silkscreen
-- Shape outlines, thermal spokes and custom pad outlines (reported by their bounding box)
-- Components without a refdes (fiducials and other mechanical symbols)
+- Thermal spokes and custom pad outlines (reported by their bounding box)
+- Hatch lines (0x20) of hatched shapes; the shape's outline and voids are read
+- Components without a refdes (fiducials and other mechanical symbols); what they draw is read as board items
 
 ## 11. Block Sizes
 

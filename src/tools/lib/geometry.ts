@@ -379,35 +379,38 @@ export const transformPin = (comp: ComponentPlacement, pinDef: PinDef, f: number
 // Board outline
 // =============================================================================
 
+/** [minX, minY, maxX, maxY] of a contour, arcs measured to the axis-crossings their sweep passes. */
+export const contourExtent = (c: OutlineContour) => {
+  const xs = c.points.map((p) => p[0]);
+  const ys = c.points.map((p) => p[1]);
+  for (const a of c.arcs ?? []) {
+    const [sx, sy] = c.points[a.index - 1];
+    const [ex, ey] = c.points[a.index];
+    const r = Math.hypot(sx - a.centerX, sy - a.centerY);
+    const from = Math.atan2(sy - a.centerY, sx - a.centerX);
+    const to = Math.atan2(ey - a.centerY, ex - a.centerX);
+    const full = sx === ex && sy === ey;
+    // counterclockwise sweep from `from` to `to`; a clockwise arc is the same sweep reversed
+    const [lo, hi] = a.clockwise ? [to, from] : [from, to];
+    const span = full ? 2 * Math.PI : (((hi - lo) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    for (let q = 0; q < 4; q++) {
+      const ang = (q * Math.PI) / 2;
+      const d = (((ang - lo) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (d > span) continue;
+      xs.push(Math.round(a.centerX + r * Math.cos(ang)));
+      ys.push(Math.round(a.centerY + r * Math.sin(ang)));
+    }
+  }
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+};
+
 /**
  * Extent and order of outline contours: the largest is the board edge, closed or not; the
  * other open fragments are dropped. An arc's extent includes the axis-crossings its sweep
  * passes, so a rounded or circular edge is measured to its true limit.
  */
 export const boardOutline = (contours: OutlineContour[]): BoardOutline | undefined => {
-  const extent = (c: OutlineContour) => {
-    const xs = c.points.map((p) => p[0]);
-    const ys = c.points.map((p) => p[1]);
-    for (const a of c.arcs ?? []) {
-      const [sx, sy] = c.points[a.index - 1];
-      const [ex, ey] = c.points[a.index];
-      const r = Math.hypot(sx - a.centerX, sy - a.centerY);
-      const from = Math.atan2(sy - a.centerY, sx - a.centerX);
-      const to = Math.atan2(ey - a.centerY, ex - a.centerX);
-      const full = sx === ex && sy === ey;
-      // counterclockwise sweep from `from` to `to`; a clockwise arc is the same sweep reversed
-      const [lo, hi] = a.clockwise ? [to, from] : [from, to];
-      const span = full ? 2 * Math.PI : (((hi - lo) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      for (let q = 0; q < 4; q++) {
-        const ang = (q * Math.PI) / 2;
-        const d = (((ang - lo) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-        if (d > span) continue;
-        xs.push(Math.round(a.centerX + r * Math.cos(ang)));
-        ys.push(Math.round(a.centerY + r * Math.sin(ang)));
-      }
-    }
-    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-  };
+  const extent = contourExtent;
   const area = (e: number[]) => (e[2] - e[0]) * (e[3] - e[1]);
   const seen = new Set<string>();
   const sized = contours

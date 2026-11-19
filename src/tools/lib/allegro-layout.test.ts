@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadBrdLayout, type BrdLayout } from "./allegro-layout.js";
+import { loadBrdLayout, ringArea, type BrdLayout } from "./allegro-layout.js";
 import { getDesignOverview } from "../get-pcb-metadata.js";
 import { queryComponent } from "../get-pcb-component.js";
 import { queryNet } from "../get-pcb-net.js";
@@ -114,18 +114,23 @@ describe.skipIf(!existsSync(BBB))("geometry tools on an Allegro .brd", () => {
     const r = (await queryNet(BBB, "^I2C0_SDA$", "full")) as QueryNetsResult;
     const net = r.matches[0];
     expect(net.pins).toEqual({ R4: ["2"], U11: ["51"], U2: ["27"], U5: ["C17"], U7: ["3"] });
-    // TOP and BOTTOM equal the IPC-2581 export, which leaves the inner layers out
+    // TOP and BOTTOM equal the IPC-2581 export, which leaves the inner layers out; its teardrop
+    // contours there cover 0.2386 and 0.0538 mm2
     expect(net.routing).toContainEqual({
       layerName: "TOP",
       traceWidths: [121],
       segmentCount: 8,
       traceLength: 9151,
+      shapeCount: 4,
+      shapeArea: 0.2388,
     });
     expect(net.routing).toContainEqual({
       layerName: "BOTTOM",
       traceWidths: [121],
       segmentCount: 2,
       traceLength: 7128,
+      shapeCount: 1,
+      shapeArea: 0.054,
     });
     expect(net.routing!.map((l) => l.layerName)).toEqual(["BOTTOM", "LYR3", "LYR4", "TOP"]);
     expect(net.viaCounts).toEqual([{ diameter: 203, layer: "DRILL_1-6", count: 4 }]);
@@ -199,6 +204,99 @@ describe.skipIf(!existsSync(CC13))("parts on a 16.x board", () => {
     const c5 = brd.layout.components.find((c) => c.refdes === "C5")!;
     expect(c5).toMatchObject({ value: "22uF" });
     expect(c5.deviceType).toMatch(/^CAPACITOR_CAPC1608X100A2L_22UF/);
+  });
+});
+
+describe("ringArea", () => {
+  it("measures straight, arc and full-circle contours", () => {
+    const square: [number, number][] = [
+      [0, 0],
+      [1000, 0],
+      [1000, 1000],
+      [0, 1000],
+      [0, 0],
+    ];
+    expect(ringArea({ points: square })).toBe(1e6);
+    // a full circle of radius 1000 drawn as one arc, in either direction
+    for (const clockwise of [false, true])
+      expect(
+        ringArea({
+          points: [
+            [1000, 0],
+            [1000, 0],
+          ],
+          arcs: [{ index: 1, centerX: 0, centerY: 0, clockwise }],
+        })
+      ).toBeCloseTo(Math.PI * 1e6, 0);
+    // a square whose top edge bulges out as a half circle, its ends rounded a micron apart
+    const bulge = ringArea({
+      points: [
+        [0, 0],
+        [1000, 0],
+        [1000, 1000],
+        [0, 1001],
+        [0, 0],
+      ],
+      arcs: [{ index: 3, centerX: 500, centerY: 1000, clockwise: false }],
+    });
+    expect(bulge).toBeCloseTo(1e6 + (Math.PI * 500 ** 2) / 2, -3);
+  });
+});
+
+describe.skipIf(!existsSync(BBB))("layers, graphics, text and copper shapes of a .brd", () => {
+  it("names every layer class and its subclasses", async () => {
+    const { layout } = (await loadBrdLayout(BBB)) as { layout: BrdLayout };
+    const board = layout.layers.find((l) => l.class === "BOARD_GEOMETRY")!;
+    expect(board.subclasses).toEqual(
+      expect.arrayContaining(["SILKSCREEN_TOP", "DESIGN_OUTLINE", "CUTOUT"])
+    );
+    expect(layout.layers.find((l) => l.class === "ETCH")!.subclasses.slice(0, 6)).toEqual(
+      layout.copperLayers.map((l) => l.name)
+    );
+  });
+
+  it("reads board text as KiCad's importer places it", async () => {
+    // KiCad anchors text 0.45 heights higher (its vertical centre); every one of its 694 board
+    // texts on this board agrees in string, position, rotation, height and justification
+    const { layout } = (await loadBrdLayout(BBB)) as { layout: BrdLayout };
+    expect(layout.items).toContainEqual({
+      kind: "text",
+      layer: "ETCH/BOTTOM",
+      text: "PCB RevC",
+      x: 2223,
+      y: 5398,
+      rotation: 270,
+      height: 1016,
+      mirrored: true,
+      justify: "left",
+    });
+    expect(
+      layout.items.filter((i) => i.refdes === "U5" && i.layer === "REF_DES/SILKSCREEN_TOP")
+    ).toEqual([expect.objectContaining({ text: "U5", x: 36195, y: 34544, height: 1016 })]);
+  });
+
+  it("measures copper area per layer as the IPC-2581 export's contours", async () => {
+    // the export's GND_EARTH pours cover 319.68 mm2 on TOP and 320.75 on BOTTOM
+    const r = (await queryNet(BBB, "^GND_EARTH$")) as QueryNetsResult;
+    const area = Object.fromEntries(r.matches[0].routing!.map((l) => [l.layerName, l.shapeArea]));
+    expect(area.TOP).toBeCloseTo(319.68, 0);
+    expect(area.BOTTOM).toBeCloseTo(320.75, 0);
+  });
+});
+
+describe.skipIf(!existsSync(path.join(TI, "cc1310emk")))("text on a 16.6 board", () => {
+  it("reads rotation and height from the 16.x text block", async () => {
+    const file = path.join(TI, "cc1310emk/swrc315_design_files/Cadence/CC13xxEM_5XD_7793_4L.brd");
+    const { layout } = (await loadBrdLayout(file)) as { layout: BrdLayout };
+    expect(layout.items).toContainEqual(
+      expect.objectContaining({
+        text: "2015-01-19",
+        x: 123790,
+        y: 105030,
+        rotation: 180,
+        height: 200,
+      })
+    );
   });
 });
 

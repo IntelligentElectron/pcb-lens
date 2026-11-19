@@ -26,6 +26,7 @@ interface DesignOverview {
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
+  drawingLayers?: Array<{ name: string; itemCount: number }>; // .brd only: CLASS/SUBCLASS layers holding lines, shapes or text
   outline?: BoardOutline;     // absent when the file has no outline
   sections?: SectionInfo[];   // XML only; sorted by lineCount descending
 }
@@ -115,5 +116,5 @@ interface SectionInfo {
 - `componentCount` is derived from placement entries in the Component section (not BOM line items)
 - `netCount` is the number of `PhyNet` entries
 - `ipc2581Revision` and `stepName` may be absent if the file omits them
-- For an Allegro `.brd`, `layers` lists the copper layers top to bottom (`layerFunction` is `PLANE` for a non-routable layer, else `CONDUCTOR`), `componentCount` counts components with a refdes, and `netCount` counts named nets; `totalLines`, `sections` and `ipc2581Revision` are absent
+- For an Allegro `.brd`, `layers` lists the copper layers top to bottom (`layerFunction` is `PLANE` for a non-routable layer, else `CONDUCTOR`), `componentCount` counts components with a refdes, and `netCount` counts named nets; `totalLines`, `sections` and `ipc2581Revision` are absent. `allegroVersion` is the release that last saved the board. `drawingLayers` lists every layer that holds drawn items (silkscreen, assembly, place bounds, keepouts, copper shapes, notes) with their count, named `CLASS/SUBCLASS` as Allegro names them; [`get_pcb_layer`](get_pcb_layer.md) reads them
 - `outline` comes from the IPC-2581 `<Profile>` (its `<Polygon>` and `<Cutout>`s), or for an Allegro `.brd` from the board geometry outline (section 10 of [the format notes](../allegro-brd-format.md)). An arc's point at `index` is reached along the arc from the point before it, as in `get_pcb_net` traces. The board edge can be open (`closed: false`) where a footprint draws part of it, such as an edge connector's notch; `width` and `height` still measure the drawn edge

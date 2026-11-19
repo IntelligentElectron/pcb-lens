@@ -82,6 +82,8 @@ export interface DesignOverview {
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
+  /** Allegro .brd only: every CLASS/SUBCLASS layer holding drawn items, with their count */
+  drawingLayers?: Array<{ name: string; itemCount: number }>;
   /** Board outline, when the file has one */
   outline?: BoardOutline;
   /** XML top-level sections by size; absent for an Allegro .brd */
@@ -193,6 +195,10 @@ export interface NetRouteInfo {
   // so this undercounts traces that contain arcs; treat it as a lower bound on
   // such nets.
   traceLength: number;
+  // Allegro .brd only: copper shapes (pours, planes, fills, teardrops) on the layer and their
+  // copper area in square millimetres, voids excluded.
+  shapeCount?: number;
+  shapeArea?: number;
 }
 
 /**
