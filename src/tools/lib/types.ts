@@ -255,6 +255,7 @@ export interface ViaDrill {
 export interface ViaCount {
   diameter: number;
   layer: string;
+  padstack?: string; // .brd only: the vias' padstack, whose pads get_pcb_footprint gives
   count: number;
 }
 

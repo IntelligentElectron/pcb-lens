@@ -60,6 +60,7 @@ interface NetRouteInfo {
 interface ViaCount {
   diameter: number;
   layer: string;
+  padstack?: string;     // .brd only: the vias' padstack; get_pcb_footprint gives its pads
   count: number;
 }
 
@@ -221,4 +222,4 @@ Response (`viaColumns`/`viaRows` now present; each `viaRows` entry's `drillIndex
 - All physical values are normalized to microns
 - `layersUsed` merges layers from PhyNet points and routing geometry
 - Routing within each match is sorted by layer name
-- For an Allegro `.brd`, routing comes from the board's own database on every copper layer: each track counts as one segment and each copper shape (pour, plane, fill, teardrop) as one segment with no width or length, and `shapeCount` and `shapeArea` give the shapes on the layer and their copper area in mm², voids and antipads excluded (equal within 0.5% to the copper contours of the board's IPC-2581 export where it has them). This tells a solid ground plane from power islands split across nets; `traceLength` adds straight spans only, as for IPC-2581. Vias are named by their drill span, `DRILL_<first>-<last>` in 1-based copper layers, as Allegro's IPC-2581 export names them. Unnamed nets are not matched
+- For an Allegro `.brd`, routing comes from the board's own database on every copper layer: each track counts as one segment and each copper shape (pour, plane, fill, teardrop) as one segment with no width or length, and `shapeCount` and `shapeArea` give the shapes on the layer and their copper area in mm², voids and antipads excluded (equal within 0.5% to the copper contours of the board's IPC-2581 export where it has them). This tells a solid ground plane from power islands split across nets; `traceLength` adds straight spans only, as for IPC-2581. Vias are named by their drill span, `DRILL_<first>-<last>` in 1-based copper layers, as Allegro's IPC-2581 export names them, and counted per padstack, whose name `get_pcb_footprint` takes to give the via's pad, antipad and thermal on each layer. Unnamed nets are not matched

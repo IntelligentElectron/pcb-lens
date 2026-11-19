@@ -82,8 +82,17 @@ const queryBrdNet = async (
 
       const drills: ViaCount[] = [];
       const viaRows: ViaRow[] = net.vias.map((v) => {
-        let idx = drills.findIndex((d) => d.diameter === v.drill && d.layer === v.span);
-        if (idx < 0) idx = drills.push({ diameter: v.drill, layer: v.span, count: 0 }) - 1;
+        let idx = drills.findIndex(
+          (d) => d.diameter === v.drill && d.layer === v.span && d.padstack === v.padstack
+        );
+        if (idx < 0)
+          idx =
+            drills.push({
+              diameter: v.drill,
+              layer: v.span,
+              ...(v.padstack ? { padstack: v.padstack } : {}),
+              count: 0,
+            }) - 1;
         drills[idx].count++;
         return [v.x, v.y, idx];
       });

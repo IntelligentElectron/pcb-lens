@@ -77,6 +77,10 @@ describe.each(BOARDS)("readBrdLayout on %s", (file, version, comps, pads, segs, 
     expect(layout.components.reduce((s, c) => s + c.pads.length, 0)).toBe(pads);
     expect(segments(layout)).toBe(segs);
     expect(layout.nets.reduce((s, n) => s + n.vias.length, 0)).toBe(vias);
+    // every via names a padstack the board defines, with the via's own drill
+    const defs = new Map(layout.padstacks.map((p) => [p.name, p]));
+    for (const v of layout.nets.flatMap((n) => n.vias))
+      expect(defs.get(v.padstack!)?.drill).toBe(v.drill);
   });
 });
 
@@ -133,7 +137,9 @@ describe.skipIf(!existsSync(BBB))("geometry tools on an Allegro .brd", () => {
       shapeArea: 0.054,
     });
     expect(net.routing!.map((l) => l.layerName)).toEqual(["BOTTOM", "LYR3", "LYR4", "TOP"]);
-    expect(net.viaCounts).toEqual([{ diameter: 203, layer: "DRILL_1-6", count: 4 }]);
+    expect(net.viaCounts).toEqual([
+      { diameter: 203, layer: "DRILL_1-6", padstack: "18RD8-1", count: 4 },
+    ]);
     expect(net.viaRows).toContainEqual([66167, 45212, 0]);
     expect(net.segments!.every((s) => s.points.length >= 2)).toBe(true);
   });
