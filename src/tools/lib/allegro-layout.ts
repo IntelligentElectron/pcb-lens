@@ -8,6 +8,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { readBrdInfo, type BrdInfo } from "./allegro-brd.js";
+import { walkBrdBlocks } from "./allegro-blocks.js";
 import { boardOutline } from "./geometry.js";
 import type { BoardOutline, OutlineContour, RoutingArc } from "./types.js";
 
@@ -65,17 +66,6 @@ export interface BrdLayout {
   outline?: BoardOutline;
 }
 
-// Layer class (byte 2 of word 0) a block of these types must carry; data words that happen to look
-// like a block header are rejected by it
-const BLOCK_CLASS: Record<number, number[]> = {
-  0x04: [0x00], // net assignment
-  0x05: [0x06], // track, ETCH
-  0x0e: [0x06], // copper rectangle, ETCH
-  0x28: [0x06], // shape, ETCH
-  0x32: [0x0c], // placed pad, PIN
-  0x33: [0x12], // via, VIA_CLASS
-  0x2e: [0x00, 0x06], // connection
-};
 const NET_ITEMS = new Set([0x05, 0x0e, 0x28, 0x32, 0x33, 0x2e]);
 const SEGMENT_TYPES = new Set([0x01, 0x15, 0x16, 0x17]);
 const PAD_SHAPES: Record<number, BrdPad["shape"]> = {
@@ -123,10 +113,14 @@ const V16: typeof V17 = {
   drill: 4,
 };
 
-export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
+/** Read a board's layout, or an error string when its object stream cannot be walked. */
+export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string => {
   if (buf.byteOffset % 4) buf = Buffer.from(buf); // shortcut: assumes a little-endian host, as all supported targets are
   const w = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >>> 2);
   const n = w.length;
+  const blocks = walkBrdBlocks(w, info);
+  if (typeof blocks === "string") return blocks;
+  const { starts, byKey } = blocks;
   const i32 = (i: number) => w[i] | 0;
   const um = (raw: number) => Math.round(raw * info.mmPerUnit * 1000);
   const str = (id: number) => info.strings.get(id);
@@ -139,24 +133,11 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   // 17.4 inserts a word in some blocks, and 18.x keeps it
   const v174 = v18 || Number(info.version) >= 17.4;
 
-  // Candidate block starts by key: word 0 a type byte, byte 1 0 or 2, word 1 the key. Keys are
-  // unique, but a data word can mimic a header, so every lookup below names the type it expects.
-  const byKey = new Map<number, number[]>();
-  for (let i = info.bodyWord; i < n - 2; i++) {
-    const t = w[i] & 0xff;
-    const b1 = (w[i] >>> 8) & 0xff; // 0, or 2 on some blocks
-    if (t === 0 || t > 0x3c || !w[i + 1] || (b1 !== 0 && b1 !== 2)) continue;
-    const list = byKey.get(w[i + 1]);
-    if (list) list.push(i);
-    else byKey.set(w[i + 1], [i]);
-  }
-  // a clear byte 1 is the likelier header, so lookups try those first, in file order
-  const flagged = (i: number) => (w[i] >>> 8) & 0xff;
-  for (const list of byKey.values())
-    if (list.length > 1) list.sort((a, b) => flagged(a) - flagged(b));
-  const valid = (i: number, t: number) =>
-    type(i) === t && (!BLOCK_CLASS[t] || BLOCK_CLASS[t].includes(cls(i)));
-  const find = (key: number, t: number) => byKey.get(key)?.find((i) => valid(i, t));
+  // the block with this key, if it has type `t`
+  const find = (key: number, t: number) => {
+    const i = byKey.get(key);
+    return i !== undefined && type(i) === t ? i : undefined;
+  };
 
   // Follow a chain of `t` blocks through the next word `nextAt` until `end`
   const chain = (first: number, end: number, t: number, nextAt = 2) => {
@@ -189,11 +170,10 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   const extra = v174 ? 1 : 0;
   const entry = pre165 ? 9 : 3;
   let copperLayers: BrdLayout["copperLayers"] = [];
-  for (let i = info.bodyWord; i < n - 2 && etchList; i++) {
-    if ((w[i] & 0xffff) !== 0x2a) continue;
-    const count = w[i] >>> 16;
-    const e = i + 1 + extra; // first entry
-    if (!count || count > 64 || w[e + entry * count] !== etchList) continue;
+  const etch = etchList ? find(etchList, 0x2a) : undefined;
+  if (etch !== undefined) {
+    const count = w[etch] >>> 16;
+    const e = etch + 1 + extra; // first entry
     copperLayers = Array.from({ length: count }, (_, j) => {
       const name = pre165
         ? buf.toString("latin1", (e + 9 * j) * 4, buf.indexOf(0, (e + 9 * j) * 4))
@@ -203,7 +183,6 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
         plane: !(w[e + entry * j + (pre165 ? 8 : 1)] & 0x8000),
       };
     });
-    break;
   }
   const layerName = (index: number) => copperLayers[index]?.name ?? `ETCH_${index + 1}`;
   const topLayer = copperLayers[0]?.name ?? "TOP";
@@ -223,12 +202,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
       let k = w[a + 4];
       while (k && k !== w[a + 1] && !seen.has(k)) {
         seen.add(k);
-        const cands = byKey.get(k)?.filter((i) => NET_ITEMS.has(type(i)) && valid(i, type(i)));
-        // an item's word 3 is its island's assignment; fall back to one whose next key exists
-        const i =
-          cands?.find((c) => w[c + 3] === w[a + 1]) ??
-          cands?.find((c) => w[c + 2] === w[a + 1] || byKey.has(w[c + 2]));
-        if (i === undefined) break;
+        const i = byKey.get(k);
+        if (i === undefined || !NET_ITEMS.has(type(i))) break;
         items.push(i);
         netOf.set(k, name);
         k = w[i + 2];
@@ -371,8 +346,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
     let k = first;
     while (k && k !== w[owner + 1] && !seen.has(k)) {
       seen.add(k);
-      const s = byKey.get(k)?.find((c) => SEGMENT_TYPES.has(type(c)) && w[c + 3] === w[owner + 1]);
-      if (s === undefined) break;
+      const s = byKey.get(k);
+      if (s === undefined || !SEGMENT_TYPES.has(type(s))) break;
       k = w[s + 2];
       const c = s + O.segWidth;
       out.push({
@@ -442,12 +417,10 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout => {
   };
   const outlinePieces = (subclass: number, footprint = false) => {
     const out: Piece[] = [];
-    for (let i = info.bodyWord; i < n - 16; i++) {
+    for (const i of starts) {
       const t = type(i);
       if ((t !== 0x14 && t !== 0x28 && t !== 0x24) || cls(i) !== 1 || w[i] >>> 24 !== subclass)
         continue;
-      const b1 = (w[i] >>> 8) & 0xff;
-      if (b1 !== 0 && b1 !== 2) continue;
       const owner = footprint ? mechanical(w[i + 3]) : w[i + 3] === tail(t === 0x14 ? 4 : 7);
       if (!owner) continue;
       if (t === 0x24) {
@@ -536,7 +509,9 @@ export const loadBrdLayout = async (
   const buf = await readFile(filePath);
   const info = readBrdInfo(buf, ["16", "17", "18"]);
   if (typeof info === "string") return info;
-  cached = { key, result: { info, layout: readBrdLayout(buf, info) } };
+  const layout = readBrdLayout(buf, info);
+  if (typeof layout === "string") return layout;
+  cached = { key, result: { info, layout } };
   return cached.result;
 };
 

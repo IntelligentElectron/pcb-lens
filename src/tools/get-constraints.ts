@@ -348,20 +348,22 @@ const loadCadenceSections = async (
       });
     }
   }
-  if (board) {
-    for (const [name, objects] of Object.entries(readBrdConstraints(buf, board))) {
+  const binary = board ? readBrdConstraints(buf, board) : undefined;
+  if (typeof binary === "object") {
+    for (const [name, objects] of Object.entries(binary)) {
       sections.set(name, { source: "binary", units: "mm", objects });
     }
   }
+  const unread = typeof info === "string" ? info : typeof binary === "string" ? binary : undefined;
   if (!sections.size) {
     return {
-      error: `No constraint data found in '${path.basename(filePath)}'${typeof info === "string" ? `: ${info}` : ""}`,
+      error: `No constraint data found in '${path.basename(filePath)}'${unread ? `: ${unread}` : ""}`,
     };
   }
   return {
     sections,
     ...(board ? { allegroVersion: board.version } : {}),
-    ...(typeof info === "string" ? { note: `Binary sections not read: ${info}` } : {}),
+    ...(unread ? { note: `Binary sections not read: ${unread}` } : {}),
   };
 };
 

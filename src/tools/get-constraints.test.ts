@@ -325,7 +325,7 @@ const syntheticBrd = (): Buffer => {
     words(0x37, 0x500, 0x400, 0, 2, 2, 0x100, 0x101, 0),
     words(0x26, 0x600, 0, 0x100, 0x401, 0),
     words(0x26, 0x601, 0, 0x101, 0x401, 0),
-    words(0x00100036, 0x700, 0, 0, 0x96, 3, 3, 0), // 3 layers in 4 slots
+    words(0x00100036, 0x700, 0, 0, 4, 3, 3, 0), // 3 layers in 4 slots
     ...[
       [1, 1, 0, 1, 0],
       [2, 2, 50e-6, 3.5, 0.02],
@@ -341,7 +341,10 @@ const syntheticBrd = (): Buffer => {
       '<root><o N="DEFAULT"><a N="LINE_TO_LINE_SPACING"><v G="0.0500"/></a></o></root>',
     ],
   ]);
-  return Buffer.concat([header, strTable, ...blocks, archive, Buffer.alloc(64)]);
+  // the archive rides in a 0x21 block: [21][size in bytes][key], padded to a word
+  const padded = Buffer.concat([archive, Buffer.alloc(-archive.length & 3)]);
+  const blob = words(0x21, 12 + padded.length, 0x800);
+  return Buffer.concat([header, strTable, ...blocks, blob, padded, Buffer.alloc(64)]);
 };
 
 describe("queryConstraints on Cadence .dcf", () => {

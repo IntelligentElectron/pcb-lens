@@ -27,6 +27,7 @@ Coverage: Allegro 17.x files (magic `0x0014xxxx`). Files written by 17.2 (`0x001
 8. [How get_constraints Reports Them](#8-how-get_constraints-reports-them)
 9. [Known Gaps](#9-known-gaps)
 10. [Layout Geometry](#10-layout-geometry)
+11. [Block Sizes](#11-block-sizes)
 
 ---
 
@@ -162,7 +163,7 @@ word 1   key: unique id of the block
 word 2   next: key of the next block in its list
 ```
 
-Block sizes depend on type and version, and this reader does not walk the whole stream. It indexes candidate block starts by key in one pass over the words (word 0 matching the type, word 1 the key) and then walks the header lists, accepting at each step the candidate whose chain continues. A data word can look like a block start, so a candidate is accepted only when its own next key is the list tail or another candidate.
+Block sizes depend on type and release (section 11). The reader walks the stream from the end of the string table to the end of the file one block at a time and indexes every block by its key; keys are unique across all blocks of a file. The header lists are then followed through that index.
 
 A list ends where a block's next key equals the list's tail sentinel. The tails form a run of consecutive values (0x65, 0x66, ... for lists 0, 1, ...).
 
@@ -521,8 +522,7 @@ Other codes are reported on sets and tables as `FIELD_0x<code>` with their decod
 The reader in `src/tools/lib/allegro-layout.ts` reads 16.x, 17.x and 18.x boards. It uses the header, string table and lists of sections 4 and 5, with these additions:
 
 - 16.x files keep the string count at 0x194 too. 18.x files keep it at 0x34, the units byte at 0x18C (the divisor stays at 0x26C) and the list descriptors from 0x60; the string table still starts at 0x1200.
-- Byte 1 of word 0 is 0 on most blocks and 2 on some (nets, segments, shapes, pads, vias seen). Candidates are indexed with byte 1 equal to 0 or 2, and a lookup tries the byte-1-clear candidates first, in file order.
-- Net assignments, placed pads, tracks, copper rectangles, shapes and vias must also carry the layer class of their type in byte 2 (0x00, PIN 0x0C, ETCH 0x06, ETCH 0x06, ETCH 0x06, VIA_CLASS 0x12). This rejects data words that mimic a header.
+- Blocks are found through the block walk of section 11.
 
 Coordinates are signed internal units (section 4) with Y up; rotations are millidegrees counterclockwise. 18.x blocks are read with the 17.4 layouts; only the padstack header grows (see Padstacks).
 
@@ -594,7 +594,7 @@ Each 0x1B net (list 5) points to its first 0x04 assignment (word 7 in 17.x, word
 0x04   word 1 key, word 2 next assignment (the net itself after the last), word 3 net, word 4 first item
 ```
 
-From word 4, the island's items chain through their word 2 back to the assignment's key, and each item's word 3 is that key, which picks the right block when a key has several candidates. Items are 0x32 placed pads, 0x05 tracks, 0x33 vias, 0x28 shapes, 0x0E copper rectangles and 0x2E connections. A pad's net is the net whose chain holds its key; shapes and rectangles are counted per copper layer.
+From word 4, the island's items chain through their word 2 back to the assignment's key, and each item's word 3 is that key. Items are 0x32 placed pads, 0x05 tracks, 0x33 vias, 0x28 shapes, 0x0E copper rectangles and 0x2E connections. A pad's net is the net whose chain holds its key; shapes and rectangles are counted per copper layer.
 
 ### Tracks, segments and vias
 
@@ -636,3 +636,73 @@ Pieces are joined end to end into contours, reversing a piece (and its arc's dir
 - Keepouts, text and silkscreen
 - Shape outlines, thermal spokes and custom pad outlines (reported by their bounding box)
 - Components without a refdes (fiducials and other mechanical symbols)
+
+## 11. Block Sizes
+
+**Confidence: VERIFIED** by walking 75 distinct board files (five 16.4, ten 16.5, thirty-five 16.6, thirteen 17.2, eleven 17.4, one 18.0, the public fixtures among them) block by block from the end of the string table: every walk lands exactly on the end of its file, or on all-zero padding that runs to it. A wrong size lands on a word that is no block header, so one clean walk accounts for every block of the file. Blocks and keys found this way match every block the layout and constraint readers reached before the walk existed; the walk also finds 0x03 fields and net list members that the earlier scan missed. The reader is `src/tools/lib/allegro-blocks.ts`.
+
+Word 0 of a block holds the type in byte 0; byte 1 is 0 or 2. The key is word 1, except 0x21 (word 2) and 0x2A (its last word); 0x27 and 0x3B have none.
+
+### Fixed sizes
+
+Sizes in words. Releases group into six families: 16.4 (and older), 16.5, 16.6, 17.2, 17.4 (and 17.5), 18.x.
+
+| Type | 16.4 | 16.5 | 16.6 | 17.2 | 17.4 | 18.x |
+| ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| 0x01 arc | 20 | 20 | 20 | 21 | 21 | 21 |
+| 0x04 net assignment | 5 | 5 | 5 | 5 | 6 | 6 |
+| 0x05 track | 15 | 15 | 15 | 17 | 17 | 17 |
+| 0x06 part | 9 | 9 | 9 | 10 | 10 | 10 |
+| 0x07 instance | 10 | 10 | 10 | 12 | 12 | 12 |
+| 0x08 | 6 | 6 | 6 | 8 | 8 | 8 |
+| 0x09 | 11 | 11 | 11 | 12 | 13 | 13 |
+| 0x0A DRC marker | 17 | 17 | 17 | 18 | 19 | 19 |
+| 0x0C | 14 | 14 | 14 | 16 | 17 | 17 |
+| 0x0D pad definition | 10 | 10 | 10 | 11 | 12 | 12 |
+| 0x0E copper rectangle | 15 | 15 | 15 | 17 | 17 | 17 |
+| 0x0F | 14 | 14 | 14 | 15 | 16 | 16 |
+| 0x10 | 8 | 8 | 8 | 9 | 10 | 10 |
+| 0x11 | 6 | 6 | 6 | 6 | 7 | 7 |
+| 0x12 | 6 | 7 | 7 | 7 | 8 | 8 |
+| 0x14 graphic | 8 | 8 | 8 | 9 | 9 | 9 |
+| 0x15, 0x16, 0x17 line segments | 10 | 10 | 10 | 11 | 11 | 11 |
+| 0x1B net | 14 | 14 | 14 | 15 | 15 | 15 |
+| 0x22 | 11 | 11 | 11 | 11 | 11 | 11 |
+| 0x23 connection | 21 | 21 | 21 | 21 | 22 | 22 |
+| 0x24 rectangle | 13 | 13 | 13 | 14 | 14 | 14 |
+| 0x26 group link | 5 | 5 | 5 | 6 | 7 | 7 |
+| 0x28 shape | 17 | 17 | 17 | 19 | 19 | 19 |
+| 0x2B footprint definition | 18 | 18 | 18 | 19 | 19 | 19 |
+| 0x2C table | 9 | 9 | 9 | 11 | 11 | 11 |
+| 0x2D placed footprint | 16 | 16 | 16 | 18 | 18 | 18 |
+| 0x2E | 9 | 9 | 9 | 10 | 10 | 10 |
+| 0x30 text | 11 | 11 | 11 | 14 | 15 | 15 |
+| 0x32 placed pad | 19 | 19 | 19 | 21 | 21 | 21 |
+| 0x33 via | 18 | 18 | 18 | 20 | 20 | 20 |
+| 0x34 keepout | 8 | 8 | 8 | 9 | 9 | 9 |
+| 0x35 file reference | 31 | 31 | 31 | 31 | 31 | 31 |
+| 0x38 film | 16 | 16 | 13 | 13 | 14 | 14 |
+| 0x39 film layers | 15 | 15 | 15 | 15 | 15 | 15 |
+| 0x3A film layer | 4 | 4 | 4 | 4 | 5 | 5 |
+
+0x22 is seen in 17.2 files only; its other sizes are assumed.
+
+### Sizes that grow with a count
+
+| Type | Size |
+| ---- | ---- |
+| 0x03 field | A header of 4 words (16.x) or 6, then a payload set by the type word (word 3 in 16.x, word 4 otherwise: type byte, length in the upper half). A nonzero length is the payload in bytes, rounded up to words, except type 0x6C (length / 4 words in 16.x, length / 8 in 17.x and 18.x) and 0x74 (3 + (length - 12) / 8 words). A zero length: 0x65 none, 0x64, 0x66, 0x67, 0x6A one word, 0x69 two |
+| 0x1C padstack | header + (fixed + per-layer × copper layers) × component words (section 10, Padstacks) |
+| 0x1D physical set | 6 words (16.x) or 7, then 14 words per layer and 64 per via slot (counts in word 5) |
+| 0x1E electrical set | 6 words (16.x) or 7, then a text of word-5 bytes |
+| 0x1F padstack dimensions | 8 words (16.x) or 9, then 70 words per layer (96 in 18.x); the layer count in the upper half of word 6 |
+| 0x21 | word 1 bytes |
+| 0x27 | up to the byte offset (plus 1) at header 0x18C (0x28 in 18.x), or to the end of the file when that word is 0 |
+| 0x2A layer list | 2 words, one more in 17.4 and later, then 3 words per entry (9 in 16.4); the count in the upper half of word 0 |
+| 0x31 text string | 6 words (7 from 17.4), then the string, its length with the NUL in the upper half of word 5 |
+| 0x36 table | 7 words (16.x, count in word 3), 8 (17.2) or 9 (17.4 and later, count in word 4), then count records of a size set by the substruct in byte 2: 0x02 25 words in 16.x, 27 later; 0x03 8; 0x06 52 in 16.x, 2 later; 0x08 8 in 16.x, 16 in 17.2, 17 later; 0x0B 254; 0x0F 5; 0x10 27, 28 in 18.x |
+| 0x37 key array | 7 words (8 from 17.4), then word-4 key slots |
+| 0x3B named property | a 128-byte name from word 2, then the value of word-1 bytes from word 44 (16.x) or 45 |
+| 0x3C key list | 3 words, then word-2 keys; from 17.4, 4 words, then word-3 keys |
+
+A block type or 0x36 substruct outside these tables stops the walk with an error that names it and its byte offset.

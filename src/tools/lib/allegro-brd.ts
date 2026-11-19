@@ -8,6 +8,7 @@
  * docs/allegro-brd-format.md. Allegro 17.x files only.
  */
 
+import { walkBrdBlocks } from "./allegro-blocks.js";
 import type { ConstraintObject } from "./types.js";
 
 export interface BrdInfo {
@@ -224,68 +225,47 @@ const newObject = (name: string): ConstraintObject => ({
 /**
  * Binary constraint sections of a 17.x board, keyed by section name
  * (BrdPhysicalCSet, BrdElectricalCSet, BrdNetClass, BrdMatchGroup, BrdDiffPair,
- * BrdRegion, BrdXnet, BrdBus, BrdNet, BrdStackup). Lengths are in mm.
+ * BrdRegion, BrdXnet, BrdBus, BrdNet, BrdStackup), or an error string when the board's object
+ * stream cannot be walked. Lengths are in mm.
  */
 export const readBrdConstraints = (
   buf: Buffer,
   info: BrdInfo
-): Record<string, ConstraintObject[]> => {
+): Record<string, ConstraintObject[]> | string => {
   if (buf.byteOffset % 4) buf = Buffer.from(buf); // shortcut: assumes a little-endian host, as all supported targets are
   const w = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >>> 2);
   const n = w.length;
   const str = (id: number) => info.strings.get(id);
   const mm = (raw: number) => ((raw | 0) * info.mmPerUnit).toFixed(4);
 
-  // Block candidates by key. Blocks are word aligned and start with [type][key][next]; a data word
-  // can look like a block start, so every list walk below re-checks the chain it follows.
-  const nets = new Map<number, number[]>();
-  const sets = new Map<number, number[]>();
-  const tables = new Map<number, number[]>();
-  const arrays = new Map<number, number[]>();
-  const links: number[] = []; // 0x26 [26][key][?][net key][table key]: diff pair and match group membership
-  const crossSections: number[] = []; // 0x36 blocks of substruct 0x10
-  const add = (m: Map<number, number[]>, i: number) => {
-    const list = m.get(w[i + 1]);
-    if (list) list.push(i);
-    else m.set(w[i + 1], [i]);
-  };
-  for (let i = info.bodyWord; i < n - 8; i++) {
-    const t = w[i];
-    if (t === 0x1b) add(nets, i);
-    else if ((t & 0xffff) >= 0x1d && (t & 0xffff) <= 0x1f)
-      add(sets, i); // 0x1F carries flags in byte 2
-    else if (t === 0x37) add(arrays, i);
-    else if (t === 0x26) links.push(i);
-    else if (t === 0x00100036) crossSections.push(i);
-    else if ((t & 0xff) === 0x2c) add(tables, i);
-  }
+  const blocks = walkBrdBlocks(w, info);
+  if (typeof blocks === "string") return blocks;
+  const { starts, byKey } = blocks;
+  const type = (i: number) => w[i] & 0xff;
+  // 0x26 [26][key][?][net key][table key]: diff pair and match group membership
+  const links = starts.filter((i) => w[i] === 0x26);
+  const crossSections = starts.filter((i) => w[i] === 0x00100036); // 0x36 of substruct 0x10
 
-  // Header list descriptors: [tail sentinel][head key] from 0x3C; a list ends at its tail
-  const walk = (
-    list: number,
-    cands: Map<number, number[]>,
-    ok: (i: number, tail: number) => boolean
-  ) => {
-    const tail = buf.readUInt32LE(0x3c + 8 * list);
+  // Header list descriptors: [tail sentinel][head key]; a list ends at its tail
+  const walk = (list: number, ok: (t: number) => boolean) => {
+    const tail = buf.readUInt32LE(info.listBase + 8 * list);
     const out: number[] = [];
     const seen = new Set<number>();
-    let k = buf.readUInt32LE(0x3c + 8 * list + 4);
+    let k = buf.readUInt32LE(info.listBase + 8 * list + 4);
     while (k && k !== tail && !seen.has(k)) {
       seen.add(k);
-      const i = cands.get(k)?.find((c) => ok(c, tail));
-      if (i === undefined) break;
+      const i = byKey.get(k);
+      if (i === undefined || !ok(type(i))) break;
       out.push(i);
       k = w[i + 2];
     }
     return out;
   };
-  const chained = (cands: Map<number, number[]>) => (i: number, tail: number) =>
-    w[i + 2] === tail || cands.has(w[i + 2]);
 
-  const netBlocks = walk(5, nets, chained(nets));
+  const netBlocks = walk(5, (t) => t === 0x1b);
   // list 12 interleaves 0x1D, 0x1E and 0x1F (padstack dimensions, not read)
-  const setBlocks = walk(12, sets, chained(sets)).filter((i) => (w[i] & 0xff) !== 0x1f);
-  const tableBlocks = walk(15, tables, (i, tail) => w[i + 3] === tail);
+  const setBlocks = walk(12, (t) => t >= 0x1d && t <= 0x1f).filter((i) => type(i) !== 0x1f);
+  const tableBlocks = walk(15, (t) => t === 0x2c);
 
   const nameOf = new Map<number, { name: string; kind: string }>();
   for (const i of netBlocks) nameOf.set(w[i + 1], { name: str(w[i + 3]) ?? "", kind: "Net" });
@@ -297,7 +277,7 @@ export const readBrdConstraints = (
   // 0x03 fields: [type 3][0][u16 code] key next owner [u8 subtype][u8][u16 length] 0 value...
   const owners = new Set<number>([...nameOf.keys(), ...setBlocks.map((i) => w[i + 1])]);
   const fields = new Map<number, Record<string, { value: string }>>();
-  for (let i = info.bodyWord; i < n - 8; i++) {
+  for (const i of starts) {
     if ((w[i] & 0xffff) !== 3 || !owners.has(w[i + 3])) continue;
     const code = w[i] >>> 16;
     if (!code || code === LOGICAL_PATH) continue;
@@ -382,8 +362,8 @@ export const readBrdConstraints = (
     let prev = w[i + 1];
     while (k && !seen.has(k)) {
       seen.add(k);
-      const a = arrays.get(k)?.find((c) => w[c + 2] === prev);
-      if (a === undefined) break;
+      const a = byKey.get(k);
+      if (a === undefined || type(a) !== 0x37 || w[a + 2] !== prev) break;
       for (let j = 0; j <= Math.min(w[a + 4], n - a - 7); j++) {
         if (nameOf.has(w[a + 6 + j])) keys.add(w[a + 6 + j]);
       }
