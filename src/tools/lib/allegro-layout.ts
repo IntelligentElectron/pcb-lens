@@ -755,17 +755,8 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       const owner = footprint ? mechanical(w[i + 3]) : w[i + 3] === tail(t === 0x14 ? 4 : 7);
       if (!owner) continue;
       if (t === 0x24) {
-        // a rectangle holds its corners directly: words 6-9 from g14.04, 5-8 before
-        const r = i + (v16 ? 5 : 6);
-        const [x1, y1, x2, y2] = [0, 1, 2, 3].map((j) => um(i32(r + j)));
-        const corners: [number, number][] = [
-          [x1, y1],
-          [x2, y1],
-          [x2, y2],
-          [x1, y2],
-          [x1, y1],
-        ];
-        for (let j = 0; j < 4; j++) out.push({ start: corners[j], end: corners[j + 1], width: 0 });
+        const { points } = rectangle(i);
+        for (let j = 0; j < 4; j++) out.push({ start: points[j], end: points[j + 1], width: 0 });
       } else out.push(...segments(i, w[i + (t === 0x14 ? O.graphicSeg : O.shapeSeg)]));
     }
     return out;
