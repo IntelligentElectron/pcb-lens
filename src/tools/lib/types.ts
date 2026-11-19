@@ -82,6 +82,8 @@ export interface DesignOverview {
   layers: LayerInfo[];
   componentCount: number;
   netCount: number;
+  /** Allegro .brd only: artwork films and the CLASS/SUBCLASS layers each plots */
+  films?: Array<{ name: string; layers: string[] }>;
   /** Allegro .brd only: named design-level properties */
   properties?: Record<string, string>;
   /** Allegro .brd only: every CLASS/SUBCLASS layer holding drawn items, with their count */
@@ -312,6 +314,9 @@ export interface QueryNetResult {
   layersUsed: string[];
   /** Allegro .brd only: the net's named properties (voltage, constraint sets, ...) */
   properties?: Record<string, string>;
+  /** Allegro .brd only: pin pairs the routing does not connect yet (ratsnest), and their pairs with detail="full" */
+  unroutedCount?: number;
+  unrouted?: Array<[string, string]>;
   /**
    * True when data was truncated to stay within the response budget: either the
    * detail="full" viaRows array or the connected-pin list (capped before being

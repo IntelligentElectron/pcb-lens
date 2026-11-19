@@ -107,6 +107,23 @@ Look up footprint (package symbol) and padstack definitions of an Allegro .brd b
 - `--pattern` (required; string). Case-insensitive regex on footprint and padstack names (e.g. '^SOIC', 'QFN48', 'VIA').
 - `--detail` (string; default "summary"). 'summary' (default) describes each definition. 'full' adds footprint pins and template drawing, capped.
 
+### get_pcb_drc
+
+Report the DRC markers an Allegro .brd holds from its last DRC run, counted by check (e.g. LINE_TO_LINE_SPACING, PACKAGE_PACKAGE), and how many DRC checks the board has on, off or in batch mode. Set detail='full' for each marker's position, layer, constraint set and the two objects in conflict (pins as REFDES.PIN, vias, tracks and shapes with their net and layer), and the list of checks that are on. Markers are what the last DRC run found; edits since then are not reflected.
+
+- `--file` (required; string; may be the first argument). Path to an Allegro .brd file (Allegro 17.2 to 25.1).
+- `--check` (string). Only checks whose name matches this case-insensitive regex (e.g. 'SPACING', 'PACKAGE').
+- `--detail` (string; default "summary"). 'summary' (default) gives counts. 'full' adds each marker (sampled across checks) and the checks that are on.
+
+### get_pcb_object
+
+Look inside the binary database of an Allegro .brd, for data the other tools do not cover. Without arguments: every block type with Allegro's name and count, and the attachments (embedded files such as the last-save record, Constraint Manager archives, 3D models, DBDoctor logs). With 'type': the keys of the blocks of that type. With 'key': that block's words, each word that names another block or a string resolved, and the blocks whose words hold this key. With 'attachment': that attachment's text, decompressed when zlib. Use the named tools first; this is the backstop.
+
+- `--file` (required; string; may be the first argument). Path to an Allegro .brd file (Allegro 16.0 to 25.1).
+- `--key` (string). A block key, decimal or hex (e.g. '81234' or '0x13d52').
+- `--type` (string). A block type number, e.g. '0x1B' (nets) or '0x21'.
+- `--attachment` (string). An attachment name, e.g. 'ALLEGRO_DESIGN_WAS_LAST_SAVED'.
+
 ### get_constraints
 
 Query layout constraints from a Cadence .tcfx file, a Constraint Manager .dcf file, or an Allegro .brd board (read directly, no Cadence install needed). Without a section name, returns an overview of all sections and object counts. With a section name, returns all constraint objects with their attributes, references, members and children. Common sections: PhysicalCSet, SpacingCSet, ElectricalCSet, NetClass, MatchGroup, DiffPair, Design (stackup), Region. A .brd also has Brd* sections decoded from its binary database (BrdPhysicalCSet, BrdNetClass, BrdNet, BrdStackup, ...): these are the board's live rules, while the XML sections are embedded Constraint Manager snapshots whose 'source' says where they came from.

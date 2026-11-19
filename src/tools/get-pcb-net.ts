@@ -102,6 +102,10 @@ const queryBrdNet = async (
       };
       if (cappedPins.truncated) result.truncated = true;
       if (net.properties) result.properties = net.properties;
+      if (net.unrouted) {
+        result.unroutedCount = net.unrouted.length;
+        if (detail === "full") result.unrouted = net.unrouted.slice(0, MAX_PIN_ROWS);
+      }
       if (routing.length) result.routing = routing;
       if (drills.length) {
         result.viaCounts = drills;
