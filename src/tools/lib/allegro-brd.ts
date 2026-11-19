@@ -156,24 +156,50 @@ export const readBrdInfo = (buf: Buffer, layout?: Layout): BrdInfo | string => {
   };
 };
 
+export interface BrdAttachment {
+  name: string;
+  class?: string;
+  bytes: number;
+  savedAt?: string; // ISO time the attachment was written
+  payload: number; // byte offset of its content
+}
+
 /**
- * The release in the ALLEGRO_DESIGN_WAS_LAST_SAVED attachment ("allegro 17.4 S037 - 3/2/2023").
- * Attachments run from the end of the blocks to the end of the file: [3B][0][?][0][payload
- * length], a 128-byte name and a 32-byte class, a time and two more words, then the payload
- * padded to 4 bytes; the header is one word shorter before g14.04.
+ * The attachments that run from the end of the blocks to the end of the file: [3B][0][?][0]
+ * [payload length], a 128-byte name and a 32-byte class, a Unix time and two more words, then the
+ * payload padded to 4 bytes; the header is one word shorter before g14.04.
  */
-const lastSaved = (buf: Buffer, start: number, layout: Layout) => {
+export const readAttachments = (buf: Buffer, start: number, layout: Layout) => {
   const head = at(layout) < at("g14.04") ? 176 : 180;
+  const cstr = (o: number, len: number) => buf.toString("latin1", o, o + len).replace(/\0.*$/s, "");
+  const out: BrdAttachment[] = [];
   let p = start;
   while (p > 0 && p + head <= buf.length && buf[p] === 0x3b) {
     const n = buf.readUInt32LE(p + 4);
-    if (buf.toString("latin1", p + 8, buf.indexOf(0, p + 8)) === "ALLEGRO_DESIGN_WAS_LAST_SAVED") {
-      const line = buf.toString("latin1", p + head, Math.min(p + head + n, buf.length));
-      return line.match(/^\S+ (\d+\.\d+)\b/)?.[1];
-    }
+    const time = buf.readUInt32LE(p + 0xa8);
+    out.push({
+      name: cstr(p + 8, 128),
+      ...(cstr(p + 0x88, 32) ? { class: cstr(p + 0x88, 32) } : {}),
+      bytes: n,
+      ...(time ? { savedAt: new Date(time * 1000).toISOString() } : {}),
+      payload: p + head,
+    });
     p += head + ((n + 3) & ~3);
   }
-  return undefined;
+  return out;
+};
+
+/** The release in the ALLEGRO_DESIGN_WAS_LAST_SAVED attachment ("allegro 17.4 S037 - 3/2/2023"). */
+const lastSaved = (buf: Buffer, start: number, layout: Layout) => {
+  const a = readAttachments(buf, start, layout).find(
+    (x) => x.name === "ALLEGRO_DESIGN_WAS_LAST_SAVED"
+  );
+  return (
+    a &&
+    buf
+      .toString("latin1", a.payload, Math.min(a.payload + a.bytes, buf.length))
+      .match(/^\S+ (\d+\.\d+)\b/)?.[1]
+  );
 };
 
 // 0x03 field codes, verified by matching values and field order against Constraint Manager XML

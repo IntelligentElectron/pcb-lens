@@ -3,7 +3,12 @@ import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { z } from "zod";
 import type { ErrorResult } from "./lib/types.js";
-import { at, readBrdInfo, type BrdInfo } from "./lib/allegro-brd.js";
+import {
+  readAttachments,
+  readBrdInfo,
+  type BrdAttachment,
+  type BrdInfo,
+} from "./lib/allegro-brd.js";
 import { walkBrdBlocks, type BrdBlocks } from "./lib/allegro-blocks.js";
 import { isBrdFile } from "./lib/allegro-layout.js";
 import { TYPE_NAMES } from "./lib/allegro-names.js";
@@ -14,12 +19,7 @@ const MAX_REFS = 50;
 const MAX_LIST = 300;
 const MAX_TEXT = 20000;
 
-export interface Attachment {
-  name: string;
-  class?: string;
-  bytes: number;
-  savedAt?: string; // ISO time the attachment was written
-}
+export type Attachment = Omit<BrdAttachment, "payload">;
 
 export type ObjectQueryResult = { fileName: string; layout: string; allegroVersion: string } & (
   | {
@@ -47,26 +47,27 @@ export type ObjectQueryResult = { fileName: string; layout: string; allegroVersi
 
 const hex = (n: number, pad = 2) => `0x${n.toString(16).padStart(pad, "0")}`;
 
-/** The attachments after the block stream: a 180-byte header (176 before g14.04), then the payload. */
-const attachments = (buf: Buffer, info: BrdInfo) => {
-  const head = at(info.layout) < at("g14.04") ? 176 : 180;
-  const out: Array<Attachment & { payload: number }> = [];
-  let p = info.streamEnd;
-  while (p > 0 && p + head <= buf.length && buf[p] === 0x3b) {
-    const n = buf.readUInt32LE(p + 4);
-    const cstr = (o: number, len: number) =>
-      buf.toString("latin1", o, o + len).replace(/\0.*$/s, "");
-    const time = buf.readUInt32LE(p + 0xa8);
-    out.push({
-      name: cstr(p + 8, 128),
-      ...(cstr(p + 0x88, 32) ? { class: cstr(p + 0x88, 32) } : {}),
-      bytes: n,
-      ...(time ? { savedAt: new Date(time * 1000).toISOString() } : {}),
-      payload: p + head,
-    });
-    p += head + ((n + 3) & ~3);
+let cached: { key: string; buf: Buffer; info: BrdInfo; blocks: BrdBlocks } | undefined;
+
+/** The board's bytes, header and block index; the last board read is kept for repeat calls. */
+const load = async (filePath: string) => {
+  let s;
+  try {
+    s = await stat(filePath);
+  } catch {
+    return `File not found: '${filePath}'`;
   }
-  return out;
+  if (!s.isFile()) return `'${filePath}' is not a file`;
+  const key = `${path.resolve(filePath)}:${s.size}:${s.mtimeMs}`;
+  if (cached?.key === key) return cached;
+  let buf = await readFile(filePath);
+  if (buf.byteOffset % 4) buf = Buffer.from(buf);
+  const info = readBrdInfo(buf);
+  if (typeof info === "string") return info;
+  const blocks = walkBrdBlocks(new Uint32Array(buf.buffer, buf.byteOffset, buf.length >>> 2), info);
+  if (typeof blocks === "string") return blocks;
+  cached = { key, buf, info, blocks };
+  return cached;
 };
 
 export const queryObject = async (
@@ -74,18 +75,11 @@ export const queryObject = async (
   opts: { key?: string; type?: string; attachment?: string } = {}
 ): Promise<ObjectQueryResult | ErrorResult> => {
   if (!isBrdFile(filePath)) return { error: "get_pcb_object reads Allegro .brd files" };
-  try {
-    if (!(await stat(filePath)).isFile()) return { error: `'${filePath}' is not a file` };
-  } catch {
-    return { error: `File not found: '${filePath}'` };
-  }
-  let buf = await readFile(filePath);
-  if (buf.byteOffset % 4) buf = Buffer.from(buf);
-  const info = readBrdInfo(buf);
-  if (typeof info === "string") return { error: info };
+  const board = await load(filePath);
+  if (typeof board === "string") return { error: board };
+  const { buf, info, blocks } = board;
   const w = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >>> 2);
-  const blocks: BrdBlocks | string = walkBrdBlocks(w, info);
-  if (typeof blocks === "string") return { error: blocks };
+  const { starts } = blocks;
   const base = {
     fileName: path.basename(filePath),
     layout: info.layout,
@@ -93,12 +87,11 @@ export const queryObject = async (
   };
   const type = (i: number) => w[i] & 0xff;
   const nameOf = (t: number) => TYPE_NAMES[t];
-  const ends = new Map(
-    blocks.starts.map((s, k) => [s, blocks.starts[k + 1] ?? info.streamEnd >>> 2])
-  );
+  const endOf = (k: number) => starts[k + 1] ?? info.streamEnd >>> 2; // block k's end, in words
+  const attachments = () => readAttachments(buf, info.streamEnd, info.layout);
 
   if (opts.attachment !== undefined) {
-    const a = attachments(buf, info).find((x) => x.name === opts.attachment);
+    const a = attachments().find((x) => x.name === opts.attachment);
     if (!a)
       return {
         error: `No attachment named '${opts.attachment}'; get_pcb_object without arguments lists them`,
@@ -106,7 +99,7 @@ export const queryObject = async (
     const { payload, ...meta } = a;
     let data = buf.subarray(payload, payload + a.bytes);
     let encoding: "text" | "zip" | "zlib" | "binary" = "binary";
-    if (data.readUInt32LE(0) === 0x04034b50) encoding = "zip";
+    if (data.length >= 4 && data.readUInt32LE(0) === 0x04034b50) encoding = "zip";
     else if (data[0] === 0x78) {
       try {
         data = inflateSync(data);
@@ -131,7 +124,15 @@ export const queryObject = async (
     const key = Number(opts.key);
     const i = Number.isInteger(key) ? blocks.byKey.get(key) : undefined;
     if (i === undefined) return { error: `No block with key ${opts.key}` };
-    const end = ends.get(i)!;
+    // the block's index in file order, by binary search on its start
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (starts[mid] < i) lo = mid + 1;
+      else hi = mid;
+    }
+    const end = endOf(lo);
     const describe = (v: number): string | undefined => {
       const j = blocks.byKey.get(v);
       if (j !== undefined && v > 0xff) return `${hex(type(j))} ${nameOf(type(j)) ?? ""}`.trim();
@@ -145,9 +146,10 @@ export const queryObject = async (
     }
     // words elsewhere holding this key; coordinates can collide with keys, so this may over-report
     const referencedBy: Array<{ key: number; type: string; word: number }> = [];
-    for (const s of blocks.starts) {
+    for (let b = 0; b < starts.length; b++) {
+      const s = starts[b];
       if (s === i || type(s) === 0x27) continue;
-      const e = ends.get(s)!;
+      const e = endOf(b);
       for (let k = 1; k < e - s && referencedBy.length < MAX_REFS; k++)
         if (w[s + k] === key) referencedBy.push({ key: w[s + 1], type: hex(type(s)), word: k });
       if (referencedBy.length >= MAX_REFS) break;
@@ -189,7 +191,7 @@ export const queryObject = async (
     types: [...counts]
       .sort((a, b) => a[0] - b[0])
       .map(([t, count]) => ({ type: hex(t), ...(nameOf(t) ? { name: nameOf(t) } : {}), count })),
-    attachments: attachments(buf, info).map(({ payload: _, ...a }) => a),
+    attachments: attachments().map(({ payload: _, ...a }) => a),
   };
 };
 

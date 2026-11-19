@@ -941,8 +941,9 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
 
   // DRC markers 0x0A on lists 11 and 22, from g14.04: the layer, point 1 and point 2 (words 5 to 8),
   // the constraint set name (9), the objects in conflict (10, 11) and the check code in the lower
-  // half of word 13 (12 in g14.04). The 0x36 table of discriminator 6 holds every check's state:
-  // 8-byte items from word 9 (8 in g14.04), the code in the lower half, the state in byte 3.
+  // half of word 13 (12 in g14.04, the only field that moves). The 0x36 table of discriminator 6
+  // holds every check's state: 8-byte items from word 9 (8 in g14.04), the code in the lower half,
+  // the state in byte 3.
   const describe = (key: number): string | undefined => {
     const i = byKey.get(key);
     if (i === undefined) return undefined;
@@ -970,19 +971,18 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   const markers: BrdDrcMarker[] = v16
     ? []
     : [...list(11, 0x0a), ...list(22, 0x0a)].map((i) => {
-        const o = v174 ? 0 : -1;
-        const code = w[i + 13 + o] & 0xffff;
+        const code = w[i + (v174 ? 13 : 12)] & 0xffff;
         const m: BrdDrcMarker = {
           check: DRC_MODES[code] ?? `0x${code.toString(16)}`,
           x: um(i32(i + 5)),
           y: um(i32(i + 6)),
-          objects: [w[i + 10 + o], w[i + 11 + o]].flatMap((k) => (k && describe(k)) || []),
+          objects: [w[i + 10], w[i + 11]].flatMap((k) => (k && describe(k)) || []),
         };
         const layer = layerOf(i);
         if (layer) m.layer = layer.replace(/^DRC_ERROR\//, "");
         if (i32(i + 7) !== i32(i + 5) || i32(i + 8) !== i32(i + 6))
           [m.x2, m.y2] = [um(i32(i + 7)), um(i32(i + 8))];
-        const set = str(w[i + 9 + o]);
+        const set = str(w[i + 9]);
         if (set) m.constraintSet = set;
         return m;
       });
