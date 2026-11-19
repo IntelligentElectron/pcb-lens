@@ -58,6 +58,8 @@ interface BrdItem {
   height?: number;          // character height
   mirrored?: boolean;       // drawn mirror-imaged, as seen from the top (17.x and later)
   justify?: "left" | "center" | "right";
+  extent?: { minX: number; minY: number; maxX: number; maxY: number }; // in place of contours past 200 points
+  pointCount?: number;      // the points left out
 }
 ```
 
