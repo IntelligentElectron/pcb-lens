@@ -52,18 +52,24 @@ const queryBrdNet = async (
       // one routed segment per track block or copper shape, as one IPC-2581 Set each
       const byLayer = new Map<
         string,
-        { widths: Set<number>; ids: Set<number>; shapes: number; length: number }
+        { widths: Set<number>; ids: Set<number>; shapes: number; area: number; length: number }
       >();
       const layerOf = (l: string) =>
         byLayer.get(l) ??
-        byLayer.set(l, { widths: new Set(), ids: new Set(), shapes: 0, length: 0 }).get(l)!;
+        byLayer
+          .set(l, { widths: new Set(), ids: new Set(), shapes: 0, area: 0, length: 0 })
+          .get(l)!;
       for (const t of net.tracks) {
         const r = layerOf(t.layer);
         r.widths.add(t.width);
         r.ids.add(t.id);
         r.length += t.length;
       }
-      for (const l of net.shapeLayers) layerOf(l).shapes++;
+      for (const sh of net.shapes) {
+        const r = layerOf(sh.layer.slice("ETCH/".length));
+        r.shapes++;
+        r.area += sh.area ?? 0;
+      }
       const routing: NetRouteInfo[] = [...byLayer.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([layerName, r]) => ({
@@ -71,6 +77,7 @@ const queryBrdNet = async (
           traceWidths: [...r.widths].sort((a, b) => a - b),
           segmentCount: r.ids.size + r.shapes,
           traceLength: Math.round(r.length),
+          ...(r.shapes ? { shapeCount: r.shapes, shapeArea: Math.round(r.area * 1e4) / 1e4 } : {}),
         }));
 
       const drills: ViaCount[] = [];

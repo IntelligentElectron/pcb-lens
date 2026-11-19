@@ -69,7 +69,7 @@ Each description is the MCP tool's own.
 
 ### get_pcb_metadata
 
-Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, the board outline (its width, height and extent, and its edge and cutout contours), and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom.
+Get a high-level overview of a PCB design file: file metadata, the layer stackup, design units, the board outline (its width, height and extent, and its edge and cutout contours), and the total component and net counts. Use this first to understand a design's size and layers before querying specific components or nets. For an Allegro .brd the layers are the copper layers, top to bottom, and drawingLayers lists every CLASS/SUBCLASS layer that holds lines, shapes or text (silkscreen, assembly, place bounds, keepouts, copper shapes...) with its item count; get_pcb_layer reads them.
 
 - `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro .brd file (Allegro 16.0 to 25.1).
 
@@ -88,6 +88,16 @@ Look up nets in a PCB layout by name and inspect their connectivity and routing.
 - `--file` (required; string; may be the first argument). Path to an IPC-2581 XML file or an Allegro .brd file (Allegro 16.0 to 25.1).
 - `--pattern` (required; string). Regex pattern for net name (e.g., '^DDR_D0$', 'CLK', '^VCC_3V3$').
 - `--detail` (string; default "summary"). How much to return. 'summary' (default) gives the per-layer routing summary and via counts. 'full' additionally returns exact geometry: every via coordinate and the full shape of each routed trace (its vertices, width, and arc data for curved traces); large nets are sampled and the response is marked truncated. Use 'full' only when you need exact coordinates, since responses are larger.
+
+### get_pcb_layer
+
+List what is drawn on the layers of an Allegro .brd whose CLASS/SUBCLASS name matches a pattern: lines, rectangles, shapes (copper pours, keepouts, place bounds, soldermask openings, outlines) and text (refdes and value labels, pin numbers, notes). Layers are named as Allegro names them, e.g. 'BOARD_GEOMETRY/SILKSCREEN_TOP', 'PACKAGE_GEOMETRY/PLACE_BOUND_TOP', 'ETCH/TOP'; get_pcb_metadata lists the layers that hold items. The summary gives per-layer counts, filled area and extent. Set detail='full' for each item's geometry and text. Routed tracks and vias are reported by get_pcb_net.
+
+- `--file` (required; string; may be the first argument). Path to an Allegro .brd file (Allegro 16.0 to 25.1).
+- `--layer` (required; string). Case-insensitive regex on CLASS/SUBCLASS layer names (e.g. 'SILKSCREEN_TOP', '^PACKAGE_GEOMETRY/PLACE_BOUND', 'KEEPOUT').
+- `--refdes` (string). Only items drawn by this component (exact refdes).
+- `--within` (string). Only items overlapping this box: 'minX,minY,maxX,maxY' in microns.
+- `--detail` (string; default "summary"). 'summary' (default) gives counts, filled area and extent per layer. 'full' adds every item's geometry and text, sampled across layers when there are very many.
 
 ### get_constraints
 

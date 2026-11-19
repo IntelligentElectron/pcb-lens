@@ -9,6 +9,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { at, readBrdInfo, type BrdInfo } from "./allegro-brd.js";
 import { walkBrdBlocks } from "./allegro-blocks.js";
+import { className, subclassName } from "./allegro-names.js";
 import { boardOutline } from "./geometry.js";
 import type { BoardOutline, OutlineContour, RoutingArc } from "./types.js";
 
@@ -56,13 +57,36 @@ export interface BrdNet {
   pins: Array<{ refdes: string; pin: string }>;
   tracks: BrdTrack[];
   vias: BrdVia[];
-  shapeLayers: string[]; // one entry per copper shape (pour, plane, fill) on the net
+  shapes: BrdItem[]; // copper shapes and filled rectangles (pours, planes, fills, teardrops)
+}
+
+/** A drawn item on a layer: a line, a rectangle, a shape or a text. Lengths in microns. */
+export interface BrdItem {
+  kind: "line" | "rectangle" | "shape" | "text";
+  layer: string; // CLASS/SUBCLASS, e.g. BOARD_GEOMETRY/SILKSCREEN_TOP or ETCH/TOP
+  refdes?: string; // the component that draws it
+  net?: string; // copper only
+  filled?: boolean;
+  width?: number; // stroke width of a line or unfilled outline
+  contours?: OutlineContour[]; // outline first, then the voids of a shape
+  area?: number; // square millimetres, voids excluded; filled items only
+  text?: string;
+  x?: number; // text anchor
+  y?: number;
+  rotation?: number; // degrees counterclockwise
+  height?: number; // character height
+  mirrored?: boolean;
+  justify?: "left" | "center" | "right";
 }
 
 export interface BrdLayout {
   copperLayers: Array<{ name: string; plane: boolean }>;
+  /** Every layer class with its subclasses, user ones first, as CLASS/SUBCLASS names. */
+  layers: Array<{ class: string; subclasses: string[] }>;
   components: BrdComponent[];
   nets: BrdNet[];
+  /** Board-level and component graphics, text and non-copper shapes, in file order. */
+  items: BrdItem[];
   outline?: BoardOutline;
 }
 
@@ -90,7 +114,10 @@ const V17 = {
   padDef: 9, // 0x0D: x at 4, y at 5, padstack at 6
   trackSeg: 14, // 0x05
   graphicSeg: 6, // 0x14
-  shapeSeg: 10, // 0x28
+  shapeSeg: 10, // 0x28: then the first void one word before, at 9
+  voidSeg: 6, // 0x34
+  rect: 6, // 0x24 corners, rotation 7 words on (none in 16.x)
+  fillRect: 9, // 0x0E corners, rotation 7 words on
   segWidth: 6, // line and arc segments: width, then start and end, then an arc's centre
   viaX: 8, // 0x33
   viaPadstack: 11,
@@ -107,6 +134,9 @@ const V16: typeof V17 = {
   trackSeg: 12,
   graphicSeg: 5,
   shapeSeg: 8,
+  voidSeg: 5,
+  rect: 5,
+  fillRect: 7,
   segWidth: 5,
   viaX: 6,
   viaPadstack: 9,
@@ -186,6 +216,37 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     });
   }
   const layerName = (index: number) => copperLayers[index]?.name ?? `ETCH_${index + 1}`;
+
+  // Every class: [built-in subclass count][0x2A list key] at 0x428 + 8 * class, 28 classes
+  const subclassLists = Array.from({ length: 28 }, (_, c) => {
+    const l = w[(0x42c >>> 2) + 2 * c] ? find(w[(0x42c >>> 2) + 2 * c], 0x2a) : undefined;
+    if (l === undefined) return [];
+    const e = l + 1 + extra;
+    return Array.from({ length: w[l] >>> 16 }, (_, j) =>
+      pre165
+        ? buf.toString("latin1", (e + 9 * j) * 4, buf.indexOf(0, (e + 9 * j) * 4))
+        : (str(w[e + 3 * j]) ?? `${j}`)
+    );
+  });
+  const builtIns = (c: number) => w[(0x428 >>> 2) + 2 * c];
+  const layers = subclassLists
+    .map((list, c) => {
+      const fixed = Array.from(
+        { length: Math.min(builtIns(c), 0xfe) },
+        (_, j) => 0xfe - builtIns(c) + j
+      );
+      return {
+        class: className(c),
+        subclasses: [...list, ...fixed.map((s) => subclassName(c, s, list, builtIns(c))!)],
+      };
+    })
+    .filter((l, c) => c && l.subclasses.length);
+  // CLASS/SUBCLASS of a layered block (bytes 2 and 3), or undefined for a deleted subclass
+  const layerOf = (i: number) => {
+    const c = cls(i);
+    const s = subclassName(c, w[i] >>> 24, subclassLists[c] ?? [], builtIns(c));
+    return s === undefined ? undefined : `${className(c)}/${s}`;
+  };
   const topLayer = copperLayers[0]?.name ?? "TOP";
   const bottomLayer = copperLayers.at(-1)?.name ?? "BOTTOM";
 
@@ -210,7 +271,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
         k = w[i + 2];
       }
     }
-    nets.push({ name, pins: [], tracks: [], vias: [], shapeLayers: [] });
+    nets.push({ name, pins: [], tracks: [], vias: [], shapes: [] });
     netItems.push(items);
   }
 
@@ -277,6 +338,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
   // 0x07 instance (holding the refdes and its 0x06 part, whose word 3 is the device type) and its
   // first 0x32 pad.
   const components: BrdComponent[] = [];
+  const refdesOf = new Map<number, string>(); // 0x2D placement or 0x32 pad key -> refdes
   const pinsByNet = new Map<string, Array<{ refdes: string; pin: string }>>();
   for (const d of list(9, 0x2b, 8)) {
     const packageRef = str(w[d + 2]) ?? "";
@@ -284,6 +346,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       const inst = find(w[i + O.instPart], 0x07);
       const refdes = inst === undefined ? undefined : str(w[inst + O.refdes]);
       if (!refdes) continue; // unnamed mechanical symbols
+      refdesOf.set(w[i + 1], refdes);
       const part = inst === undefined ? undefined : partOf(inst);
       const bottom = cls(i) === 1;
       const raw = w[i + O.instRot] / 1000;
@@ -303,6 +366,7 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
         const ps = padstack(w[o + 6]);
         const geo = ps?.pad(bottom && ps.layers > 1 ? ps.layers - 1 : 0);
         const pin = str(w[pd + 2]) ?? "";
+        refdesOf.set(w[p + 1], refdes);
         const net = netOf.get(w[p + 1]) ?? "";
         pads.push({
           pin,
@@ -370,14 +434,61 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     return out;
   };
 
+  // Shapes 0x28: word 5 its flags (bit 0 filled), its first 0x34 void one word before its first
+  // ring segment. A void chains to the next through word 2, back to the shape at the end, its
+  // ring from word 6 (5 in 16.x). Rectangles 0x24 (outline) and 0x0E (filled) hold two corners
+  // before rotation, then the rotation in millidegrees about the first corner seven words on.
+  const voids = (shape: number) =>
+    chain(w[shape + O.shapeSeg - 1], w[shape + 1], 0x34).flatMap((v) =>
+      contours(segments(v, w[v + O.voidSeg]))
+    );
+  const rectangle = (i: number) => {
+    const c = i + (type(i) === 0x0e ? O.fillRect : O.rect);
+    const [x1, y1, x2, y2] = [0, 1, 2, 3].map((j) => i32(c + j));
+    const r = v16 && type(i) === 0x24 ? 0 : ((w[c + 7] | 0) / 1000) * (Math.PI / 180);
+    const turn = ([x, y]: number[]): [number, number] => [
+      um(x1 + (x - x1) * Math.cos(r) - (y - y1) * Math.sin(r)),
+      um(y1 + (x - x1) * Math.sin(r) + (y - y1) * Math.cos(r)),
+    ];
+    const points = [
+      [x1, y1],
+      [x2, y1],
+      [x2, y2],
+      [x1, y2],
+      [x1, y1],
+    ].map(turn);
+    return { points };
+  };
+  const areaItem = (i: number, layer: string): BrdItem => {
+    const filled = type(i) === 0x0e || Boolean(w[i + 5] & 1);
+    const outline = type(i) === 0x28 ? contours(segments(i, w[i + O.shapeSeg])) : [rectangle(i)];
+    const holes = type(i) === 0x28 ? voids(i) : [];
+    const item: BrdItem = { kind: type(i) === 0x28 ? "shape" : "rectangle", layer, filled };
+    item.contours = [...outline, ...holes];
+    if (filled)
+      item.area =
+        Math.round(
+          (outline.reduce((a, c) => a + ringArea(c), 0) -
+            holes.reduce((a, c) => a + ringArea(c), 0)) /
+            1e2
+        ) / 1e4;
+    else if (type(i) === 0x28) item.width = segments(i, w[i + O.shapeSeg])[0]?.width ?? 0;
+    return item;
+  };
+  const copper = new Set<number>();
+
   // Net geometry. Track 0x05: byte 3 of word 0 its copper layer, then its first segment.
   nets.forEach((net, ni) => {
     net.pins = pinsByNet.get(net.name) ?? [];
     for (const i of netItems[ni]) {
       const t = type(i);
       const layer = layerName(w[i] >>> 24);
-      if (t === 0x28 || t === 0x0e) net.shapeLayers.push(layer);
-      else if (t === 0x33) {
+      if (t === 0x28 || t === 0x0e) {
+        const item = areaItem(i, `ETCH/${layer}`);
+        item.net = net.name;
+        net.shapes.push(item);
+        copper.add(i);
+      } else if (t === 0x33) {
         // via: x, y, then its padstack
         const ps = padstack(w[i + O.viaPadstack]);
         const first = ps?.first ?? 0;
@@ -403,6 +514,70 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
       }
     }
   });
+
+  // Text 0x30: word 5 its style (byte 0 the 1-based text block, byte 2 the justification, byte 3
+  // the mirror flag: 1 in g14.04 and g14.09, bit 1 later, not known in 16.x), then x, y and the
+  // rotation (words 6 and 9 in 16.x, 10 and 13 in g14.04, one later from g14.09). 0x31: the
+  // layer, the 0x30 in word 2, x and y, the length with its NUL in the upper half of word 5,
+  // then the characters (one word later from g14.09). Text blocks: the 0x36 table of
+  // discriminator 8, rows of 8, 16 or 17 words (16 in g16.01) from word 7, 8 or 9, the character
+  // height in word 2.
+  const blocksTable = starts.find((i) => type(i) === 0x36 && ((w[i] >>> 16) & 0xffff) === 8);
+  const rowWords = v16 ? 8 : f === at("g14.04") || f === at("g16.01") ? 16 : 17;
+  const textHeight = (block: number) => {
+    if (blocksTable === undefined || !block || block > w[blocksTable + (v16 ? 3 : 4)])
+      return undefined;
+    return um(i32(blocksTable + (v16 ? 7 : v174 ? 9 : 8) + rowWords * (block - 1) + 2));
+  };
+  const JUSTIFY = { 1: "left", 2: "right", 3: "center" } as const;
+  const textItem = (line: number, layer: string): BrdItem => {
+    const len = w[line + 5] >>> 16;
+    const start = (line + (v174 ? 7 : 6)) * 4;
+    const end = buf.indexOf(0, start);
+    const item: BrdItem = {
+      kind: "text",
+      layer,
+      text: buf.toString("latin1", start, end >= 0 && end < start + len ? end : start + len),
+      x: um(i32(line + 3)),
+      y: um(i32(line + 4)),
+    };
+    const t = find(w[line + 2], 0x30);
+    if (t === undefined) return item;
+    const style = w[t + 5];
+    item.rotation = (w[t + (v16 ? 9 : v174 ? 14 : 13)] | 0) / 1000;
+    const height = textHeight(style & 0xff);
+    if (height !== undefined) item.height = height;
+    const mirror = style >>> 24;
+    if (!v16) item.mirrored = f >= at("g14.14") ? Boolean(mirror & 2) : mirror === 1;
+    const justify = JUSTIFY[((style >>> 16) & 0xff) as 1 | 2 | 3];
+    if (justify) item.justify = justify;
+    return item;
+  };
+
+  // Every other drawn item: 0x14 lines, 0x24 and 0x0E rectangles, 0x28 shapes and 0x31 texts. Word
+  // 3 is the owner: a placed footprint (0x2D) or pad (0x32) for what a component draws, already in
+  // board coordinates; a footprint definition (0x2B) for its template drawing, skipped; otherwise a
+  // header list. A text's owner is its 0x30's.
+  const items: BrdItem[] = [];
+  for (const i of starts) {
+    const t = type(i);
+    if (t !== 0x14 && t !== 0x24 && t !== 0x0e && t !== 0x28 && t !== 0x31) continue;
+    if (copper.has(i)) continue;
+    const ownerAt = t === 0x31 ? find(w[i + 2], 0x30) : i;
+    const owner = ownerAt === undefined ? undefined : byKey.get(w[ownerAt + 3]);
+    if (owner !== undefined && type(owner) === 0x2b) continue;
+    const layer = layerOf(i);
+    if (!layer) continue; // a deleted subclass
+    let item: BrdItem;
+    if (t === 0x31) item = textItem(i, layer);
+    else if (t === 0x14) {
+      const pieces = segments(i, w[i + O.graphicSeg]);
+      item = { kind: "line", layer, width: pieces[0]?.width ?? 0, contours: contours(pieces) };
+    } else item = areaItem(i, layer);
+    const refdes = owner === undefined ? undefined : refdesOf.get(w[owner + 1]);
+    if (refdes) item.refdes = refdes;
+    items.push(item);
+  }
 
   // Board outline: 0x14 graphics, 0x28 shapes and 0x24 rectangles on BOARD_GEOMETRY (class 1)
   // with subclass 0xEA (DESIGN_OUTLINE), else 0xFD (OUTLINE). Board-level items carry their
@@ -451,7 +626,34 @@ export const readBrdLayout = (buf: Buffer, info: BrdInfo): BrdLayout | string =>
     )
   );
 
-  return { copperLayers, components, nets, ...(outline ? { outline } : {}) };
+  return { copperLayers, layers, components, nets, items, ...(outline ? { outline } : {}) };
+};
+
+/**
+ * Area enclosed by a closed contour, in square microns: the shoelace sum over its chords, each arc
+ * adding the circular segment between its chord and its sweep. An arc whose ends meet is a full
+ * circle. The segment depends only on the radius, so ends rounded to whole microns stay exact.
+ */
+export const ringArea = (c: OutlineContour) => {
+  const arcs = new Map(c.arcs?.map((a) => [a.index, a]));
+  const pts = c.points;
+  let a = 0;
+  for (let k = 1; k <= pts.length; k++) {
+    const [x1, y1] = pts[k - 1];
+    const [x2, y2] = pts[k % pts.length];
+    a += x1 * y2 - x2 * y1;
+    const arc = k < pts.length ? arcs.get(k) : undefined;
+    if (!arc) continue;
+    const { centerX: cx, centerY: cy } = arc;
+    const r = (Math.hypot(x1 - cx, y1 - cy) + Math.hypot(x2 - cx, y2 - cy)) / 2;
+    let d = Math.atan2(y2 - cy, x2 - cx) - Math.atan2(y1 - cy, x1 - cx); // sweep, CCW positive
+    if (x1 === x2 && y1 === y2) d = 2 * Math.PI;
+    else if (arc.clockwise) d -= d > 0 ? 2 * Math.PI : 0;
+    else d += d < 0 ? 2 * Math.PI : 0;
+    if (arc.clockwise && d > 0) d = -d;
+    a += r * r * (d - Math.sin(d));
+  }
+  return Math.abs(a) / 2;
 };
 
 /**
@@ -464,6 +666,17 @@ const contours = (
 ) => {
   const same = (a: [number, number], b: [number, number]) =>
     Math.abs(a[0] - b[0]) <= 1 && Math.abs(a[1] - b[1]) <= 1;
+  // a shape or void ring is stored end to end and closes on its last piece: one contour, no search
+  const last = pieces.length - 1;
+  if (
+    last > 0 &&
+    pieces.every((p, k) => !k || same(pieces[k - 1].end, p.start)) &&
+    pieces.every((p, k) => same(p.end, pieces[0].start) === (k === last))
+  ) {
+    const c: OutlineContour = { points: [pieces[0].start, ...pieces.map((p) => p.end)], arcs: [] };
+    pieces.forEach((p, k) => p.arc && c.arcs!.push({ ...p.arc, index: k + 1 }));
+    return [c];
+  }
   const left = [...pieces];
   const out: OutlineContour[] = [];
   while (left.length) {
