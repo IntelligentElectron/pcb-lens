@@ -641,7 +641,7 @@ Pieces are joined end to end into contours, reversing a piece (and its arc's dir
 
 ## 11. Block Sizes
 
-**Confidence: VERIFIED** by walking 118 distinct board files (six 16.4, ten 16.5, thirty-seven 16.6, fifty-two 17.2, twelve 17.4 or 22.1, one 23.1; public, corpus and private boards) block by block. Every walk ends exactly at the end of the block stream, no key repeats, and on every 17.2 and later board the block and string count equals the header's object count. A wrong size lands on a word that is no block header, so one clean walk accounts for every block of the file. The reader is `src/tools/lib/allegro-blocks.ts`, which holds the size tables.
+**Confidence: VERIFIED** by walking 222 distinct board files block by block: every family from g13.0C to g16.01 (Allegro 16.4 to 25.1; public, corpus and private boards), among them 4 g14.14, 19 g15.00, 20 g15.02 and 10 g16.01 boards. The one g13.00 board seen (Allegro 16.0) does not frame; g13.00 and g13.04 sizes are unverified. Every walk ends exactly at the end of the block stream, no key repeats, and on every 17.2 and later board the block and string count equals the header's object count. A wrong size lands on a word that is no block header, so one clean walk accounts for every block of the file. The reader is `src/tools/lib/allegro-blocks.ts`, which holds the size tables.
 
 The magic word picks a layout family, named by its generation and revision bytes. One release can write several families, and a family's name says nothing about the release:
 

@@ -7,7 +7,7 @@
  * g14.04, when its block count matches the header's object count.
  */
 
-import { at, LAYOUTS, type BrdInfo, type Layout } from "./allegro-brd.js";
+import { at, LAYOUTS, type BrdInfo } from "./allegro-brd.js";
 
 // Fixed block sizes in bytes, per family: g13.00 g13.04 g13.0C g13.10 g13.15 g14.04 g14.09 g14.14
 // g15.00 g15.02 g16.01
@@ -75,16 +75,12 @@ const TABLE_ITEM: Record<number, number[]> = {
 
 const ceil4 = (bytes: number) => (bytes + 3) & ~3;
 
-/** Size in bytes of the block at word `i`, or undefined for a block type or variant not known. */
-const blockSize = (w: Uint32Array, i: number, l: Layout): number | undefined => {
+/** Size in bytes of a variable-size block at word `i` of family `f`, or undefined when not known. */
+const variableSize = (w: Uint32Array, i: number, f: number): number | undefined => {
   const t = w[i] & 0xff;
-  const f = at(l);
   const v16 = f <= at("g13.15");
   const v174 = f >= at("g14.09");
   const u16 = (byte: number) => (w[i + (byte >>> 2)] >>> ((byte & 2) * 8)) & 0xffff;
-  if (t === 0x37 && v174) return 32 + 4 * w[i + 4]; // capacity
-  const fixed = FIXED[t]?.[f];
-  if (fixed) return fixed;
   switch (t) {
     case 0x03: {
       // field: [03][key][next][owner (g14.04+)][subtype, flags, u16 size][0 (g14.04+)] then a payload
@@ -96,7 +92,7 @@ const blockSize = (w: Uint32Array, i: number, l: Layout): number | undefined => 
       if (s === 0x65) return head;
       if (s === 0x64 || s === 0x66 || s === 0x67 || s === 0x6a) return head + 4;
       if (s === 0x69) return head + 8;
-      if (s === 0x6c) return head + 4 + 4 * payload;
+      if (s === 0x6c || s === 0x72) return head + 4 + 4 * payload; // a count, then that many words
       if (s === 0x70 || s === 0x74) return head + 4 + (payload >>> 16) + 4 * (payload & 0xffff);
       if (s === 0xf6) return head + 80;
       if ([0x68, 0x6b, 0x6d, 0x6e, 0x6f, 0x71, 0x73, 0x78].includes(s)) return head + ceil4(z);
@@ -142,6 +138,8 @@ const blockSize = (w: Uint32Array, i: number, l: Layout): number | undefined => 
     }
     case 0x3c: // key list
       return v174 ? 16 + 4 * w[i + 3] : 12 + 4 * w[i + 2];
+    case 0x37: // key array: its capacity from g14.09
+      return 32 + 4 * w[i + 4];
     default:
       return undefined;
   }
@@ -162,13 +160,18 @@ export const walkBrdBlocks = (w: Uint32Array, info: BrdInfo): BrdBlocks | string
   const end = info.streamEnd >>> 2;
   if (info.streamEnd % 4 || end > w.length || end < info.bodyWord)
     return fail("has no valid end-of-stream offset");
+  const f = at(l);
+  // fixed sizes of this family by type; 0 for a type sized from its content
+  const fixed = new Uint16Array(256);
+  for (const [t, sizes] of Object.entries(FIXED)) fixed[Number(t)] = sizes[f] ?? 0;
+  if (f >= at("g14.09")) fixed[0x37] = 0;
   const starts: number[] = [];
   const byKey = new Map<number, number>();
   let i = info.bodyWord;
   while (i < end) {
     const t = w[i] & 0xff;
     // the sector table runs to the end of the stream
-    const size = t === 0x27 ? (end - i) * 4 : blockSize(w, i, l);
+    const size = t === 0x27 ? (end - i) * 4 : fixed[t] || variableSize(w, i, f);
     // a size of 0, past the end, or misaligned means a wrong layout or an unknown block
     if (!size || size % 4 || i + size / 4 > end || (w[i] >>> 8) & 0x7d)
       return fail(`block 0x${t.toString(16)} at byte 0x${(i * 4).toString(16)} is not decoded`);

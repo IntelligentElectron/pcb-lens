@@ -51,6 +51,14 @@ describe("walkBrdBlocks sizes by layout family", () => {
     });
   });
 
+  it("sizes a 0x03 field of subtype 0x72 by its word count", () => {
+    const w = new Uint32Array(13 + 5);
+    w.set([0x3f730003, 1, 0, 0, 0x72 | (56 << 16), 0, 6]); // a count of 6, then 6 words
+    w.set([0x04, 2], 13);
+    w[5] = 2;
+    expect(walkBrdBlocks(w, synth("g14.04", w.length))).toMatchObject({ starts: [0, 13] });
+  });
+
   it("sizes 0x1F by the g14.14 row", () => {
     const w = new Uint32Array(9 + 96);
     w.set([0x1f, 1, 0, 0, 0, 0, 1 << 16]); // one copper layer row
