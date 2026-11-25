@@ -106,7 +106,7 @@ npm run test:watch                 # Watch mode
 
 ## CI/CD
 
-- **CI** (`ci.yml`): Runs on every push - type-check, lint, test
+- **CI** (`ci.yml`): Runs on every push - type-check, lint, test. A pull request that changes only Markdown outside `plugins/` skips the build; the required `build` check still passes
 - **Release** (`release.yml`): Triggered by `v*` tags - builds binaries, signs macOS, publishes npm
 
 npm publishing uses OIDC trusted publishing (configured on npmjs.com) - no tokens required.
