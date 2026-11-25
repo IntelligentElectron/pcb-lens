@@ -6,12 +6,12 @@ It reads IPC-2581 layouts from any EDA tool, and Cadence Allegro boards and cons
 
 ## Supported Formats
 
-| Format | Input Files | Description |
-|--------|------------|-------------|
-| Cadence Allegro | `.brd` | The full board database, read directly: layout (Allegro 16.0 to 25.1) and constraints (17.2 to 25.1) |
-| Cadence Constraint Manager | `.dcf` | Constraint database of a schematic or board |
-| Cadence TCFX | `.tcfx` | Constraint XML exported from Allegro: physical and spacing rules, net classes, stackup, regions |
-| IPC-2581 | `.xml` | RevA, RevB and RevC files from any compliant EDA tool: stackup, board outline, component placement and pads, net connectivity, routing and vias |
+| Format | Input Files |
+|--------|------------|
+| Cadence Allegro | `.brd` |
+| Cadence Constraint Manager | `.dcf` |
+| Cadence TCFX | `.tcfx` |
+| IPC-2581 | `.xml` |
 
 ## Install
 
